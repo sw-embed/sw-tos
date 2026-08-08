@@ -10,6 +10,9 @@ runs on the [COR24-TB](https://www.makerlisp.com/cor24-test-board) FPGA
 development board (MakerLisp COR24 soft CPU, 1 MB SRAM, 101.7 MHz) and in
 a companion software emulator.
 
+SWTOS is implemented in [PL/SW](https://github.com/sw-embed/sw-cor24-plsw),
+a PL/I-inspired systems programming language for the COR24 ISA.
+
 ### Key Features
 
 - **Synchronous message-passing IPC** -- `send`, `receive`, `sendrec`
@@ -48,15 +51,18 @@ resident catalog design, milestones, and risk assessment.
 
 ## Building
 
-Requires the COR24 C compiler and tools package from
-[MakerLisp](https://www.makerlisp.com).
+Requires the PL/SW toolchain (compiler, assembler, and linker):
+
+- [sw-cor24-plsw](https://github.com/sw-embed/sw-cor24-plsw) -- PL/SW compiler
+- `cor24-asm` -- COR24 assembler
+- `link24` -- FIXUP-based linker
 
 ```
-make
+just build
 ```
 
-Produces a flat binary image loadable via the COR24 serial boot protocol
-at 921,600 baud.
+Produces a flat binary image (.lgo) loadable via the COR24 serial boot
+protocol at 921,600 baud.
 
 ## License
 

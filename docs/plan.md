@@ -97,43 +97,48 @@ Primary target: **COR24-TB** FPGA development board
 
 ---
 
-## 4. COR24 C Data Model
+## 4. COR24 PL/SW Data Model
 
-| C Type         | Representation                  |
+PL/SW targets the COR24 24-bit RISC ISA directly. Types:
+
+| PL/SW Type     | COR24 Representation           |
 |----------------|----------------------------------|
-| `char`         | 24 bits (one character per word) |
-| `short`        | 24 bits                          |
-| `int` / `unsigned` | 24 bits                       |
-| `pointer`      | 24 bits                          |
-| `long`         | 48 bits (two words), optional    |
-| `long long`    | unsupported                      |
-| `float`/`double` | unsupported                    |
+| `INT(24)`      | 24 bits (native word)            |
+| `INT(16)`      | 24 bits (stored in full word)    |
+| `INT(8)`       | 24 bits (stored in full word)    |
+| `BYTE`         | 24 bits (one character per word)  |
+| `CHAR`         | 24 bits (one character per word)  |
+| `PTR`          | 24 bits                          |
+| `WORD`         | 24 bits (raw address)            |
+| `BIT`          | 24 bits (0 or 1)                 |
 
-Local typedefs make intent explicit:
-
-```c
-typedef unsigned cor_word_t;
-typedef unsigned cor_addr_t;
-typedef unsigned endpoint_t;
-typedef unsigned octet_t;      /* UART char, constrained to 0..255 */
-```
+PL/SW does not support floating point. `FLOAT` and `DOUBLE` are not
+available. This matches SWTOS requirements exactly.
 
 One character per 24-bit word wastes memory but keeps the compiler, pointer
 arithmetic, UART driver, shell, and data handling simple. Optimize packing
 later if needed.
 
+### PL/SW Inline Assembly for HAL
+
+PL/SW supports `ASM DO` blocks and `NAKED` procedures for
+hardware-specific operations that cannot be expressed in the high-level
+language. All HAL code (context switch, interrupt entry/exit, UART
+register access) uses this facility.
+
 ### Compiler Runtime Helpers (no hardware multiply)
 
 ```c
-unsigned __mul24(unsigned a, unsigned b);
-unsigned __umul24(unsigned a, unsigned b);
-unsigned __div24(unsigned a, unsigned b);
-unsigned __udiv24(unsigned a, unsigned b);
-unsigned __mod24(unsigned a, unsigned b);
-unsigned __umod24(unsigned a, unsigned b);
+DCL __MUL24  ENTRY(INT(24), INT(24)) RETURNS(INT(24));
+DCL __UMUL24 ENTRY(INT(24), INT(24)) RETURNS(INT(24));
+DCL __DIV24  ENTRY(INT(24), INT(24)) RETURNS(INT(24));
+DCL __UDIV24 ENTRY(INT(24), INT(24)) RETURNS(INT(24));
+DCL __MOD24  ENTRY(INT(24), INT(24)) RETURNS(INT(24));
+DCL __UMOD24 ENTRY(INT(24), INT(24)) RETURNS(INT(24));
 ```
 
-Tiny C emits calls to these when the COR24 ISA lacks native instructions.
+The PL/SW compiler emits calls to these when the COR24 ISA lacks native
+multiply/divide instructions.
 
 ---
 
@@ -632,12 +637,12 @@ MINIX itself.
 ```
 swtos/
     kernel/
-        proc.c          process table, spawn, exit
-        sched.c         scheduler (cooperative + preemptive)
-        ipc.c           send, receive, sendrec
-        clock.c         heartbeat timer, sleep queue
-        syscall.c       system call dispatch
-        heap.c          kernel memory allocator
+        proc.plsw       process table, spawn, exit
+        sched.plsw      scheduler (cooperative + preemptive)
+        ipc.plsw        send, receive, sendrec
+        clock.plsw      heartbeat timer, sleep queue
+        syscall.plsw    system call dispatch
+        heap.plsw       kernel memory allocator
     hal/
         cor24/
             boot.s       reset vector, stack init
@@ -646,52 +651,55 @@ swtos/
             uart.s       raw UART access
             gpio.s       GPIO access
     services/
-        tty.c           TTY service (polled then interrupt-driven)
-        shell.c         command interpreter
+        tty.plsw        TTY service (polled then interrupt-driven)
+        shell.plsw      command interpreter
     catalog/
-        catalog.c       find, list, spawn from catalog
-        manifest.py     build tool: TOML -> descriptor table
+        catalog.plsw    find, list, spawn from catalog
+        manifest.py     build tool: manifest -> descriptor table
     apps/
-        hello.c
-        counter.c
-        ps.c
-        ipc_demo.c
-        sleep_demo.c
-        mem.c
-        uptime.c
+        hello.plsw
+        counter.plsw
+        ps.plsw
+        ipc_demo.plsw
+        sleep_demo.plsw
+        mem.plsw
+        uptime.plsw
     include/
-        swtos.h         master header
-        kernel.h
-        proc.h
-        ipc.h
-        message.h
-        catalog.h
-        hal.h
+        swtos.msw       master declarations
+        kernel.msw
+        proc.msw
+        ipc.msw
+        message.msw
+        catalog.msw
+        hal.msw
     lib/
-        printf.c
-        string.c
-        memset.c
-        memcpy.c
+        printf.plsw
+        string.plsw
+        memset.plsw
+        memcpy.plsw
     build/
         Makefile
-        link.ld         linker script
+        link.ld         linker script (link24)
 ```
 
 ---
 
 ## 15. Development Milestones
 
-### Milestone 0 -- Tiny C ABI Readiness
+### Milestone 0 -- PL/SW Systems Programming Readiness
 
-Before importing any OS code, prove Tiny C can build:
+Before building OS components, prove PL/SW can handle systems-level
+constructs needed by SWTOS:
 
-- [ ] Structures and arrays of structures
-- [ ] Pointers to structures, function pointers
-- [ ] Separate C and assembly objects linked together
-- [ ] Recursion-free stack use
-- [ ] Global/static initialization
-- [ ] Software multiply/divide runtime helpers
-- [ ] Volatile UART register access
+- [ ] RECORD types for process descriptors and message structs
+- [ ] PTR dereference and field access for linked structures
+- [ ] ADDR() and SIZEOF() built-ins for layout-sensitive code
+- [ ] NAKED procedures and ASM DO blocks for HAL routines
+- [ ] Separate .plsw modules assembled and linked together (link24)
+- [ ] Global/static data initialization
+- [ ] %INCLUDE / %DEFINE / %IF for conditional compilation
+- [ ] Volatile memory-mapped I/O access (UART, LED registers)
+- [ ] MACRODEF/GEN for recurring kernel patterns
 
 **Deliverable:** `abi-test.bin` running identically in the Rust emulator
 and on COR24-TB hardware.
@@ -732,7 +740,7 @@ Sleep command works.
 ### Milestone 4 -- Generated Catalog and Autostart
 
 - [ ] TOML manifest for programs and services
-- [ ] Build tool generates C descriptor table
+- [ ] Build tool generates PL/SW descriptor table from manifest
 - [ ] `AUTOSTART` flag launches TTY service at boot
 - [ ] Shell `run <name>` spawns from catalog
 - [ ] `ls` lists catalog entries
@@ -763,14 +771,19 @@ Sleep command works.
 
 ## 16. Toolchain and Build
 
-- **C compiler/assembler/linker:** Tiny C (COR24 target)
-- **ABI questions to resolve first:** argument passing (registers vs stack),
-  callee-saved vs caller-saved registers, stack frame layout, structure
-  alignment, can C call assembly and vice versa, can linker place sections
-  at specific addresses, can it emit relocatable objects
-- **Build system:** Makefile
-- **Output:** flat binary image loadable via COR24 serial boot (921,600 baud)
+- **Language:** PL/SW (PL/I-inspired systems programming language for COR24)
+  -- [sw-cor24-plsw](https://github.com/sw-embed/sw-cor24-plsw)
+- **Assembler:** COR24 assembler (`cor24-asm`)
+- **Linker:** `link24` (FIXUP-based linker from sw-cor24-plsw toolchain)
+- **Emulator:** `cor24-emu` (Rust-based COR24 emulator)
+- **ABI:** COR24 calling convention: args on stack R-to-L, return in r0,
+  8 registers (r0-r2 GP, fp, sp, z, iv, ir), 24-bit word-addressable
+- **Build system:** Makefile (or justfile)
+- **Output:** flat binary image (.lgo) loadable via COR24 serial boot
+  (921,600 baud)
 - **Entire system:** one monolithic binary (kernel + services + apps + catalog)
+- **Pipeline:** .plsw sources -> PL/SW compiler on emulator -> .s assembly
+  -> cor24-asm -> link24 -> .lgo image
 
 ---
 
@@ -782,7 +795,7 @@ Sleep command works.
 | No hardware timer                 | UART-hosted virtual timer with cooperative fallback |
 | No hardware multiply              | Compiler runtime helpers (`__mul24` etc.)      |
 | 1 MB RAM very limited             | Fixed regions; resident shared text; minimal kernel |
-| Tiny C ABI unknowns               | Milestone 0 validates ABI before OS work    |
+| PL/SW systems constructs unknown | Milestone 0 validates PL/SW for OS use |
 | UART ISR must support context switch for preemption | Verify COR24 interrupt return semantics early |
 | Host disconnect stops clock       | Cooperative fallback; clock status visible    |
 | 24-bit char breaks `CHAR_BIT==8` assumptions | Use `octet_t` for serialized data; avoid `char` tricks |
@@ -799,5 +812,5 @@ Sleep command works.
 - COR24 release notes (2026/07/15, commit `bd805538f6`)
 - Existing COR24 demo: `loadngo` monitor (serial boot protocol reference)
 - Existing COR24 demo: `uartintr` (UART interrupt test)
-- MakerLisp COR24 C compiler and tools package (separate archive, contact MakerLisp)
+- PL/SW compiler and toolchain: [sw-cor24-plsw](https://github.com/sw-embed/sw-cor24-plsw)
 - Lattice MachXO FPGA reference manual
