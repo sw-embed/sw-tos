@@ -1,0 +1,2424 @@
+ChatGPT Pro
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+Wednesday 9:06 AM
+So, apparently Minix is the basis for microcode in many Intel processors.  I'd like to port Minix to cor24-tb (and my emulator).  Is Minix in C or assembler or both?  Can my Tiny C compile it?  Is it still available with a BSD license?  How can I leverage it to demonstrate an "O/S" on Cor24-TB?  Does it require hardware multiply or floating point?  Can I adapt it to use the UART as implemented on cor24?
+
+Worked for 23s
+Bottom line
+A MINIX-inspired operating system on COR24-TB is quite feasible. A direct port of current MINIX 3 is probably not.
+
+The practical target should be:
+
+MINIX 1 or early MINIX 2 concepts and selected source, rather than the full modern MINIX 3 tree.
+
+A COR24-native microkernel providing tasks, message passing, a UART terminal driver, a RAM filesystem, and a small shell.
+
+Initially compile only carefully selected C modules with Tiny C, while writing context switching, interrupt entry, startup, and possibly message-copy primitives in COR24 assembly.
+
+That would be a legitimate operating-system demonstration rather than merely an executive or monitor.
+
+First, an important correction about Intel
+MINIX is not generally Intel processor microcode.
+
+Intel Management Engine 11 used a modified MINIX 3 system on a separate embedded processor within the Intel platform. This subsystem runs firmware independently of the main x86 cores. The actual x86 instruction-decoding microcode is a different mechanism.
+
+Andrew Tanenbaum confirmed that Intel engineers had worked with MINIX, requested footprint-reduction features, and used a modified version inside ME-11. He specifically mentioned the ability to disable optional components, including floating-point support. 
+
+So the accurate analogy is:
+
+Intel used MINIX as an embedded management-controller operating system, not as the microcode implementing x86 instructions.
+
+That actually strengthens its relevance to COR24: Intel was using MINIX as a small, configurable embedded OS.
+
+What language is MINIX written in?
+MINIX is overwhelmingly written in C, with architecture-dependent assembly.
+
+The MINIX documentation states that the operating system and its utilities are written in C. 
+
+Assembly is nevertheless required for the lowest layers:
+
+reset/startup code;
+
+interrupt and exception entry;
+
+saving and restoring registers;
+
+switching stacks;
+
+process context switching;
+
+enabling and disabling interrupts;
+
+any special memory or I/O instructions;
+
+sometimes optimized memory-copy routines.
+
+Conceptually:
+
+Applications and utilities       C
+Servers and device drivers       C
+Microkernel policy/logic         C
+Scheduler and IPC logic          mostly C
+Context switch                   assembly
+Interrupt entry/exit             assembly
+Reset/startup                    assembly
+Hardware-specific primitives     assembly or compiler intrinsics
+For COR24 this is favorable: most of the interesting OS behavior can remain C, while only a small architecture layer must be written in COR24 assembly.
+
+Can Tiny C compile MINIX?
+Unmodified MINIX 3: almost certainly no
+Modern MINIX 3 is a large NetBSD-derived system with a substantial build system, libraries, headers, drivers, servers, and userland. Its normal historical configurations required tens of megabytes of RAM; documented releases ranged from approximately 8–64 MB for runtime configurations, substantially more for rebuilding the system. 
+
+COR24-TB has approximately 1 MB of SRAM, so full MINIX 3 is mismatched in several ways:
+
+address-space size and pointer representation;
+
+executable and object formats;
+
+compiler assumptions;
+
+memory footprint;
+
+process model;
+
+virtual-memory and memory-protection assumptions;
+
+architecture-specific NetBSD infrastructure;
+
+filesystem and driver complexity.
+
+The official source tree also includes a large imported userland and many external components, not merely the microkernel. 
+
+Selected old MINIX code: possibly
+Tiny C could compile a carefully reduced and adapted subset if it supports enough of traditional C.
+
+The critical capabilities are:
+
+Feature	Importance
+Structures and structure pointers	Essential
+Arrays and pointer arithmetic	Essential
+Function prototypes	Highly desirable
+Function pointers	Important
+Separate compilation/linking	Essential
+extern, static, and global data	Essential
+Integer casts	Essential
+Bitwise operators	Essential
+switch	Very useful
+Preprocessor macros and conditional compilation	Essential
+typedef	Very useful
+8-bit character access	Important for UART and files
+24-bit or wider integer arithmetic	Essential
+long arithmetic	Useful, but can be emulated
+Varargs	Avoidable
+Floating point	Unnecessary
+Bitfields	Better replaced manually
+Standard library	Can be replaced
+The decisive Tiny C questions are not whether it supports all ANSI C syntax, but whether it has a sufficiently predictable ABI:
+
+How are arguments passed?
+
+Which registers are caller-saved and callee-saved?
+
+What is the stack-frame layout?
+
+How are structures laid out and aligned?
+
+How large are char, short, int, long, and pointers?
+
+Can C call assembly and assembly call C?
+
+Can the linker place sections at specified addresses?
+
+Can it emit relocatable objects, or only final flat binaries?
+
+Can it initialize global structures and arrays?
+
+Without a stable ABI, the scheduler and context switch will be difficult to connect to C.
+
+Likely compiler problems
+MINIX source will probably expose Tiny C limitations involving:
+
+typedef struct proc {
+    int flags;
+    char *stack;
+    void (*entry)(void);
+} proc_t;
+as well as:
+
+#define SEND       1
+#define RECEIVE    2
+#define ANY       (-1)
+
+extern int sys_call(int operation, int endpoint, message *m);
+Potential trouble areas include:
+
+nested or complex declarators;
+
+function pointers;
+
+signed/unsigned conversions;
+
+const and volatile;
+
+unions;
+
+structure assignment;
+
+pointer-to-integer conversion;
+
+preprocessor token operations;
+
+large initializers;
+
+assumptions that bytes are eight bits;
+
+assumptions that int and pointers are 16 or 32 bits.
+
+Therefore, I would treat MINIX as both an OS port and an excellent Tiny C conformance workload.
+
+Which MINIX generation should you use?
+MINIX 3
+Advantages
+Mature microkernel architecture.
+
+Explicitly modular.
+
+Drivers and servers isolated as processes.
+
+Attractive demonstration of fault containment and restartable services.
+
+Permissively licensed core.
+
+Disadvantages
+Far too large as a direct COR24 target.
+
+Modern source tree contains substantial NetBSD infrastructure.
+
+Assumes much richer architecture and tooling.
+
+Porting effort could become dominated by compatibility scaffolding.
+
+Recommendation
+Use MINIX 3 as an architectural reference, not as the initial source base.
+
+MINIX 2
+Advantages
+Smaller and closer to the classic educational implementation.
+
+More complete Unix-like environment than MINIX 1.
+
+More approachable than MINIX 3.
+
+Disadvantages
+Still likely too large for 1 MB without aggressive reduction.
+
+More compiler and filesystem requirements than your first demonstration needs.
+
+Architecture assumptions remain significant.
+
+Recommendation
+A possible second-stage source donor after the kernel foundation works.
+
+MINIX 1
+Advantages
+Originally intended for small 8086-class systems.
+
+Small, understandable kernel.
+
+Relatively simple process table, IPC, scheduler, drivers, and filesystem.
+
+Best conceptual match for a small 24-bit educational CPU.
+
+Historically used systems with no MMU and very limited RAM.
+
+Disadvantages
+Strong 8086 segmentation and memory-layout assumptions.
+
+Old C style.
+
+Architecture-specific assembly must be replaced.
+
+Some source may need modernization before Tiny C can parse it.
+
+Recommendation
+Best starting reference, although I would not try to compile the entire original tree immediately.
+
+Licensing
+The official MINIX repository is available under a permissive three-clause BSD-style license. It permits source and binary redistribution, with or without modification, subject to attribution, reproduction of the license, and non-endorsement requirements. 
+
+There is an important distinction:
+
+The core MINIX operating-system code is BSD-style licensed.
+
+The complete distribution contains aggregated software under other licenses, including GPL components.
+
+You must check files imported from NetBSD, GNU, or third-party packages individually. 
+
+For a COR24 port, keep the initial repository limited to:
+
+LICENSES/
+    MINIX-BSD.txt
+    third-party-notices.txt
+
+src/
+    kernel/
+    drivers/
+    servers/
+    libc/
+    commands/
+Do not copy the whole MINIX 3 repository and assume every file has identical licensing.
+
+A clean approach would be:
+
+BSD-license your new COR24-specific code;
+
+retain original notices in adapted MINIX files;
+
+document the source version and original paths;
+
+avoid GPL userland unless you deliberately want GPL obligations.
+
+Does MINIX require hardware multiply?
+Kernel operation: no
+The essential kernel mechanisms need:
+
+addition and subtraction;
+
+comparisons;
+
+shifts;
+
+bitwise operations;
+
+loads and stores;
+
+branches;
+
+function calls;
+
+stack operations;
+
+interrupt entry and return.
+
+Scheduling, message passing, process-table management, UART operation, and a simple filesystem do not inherently require hardware multiplication.
+
+Multiplication may appear in:
+
+memory-size calculations;
+
+array indexing;
+
+block-number calculations;
+
+time conversions;
+
+formatting numbers;
+
+filesystem geometry;
+
+user programs.
+
+Tiny C can lower multiplication to a software helper:
+
+unsigned cor24_umul(unsigned a, unsigned b)
+{
+    unsigned result = 0;
+
+    while (b != 0) {
+        if (b & 1)
+            result += a;
+
+        a <<= 1;
+        b >>= 1;
+    }
+
+    return result;
+}
+The same applies to division and remainder. Performance will be adequate for an educational OS.
+
+Recommendation
+Add compiler-runtime functions such as:
+
+__mul24
+__umul24
+__div24
+__udiv24
+__mod24
+__umod24
+The compiler can emit calls to those whenever the ISA lacks native instructions.
+
+A hardware multiplier might improve C performance, but it is not a prerequisite for the OS.
+
+Does MINIX require floating point?
+No.
+
+MINIX itself historically operated without requiring hardware floating-point support. The documentation notes that software floating point could be used and that the OS did not inherently need an FPU. 
+
+Tanenbaum also reported that Intel specifically requested configurability that allowed floating-point support to be disabled. 
+
+For COR24:
+
+#define CONFIG_FPU       0
+#define CONFIG_FLOAT     0
+#define CONFIG_DOUBLE    0
+Avoid %f in printf, floating-point utilities, and programs using double.
+
+You may eventually provide fixed-point math or a software floating-point library, but neither belongs in the initial OS.
+
+The real hardware requirements
+Multiply and floating point are minor concerns. The important requirements are the following.
+
+1. Interrupts
+A preemptive OS normally needs:
+
+a periodic timer interrupt;
+
+UART receive interrupts, preferably;
+
+interrupt enable/disable;
+
+a defined interrupt return instruction or sequence.
+
+Without interrupts, you can still build a cooperative OS, but it will not provide conventional time slicing.
+
+2. Timer
+A periodic timer drives:
+
+process preemption;
+
+sleep and alarm functions;
+
+time accounting;
+
+timeouts;
+
+UART polling intervals when interrupts are unavailable.
+
+If COR24 lacks a usable timer, add a small FPGA peripheral:
+
+TIMER_COUNT
+TIMER_RELOAD
+TIMER_CONTROL
+TIMER_STATUS
+with perhaps:
+
+CONTROL.ENABLE
+CONTROL.PERIODIC
+CONTROL.IRQ_ENABLE
+STATUS.EXPIRED
+3. Context-switchable machine state
+The kernel must save and restore:
+
+program counter;
+
+stack pointer;
+
+status/flags;
+
+general registers;
+
+interrupt-enable state;
+
+any architecture-specific state.
+
+No MMU is required for a classic small MINIX-style system.
+
+4. Atomicity
+On a single-core COR24, disabling interrupts around scheduler and IPC data structures is usually enough.
+
+You do not need compare-and-swap, atomic increments, or SMP primitives.
+
+5. Protection modes
+Full MINIX 3 expects a stronger separation model than a minimal FPGA CPU may provide. But your demonstration can operate with all processes in one hardware privilege domain.
+
+You can still preserve logical isolation:
+
+separate stacks;
+
+separate process descriptors;
+
+defined message interfaces;
+
+no shared global variables between services by convention;
+
+pointer validation where practical.
+
+It would be a microkernel in software architecture, though not strongly isolated by hardware.
+
+Can you adapt it to the COR24 UART?
+Yes. The UART is probably the easiest MINIX device to port.
+
+You need to implement a minimal terminal driver around the existing COR24 UART interface.
+
+Minimal UART abstraction
+int uart_rx_ready(void);
+int uart_tx_ready(void);
+unsigned uart_getc(void);
+void uart_putc(unsigned ch);
+void uart_enable_rx_irq(void);
+void uart_disable_rx_irq(void);
+Then expose it upward as a TTY-like service:
+
+int tty_read(char *buffer, int length);
+int tty_write(const char *buffer, int length);
+Initial polling driver
+Start with polling:
+
+void console_putc(int ch)
+{
+    while (!uart_tx_ready()) {
+        /* spin */
+    }
+
+    uart_putc((unsigned)ch);
+}
+int console_getc(void)
+{
+    while (!uart_rx_ready()) {
+        /* spin */
+    }
+
+    return (int)uart_getc();
+}
+This is sufficient for:
+
+boot messages;
+
+panic output;
+
+a monitor;
+
+a single-user command shell;
+
+loading programs;
+
+inspecting processes.
+
+Later interrupt-driven driver
+After scheduling works:
+
+UART receive interrupt occurs.
+
+Interrupt handler reads the received byte.
+
+Byte enters a circular buffer.
+
+TTY task is awakened.
+
+TTY task handles line editing and completes pending reads.
+
+The kernel reschedules as necessary.
+
+Example buffer:
+
+#define RX_BUFFER_SIZE 64
+
+struct uart_queue {
+    unsigned char data[RX_BUFFER_SIZE];
+    unsigned head;
+    unsigned tail;
+    unsigned count;
+};
+Because COR24 words are 24 bits, decide whether each UART character occupies:
+
+one 24-bit memory word; or
+
+a packed byte representation.
+
+For the first port, use one character per word. It wastes memory but makes the compiler, pointer arithmetic, UART driver, shell, and filesystem much simpler. Optimize packing later.
+
+The 24-bit issue is more important than multiplication
+COR24's 24-bit architecture creates interesting ABI questions.
+
+You need to define a COR24 C data model. A simple model would be:
+
+C type	Suggested representation
+char	24 bits initially
+short	24 bits
+int	24 bits
+unsigned	24 bits
+pointer	24 bits
+long	48 bits in two words
+long long	unsupported initially
+float	unsupported
+double	unsupported
+This is not a conventional byte-addressed C implementation, but it may fit Tiny C and COR24 well.
+
+Alternatively, if memory is byte-addressable and Tiny C already models 8-bit char, preserve that model. Do not contort the OS before documenting Tiny C’s current assumptions.
+
+MINIX code commonly assumes that:
+
+sizeof(char) == 1
+which C guarantees, but it often also effectively assumes:
+
+CHAR_BIT == 8
+That is not guaranteed by C. A 24-bit char will therefore expose many hidden assumptions.
+
+For the initial kernel, use explicit local types:
+
+typedef unsigned cor_word_t;
+typedef unsigned cor_addr_t;
+typedef unsigned endpoint_t;
+typedef unsigned irq_state_t;
+For serialized data and UART characters:
+
+typedef unsigned octet_t; /* value constrained to 0..255 */
+This makes the distinction semantic even when both occupy a 24-bit word.
+
+What qualifies as an OS demonstration?
+A monitor that reads commands over UART and directly invokes functions is useful, but it is not much of an OS.
+
+A convincing COR24 OS demonstration should include at least:
+
+Multiple independently scheduled tasks.
+
+Separate stacks.
+
+Kernel-mediated message passing.
+
+Blocking send or receive.
+
+A UART driver task.
+
+A filesystem or named-object service.
+
+A shell process.
+
+Loadable or prelinked user programs.
+
+Process inspection.
+
+Observable failure containment or restart.
+
+A UART session might look like:
+
+COR24 MINIX-like system 0.1
+1024 Kiwords physical memory
+kernel: 6 tasks, 4 user slots
+tty0: polling UART
+ramfs: 32 files, 192 Kiwords
+
+login: root
+# ps
+EP  STATE    NAME
+ 0  RUN      idle
+ 1  RECV     tty
+ 2  RECV     ramfs
+ 3  RECV     init
+ 4  RUN      sh
+
+# ls
+hello
+counter
+memtest
+ipc-demo
+
+# run ipc-demo
+client: sending 41
+server: received 41
+client: result 42
+
+# kill 2
+ramfs terminated
+reincarnation: restarting ramfs
+ramfs: recovered 32 files
+The final restart demonstration would evoke MINIX 3’s fault-tolerant service architecture particularly well.
+
+Recommended architecture
+Layer 0: COR24 machine layer
+Assembly and minimal C:
+
+boot
+interrupt vectors
+timer interrupt
+UART access
+context save/restore
+stack initialization
+interrupt masking
+software multiply/divide
+Layer 1: microkernel
+Keep it very small:
+
+process table
+ready queues
+scheduler
+send
+receive
+sendrec
+interrupt notification
+kernel diagnostics
+A compact process descriptor:
+
+struct proc {
+    cor_word_t regs[COR_NREGS];
+    cor_addr_t sp;
+    cor_addr_t pc;
+    cor_word_t status;
+
+    endpoint_t endpoint;
+    endpoint_t sender;
+    endpoint_t receiver;
+
+    cor_word_t state;
+    cor_word_t priority;
+    cor_word_t quantum;
+
+    struct message *message;
+};
+Layer 2: privileged service tasks
+TTY
+clock
+RAM filesystem
+process manager
+loader
+reincarnation manager
+Initially, clock and loader functionality can remain partly in the kernel.
+
+Layer 3: user processes
+init
+shell
+echo
+ps
+ls
+cat
+hexdump
+ipc-demo
+counter
+fault-demo
+Suggested milestones
+Milestone 0 — Tiny C kernel readiness
+Before importing MINIX code, prove Tiny C can build:
+
+structures;
+
+arrays of structures;
+
+pointers to structures;
+
+function pointers;
+
+separate C and assembly objects;
+
+recursion-free stack use;
+
+global initialization;
+
+software multiply/divide;
+
+volatile UART access.
+
+Deliverable:
+
+tinyc-abi-test.bin
+running identically in the Rust emulator and COR24-TB.
+
+Milestone 1 — Executive kernel
+Implement:
+
+boot;
+
+static task table;
+
+separate stacks;
+
+cooperative yield;
+
+round-robin scheduling;
+
+UART output.
+
+Demo:
+
+task A: 1
+task B: 1
+task A: 2
+task B: 2
+This proves context switching.
+
+Milestone 2 — MINIX-style IPC
+Implement:
+
+int send(endpoint_t destination, struct message *m);
+int receive(endpoint_t source, struct message *m);
+int sendrec(endpoint_t destination, struct message *m);
+Use fixed-size messages initially:
+
+struct message {
+    endpoint_t source;
+    cor_word_t type;
+    cor_word_t value[6];
+};
+Demo client/server communication.
+
+This is the point where the project becomes recognizably MINIX-like.
+
+Milestone 3 — Timer and preemption
+Add:
+
+periodic FPGA timer;
+
+timer interrupt;
+
+quantum accounting;
+
+preemptive round-robin scheduling;
+
+sleep.
+
+Demo a CPU-bound process being preempted while the shell remains responsive.
+
+Milestone 4 — UART TTY service
+Move normal UART handling out of the kernel.
+
+Add:
+
+RX queue;
+
+canonical line input;
+
+backspace;
+
+newline translation;
+
+blocking reads;
+
+asynchronous notifications.
+
+Keep a direct kernel UART output path for panic messages.
+
+Milestone 5 — Shell and built-in programs
+Implement a small shell:
+
+help
+ps
+mem
+echo
+run
+kill
+sleep
+uptime
+Programs can initially be statically linked and selected by an entry-point table.
+
+Milestone 6 — RAM filesystem
+Start with a flat filesystem:
+
+name
+type
+length
+data address
+capacity
+Operations:
+
+open
+read
+write
+close
+stat
+list
+This can use your Linux/I²C or UART loader to preload files into RAM.
+
+No directories, permissions, links, or disk block cache are initially needed.
+
+Milestone 7 — Executable loader
+Define a COR24 executable format:
+
+magic
+version
+text_words
+data_words
+bss_words
+entry
+relocation_count
+payload
+The loader:
+
+allocates memory;
+
+copies text and data;
+
+clears BSS;
+
+applies relocations;
+
+creates a stack;
+
+creates a process;
+
+schedules it.
+
+This is one of the strongest demonstrations of a real OS.
+
+Milestone 8 — Service restart
+Add a small reincarnation manager:
+
+receive service-exit notifications;
+
+restart the TTY or RAMFS server;
+
+preserve or reconstruct state;
+
+log the failure.
+
+That demonstrates the distinguishing MINIX 3 philosophy without porting all of MINIX 3.
+
+Port versus reimplementation
+There are three possible strategies.
+
+Direct source port
+Take a historical MINIX source tree and modify it until it builds.
+
+Benefit: Most defensible use of the phrase “MINIX port.”
+
+Risk: You may spend most of the project fighting 8086, ACK, memory-model, filesystem, and compiler assumptions.
+
+Clean-room MINIX-compatible reimplementation
+Implement the architecture and APIs based on documentation, without copying much code.
+
+Benefit: Best fit for COR24 and Tiny C.
+
+Risk: It is more accurately “MINIX-inspired” than MINIX itself.
+
+Hybrid port — recommended
+Use original MINIX code selectively for:
+
+process-state definitions;
+
+IPC semantics;
+
+scheduler structure;
+
+message conventions;
+
+TTY line discipline;
+
+RAM-disk or filesystem algorithms.
+
+Rewrite:
+
+startup;
+
+context switching;
+
+interrupt handling;
+
+memory layout;
+
+UART hardware layer;
+
+executable loader;
+
+build system;
+
+compiler runtime.
+
+This produces a credible lineage while avoiding a futile attempt to reproduce an x86 environment.
+
+My recommendation for your project
+Call the initial system something like:
+
+COR-MIN
+A MINIX-derived microkernel for the COR24 architecture
+or:
+
+MINIX/C24
+An experimental MINIX-style operating system for COR24
+Use this initial scope:
+
+Kernel:
+    8–16 processes
+    static process table
+    fixed-size messages
+    cooperative scheduling, then preemption
+    one address space
+    separate stacks
+
+Services:
+    clock
+    UART TTY
+    RAM filesystem
+    loader
+
+Userland:
+    init
+    shell
+    ps
+    ls
+    cat
+    echo
+    ipc-demo
+    fault-demo
+Do not initially implement:
+
+virtual memory;
+
+memory protection;
+
+fork with copied address spaces;
+
+full POSIX signals;
+
+pipes;
+
+disk filesystem;
+
+networking;
+
+users and permissions;
+
+floating point;
+
+dynamically linked libraries;
+
+full MINIX or NetBSD libc.
+
+Overall feasibility
+Item	Assessment
+Kernel in Tiny C	Plausible after ABI tests
+Architecture assembly	Required
+Hardware multiply	Not required
+Floating point	Not required
+MMU	Not required for initial version
+UART console	Straightforward
+Preemptive scheduling	Requires usable timer interrupts
+Full MINIX 3	Impractical
+MINIX 1-derived kernel	Plausible
+MINIX-inspired microkernel	Highly feasible
+Fit in 1 MB SRAM	Very likely with disciplined scope
+The best first concrete experiment is not compiling MINIX yet. It is implementing two Tiny C tasks with independent stacks, switching between them in assembly, and having them exchange a fixed-size MINIX-style message. Once that works identically in the emulator and on COR24-TB, the core technical risk has been retired.
+
+
+Yes, that makes sense
+You can repurpose the reliable UART receive interrupt as a synthetic timer interrupt by having the host terminal inject periodic heartbeat bytes.
+
+At 921,600 baud, one 8-N-1 byte takes about:
+
+10/921600≈10.85 μs
+So sending one heartbeat every 10 ms for a 100 Hz scheduler clock consumes only about 0.1% of the serial bandwidth. Even a 1 kHz heartbeat would consume roughly 1% before protocol overhead.
+
+This is a very practical COR24-specific solution.
+
+Recommended architecture
+Host terminal emulator
+    ├── sends ordinary keyboard/input bytes
+    └── sends heartbeat frame every 10 ms
+                     |
+                     v
+             COR24 UART RX IRQ
+                     |
+          +----------+-----------+
+          |                      |
+    heartbeat frame          ordinary byte
+          |                      |
+    update kernel ticks      enqueue in RX ring
+    wake expired tasks       notify TTY service
+The UART interrupt becomes both:
+
+the normal UART receive interrupt;
+
+the cooperative OS clock source.
+
+That gives you asynchronous kernel reentry, so the system is no longer purely cooperative. It becomes a constrained form of externally clocked preemptive scheduling.
+
+Do not use a single unqualified control character
+A lone byte such as NUL, XON, XOFF, or ESC creates ambiguity:
+
+terminal applications may legitimately send it;
+
+binary uploads may contain it;
+
+pasted data may contain it;
+
+terminal software may transform or consume it;
+
+dropped bytes cannot be detected;
+
+a missed heartbeat permanently makes the software clock slow.
+
+Instead, define a small escaped transport protocol.
+
+For example:
+
+0xFF 0x00               literal 0xFF data byte
+0xFF 0x01 SEQUENCE      heartbeat
+0xFF 0x02 ...           future control packet
+Ordinary bytes other than 0xFF pass through unchanged.
+
+A literal 0xFF is encoded as:
+
+FF 00
+A heartbeat is:
+
+FF 01 nn
+where nn is an incrementing sequence number.
+
+This costs three bytes per heartbeat. At 100 Hz:
+
+300 bytes/second
+which is negligible at 921,600 baud.
+
+Use a sequence number, not just an increment
+A simple interrupt routine could do:
+
+if (heartbeat)
+    kernel_ticks++;
+But if one heartbeat is lost, the clock remains permanently one tick behind.
+
+Instead, the host should send a wrapping sequence number:
+
+00, 01, 02, ... FE, FF, 00 ...
+The kernel computes:
+
+elapsed = sequence - previous_sequence;
+kernel_ticks += elapsed;
+previous_sequence = sequence;
+Using unsigned wraparound, this recovers from occasional dropped heartbeat packets.
+
+For example:
+
+previous heartbeat: 40
+next received:       43
+elapsed ticks:        3
+The kernel advances by three ticks rather than one.
+
+That makes the clock far more robust.
+
+Better still: transmit the host tick counter
+A four-byte control frame could carry a 16-bit tick value:
+
+FF 01 TICK_LO TICK_HI
+At 100 Hz, a 16-bit counter wraps every 655.36 seconds. Wrap-safe differences still work.
+
+A 24-bit value:
+
+FF 01 TICK0 TICK1 TICK2
+wraps after almost 47 hours at 100 Hz.
+
+Because COR24 is a 24-bit architecture, a 24-bit heartbeat counter is particularly natural.
+
+Interrupt-handler behavior
+The UART ISR should remain extremely small.
+
+It should:
+
+Read the UART byte immediately.
+
+Run the tiny framing state machine.
+
+If ordinary data, append it to the receive ring.
+
+If a completed heartbeat arrives, update the tick counter.
+
+Mark expired sleepers ready.
+
+Optionally request rescheduling.
+
+Return from interrupt.
+
+Conceptually:
+
+void uart_rx_interrupt(void)
+{
+    unsigned byte = uart_read();
+
+    switch (uart_protocol_state) {
+    case UART_NORMAL:
+        if (byte == CONTROL_ESCAPE) {
+            uart_protocol_state = UART_ESCAPE;
+        } else {
+            uart_rx_enqueue(byte);
+        }
+        break;
+
+    case UART_ESCAPE:
+        if (byte == CONTROL_LITERAL) {
+            uart_rx_enqueue(CONTROL_ESCAPE);
+            uart_protocol_state = UART_NORMAL;
+        } else if (byte == CONTROL_HEARTBEAT) {
+            heartbeat_index = 0;
+            uart_protocol_state = UART_HEARTBEAT;
+        } else {
+            protocol_error();
+            uart_protocol_state = UART_NORMAL;
+        }
+        break;
+
+    case UART_HEARTBEAT:
+        heartbeat_bytes[heartbeat_index++] = byte;
+
+        if (heartbeat_index == HEARTBEAT_SIZE) {
+            clock_receive_heartbeat(heartbeat_bytes);
+            uart_protocol_state = UART_NORMAL;
+        }
+        break;
+    }
+}
+The ISR should not:
+
+perform calendar conversions;
+
+scan the whole process table;
+
+run terminal line editing;
+
+do general message delivery;
+
+print diagnostics;
+
+perform I²C transactions;
+
+execute filesystem code.
+
+Scheduler integration
+On receipt of a heartbeat:
+
+void clock_receive_heartbeat(unsigned host_tick)
+{
+    unsigned elapsed = tick_difference(host_tick, last_host_tick);
+
+    last_host_tick = host_tick;
+    monotonic_ticks += elapsed;
+
+    wakeup_pending = 1;
+    reschedule_pending = 1;
+}
+You have two choices for waking sleepers.
+
+Minimal ISR work
+The ISR merely sets flags:
+
+clock_pending = 1;
+reschedule_pending = 1;
+Then, before returning to interrupted user code, the interrupt exit path enters the kernel scheduler.
+
+This is preferable.
+
+Wake sleepers directly
+The ISR examines the head of an ordered sleep queue and wakes expired tasks.
+
+This is possible, but it increases interrupt latency and kernel complexity.
+
+Because your sleep queue will probably contain fewer than 16 or 32 processes, either method works. I would still keep the ISR minimal.
+
+This can provide actual preemption
+Previously, a non-yielding process could monopolize COR24 forever.
+
+With periodic UART interrupts, the kernel can regain control even while this executes:
+
+for (;;) {
+    compute();
+}
+The UART heartbeat interrupt can:
+
+save the interrupted process context;
+
+update time;
+
+decrement its time quantum;
+
+mark another process ready;
+
+restore another process’s context;
+
+return from interrupt into that process.
+
+Thus, this hack potentially gives you genuine preemptive multitasking.
+
+The key question is whether the existing COR24 UART interrupt mechanism saves enough machine state—or allows the handler to save it—to return into a different context.
+
+You need to preserve:
+
+program counter
+status/flags
+stack pointer
+all general registers
+interrupt enable state
+any compiler ABI temporary state
+If the interrupt return instruction insists on returning to the original PC from some hidden hardware register, you may still be limited. But if the return address is software-visible or stack-based, switching tasks from the UART interrupt should be possible.
+
+Heartbeat frequency
+A good starting point is:
+
+100 Hz
+10 ms per tick
+That gives:
+
+responsive terminal interaction;
+
+usable sleep resolution;
+
+conventional scheduler quanta;
+
+negligible UART bandwidth;
+
+low interrupt overhead.
+
+Suggested process quantum:
+
+5 ticks = 50 ms
+Or:
+
+2 ticks = 20 ms
+for a more responsive demonstration.
+
+Avoid starting at 1 kHz. It offers little benefit for a shell-oriented educational OS and creates ten times as many interrupts.
+
+Send heartbeats even while ordinary data is flowing
+The terminal should not send heartbeats only during idle periods.
+
+Otherwise:
+
+pasted text delays ticks;
+
+file transfers distort the clock;
+
+sustained console traffic can stop scheduling;
+
+clock rate becomes input-dependent.
+
+Instead, the host should schedule heartbeats according to wall time and interleave them with ordinary bytes.
+
+For example:
+
+keyboard data
+keyboard data
+heartbeat
+keyboard data
+heartbeat
+...
+At 921,600 baud, there is ample bandwidth.
+
+If the host output queue is heavily occupied, heartbeat frames should receive priority over ordinary input, within reason.
+
+Host scheduling jitter
+A Linux or macOS user-space terminal process cannot promise precise 10 ms timing. You will see:
+
+occasional early or late heartbeats;
+
+multiple heartbeats delivered together;
+
+USB serial buffering;
+
+UART FIFO batching;
+
+host scheduler delays;
+
+terminal process suspension.
+
+The sequence-counter design handles most of this.
+
+The COR24 clock should represent the host’s elapsed tick count, not simply the number of UART interrupts observed.
+
+For example, the host computes:
+
+tick = floor(monotonic_host_time / 10 ms)
+and sends the current tick value.
+
+If the process is delayed for 37 ms, the next packet advances COR24 by three or four ticks.
+
+USB-UART buffering concerns
+A USB serial bridge may accumulate several bytes before delivering them. This affects latency but not elapsed-time correctness when using timestamped or sequenced heartbeat packets.
+
+Relevant behaviors include:
+
+USB frame scheduling;
+
+bridge latency timer;
+
+operating-system TTY buffering;
+
+UART FIFO thresholds;
+
+driver aggregation.
+
+At 100 Hz, a few milliseconds of jitter is acceptable for your OS demonstration.
+
+You may want the terminal emulator to:
+
+use raw TTY mode;
+
+disable software flow control;
+
+disable newline translation;
+
+set low-latency serial options where available;
+
+write each heartbeat frame promptly;
+
+avoid stdio buffering.
+
+Host disconnect behavior
+If the terminal emulator stops or the cable disconnects:
+
+time stops;
+
+preemption stops;
+
+sleeping processes remain asleep;
+
+a running task may monopolize the CPU.
+
+That is acceptable if explicitly understood, but you should expose it.
+
+For example:
+
+clock source: UART heartbeat
+clock state: synchronized
+last heartbeat age: 2 ticks
+Of course, determining heartbeat age requires a separate clock, so after complete loss you cannot measure how long it has been gone. You can only know that no new heartbeat has arrived during kernel activity.
+
+A practical policy:
+
+UART heartbeat is required for multitasking.
+
+Without it, COR-MIN falls back to cooperative scheduling.
+
+Processes are still expected to call syscalls or yield().
+
+Bootstrap issue
+Before the first heartbeat arrives, the kernel should still boot.
+
+Suggested sequence:
+
+Initialize UART.
+
+Start kernel in cooperative mode.
+
+Launch TTY and shell.
+
+Wait for a valid heartbeat frame.
+
+Mark the clock synchronized.
+
+Enable scheduler quantum expiration.
+
+That keeps boot independent of the host extension.
+
+Terminal protocol modes
+The terminal emulator should explicitly negotiate heartbeat mode rather than silently injecting bytes into every session.
+
+For example, COR24 emits:
+
+ESC ] COR24;CLOCK? BEL
+or a simpler binary startup request:
+
+FF 10
+The enhanced terminal responds:
+
+FF 11 VERSION RATE
+Then it begins periodic heartbeats.
+
+This prevents an ordinary terminal program from accidentally displaying or forwarding heartbeat bytes.
+
+A simpler first version can enable heartbeat mode with a command-line switch:
+
+cor24-term \
+    --device /dev/ttyUSB0 \
+    --baud 921600 \
+    --heartbeat-hz 100
+Clean protocol layering
+I would define three layers:
+
+UART hardware
+    raw bytes and RX interrupt
+
+COR24 serial transport
+    escaping and control frames
+
+TTY service
+    user keyboard data and terminal output
+The TTY service never sees heartbeat frames. It receives only decoded terminal input.
+
+That keeps applications unaware of the clock hack.
+
+Possible frame format
+A compact, extensible protocol:
+
+ESC TYPE LENGTH PAYLOAD CHECKSUM
+For example:
+
+FF 01 03 tt tt tt cc
+where:
+
+FF — escape;
+
+01 — heartbeat;
+
+03 — payload length;
+
+tt tt tt — 24-bit host tick;
+
+cc — small XOR or sum checksum.
+
+For a reliable local serial link, a checksum is optional. But it helps detect framing mistakes, especially during binary uploads.
+
+For maximum ISR simplicity, use fixed-size control packets and no general length field initially:
+
+FF 01 T0 T1 T2 CHECK
+Interaction with program loading
+Because you have discussed loading ASCII-hex or binary data over UART, the escaping protocol must also apply to loader traffic.
+
+Two workable approaches:
+
+Unified escaped transport
+All UART input uses the escape protocol. Binary data escapes 0xFF.
+
+Benefit: Heartbeats can continue during program loading.
+
+Cost: Loader and terminal must understand framing.
+
+Suspend heartbeat during loader transaction
+The loader sends:
+
+CLOCK_PAUSE
+then transfers the program, then sends:
+
+CLOCK_RESUME current_tick
+Benefit: Simpler binary loader.
+
+Risk: Preemption and timeouts stop during loading.
+
+The unified transport is the better long-term design.
+
+What this buys you
+This single mechanism can support:
+
+scheduler ticks;
+
+preemptive context switching;
+
+sleeping processes;
+
+timeout expiration;
+
+UART input;
+
+terminal wakeups;
+
+basic runtime accounting;
+
+a watchdog-like host presence indication;
+
+deterministic emulator testing.
+
+The emulator can emulate exactly the same UART heartbeat packets rather than introducing a separate timer device.
+
+That is a major architectural advantage:
+
+same serial protocol
+same ISR
+same clock code
+same scheduler
+same binaries
+Main risks
+Risk	Mitigation
+Missed heartbeat	Include host tick counter
+Heartbeat delayed by typing	Interleave heartbeats regardless of activity
+Control byte appears in input	Escape framing
+USB buffering adds jitter	Use elapsed host tick, not interrupt count
+Terminal disconnect stops clock	Cooperative fallback
+ISR becomes too complex	Minimal framing state machine
+Binary loader conflicts	Unified escaped transport
+Malicious input spoofs clock	Accept control packets only in negotiated mode
+Long interrupt handler harms UART	Defer scheduling work to interrupt exit
+Multiple packets arrive in burst	Advance by tick delta once
+Verdict
+This is more than an amusing hack—it is a sensible solution given the hardware.
+
+I would formalize it as:
+
+UART-hosted virtual timer: a serial transport extension in which the host sends periodic timestamped heartbeat frames. The COR24 UART interrupt decodes these frames, updates the monotonic kernel clock, and initiates scheduler processing. Ordinary UART bytes continue to feed the TTY driver.
+
+The two changes I strongly recommend are:
+
+Send heartbeats at fixed wall-clock intervals even during normal UART traffic.
+
+Send a wrapping counter or timestamp rather than merely incrementing once per heartbeat.
+
+With those changes, the mechanism is robust enough for a compelling MINIX-inspired operating-system demonstration and may even give you practical preemptive multitasking without adding any new COR24 hardware.
+
+
+Wednesday 10:48 AM
+Further simplifications: no network stack.  simple-to-no file system (maybe later via SPI).  Instead a preloaded binary blob with an index as a data structure that can be branched into, vs loading bits from a file system)
+
+Yes. That simplification makes the project much more achievable.
+
+You can avoid both a network stack and a conventional filesystem by treating the system image as a statically linked collection of executable modules plus an embedded directory table.
+
+Recommended model
+Build one COR24 image containing:
+
+boot code
+kernel
+UART/clock interrupt code
+scheduler
+IPC
+TTY service
+shell
+built-in programs
+read-only data blobs
+program index
+At runtime, run hello does not open a file and load bytes. It looks up hello in the program index and creates a process whose initial PC points directly at the program entry point.
+
+Conceptually:
+
+typedef void (*program_entry_t)(void);
+
+struct program_descriptor {
+    const char *name;
+    program_entry_t entry;
+    const cor_word_t *image_base;
+    cor_word_t image_words;
+    cor_word_t stack_words;
+    cor_word_t flags;
+};
+For the simplest case, image_base is not even needed:
+
+struct builtin_program {
+    const char *name;
+    program_entry_t entry;
+    cor_word_t stack_words;
+};
+Example:
+
+extern void hello_main(void);
+extern void ps_main(void);
+extern void ipc_demo_main(void);
+
+static const struct builtin_program programs[] = {
+    { "hello",    hello_main,    128 },
+    { "ps",       ps_main,       128 },
+    { "ipc-demo", ipc_demo_main, 256 },
+};
+The shell performs:
+
+descriptor = find_program("hello");
+spawn_builtin(descriptor);
+This is closer to an embedded ROM filesystem
+Architecturally, this is similar to:
+
+a ROMFS;
+
+an initramfs compiled into the kernel;
+
+BusyBox-style built-ins;
+
+firmware command tables;
+
+statically registered RTOS tasks.
+
+But because execution branches directly to linked code, it is even simpler than a ROM filesystem.
+
+A good name would be:
+
+embedded program catalog
+or:
+
+resident image directory
+rather than filesystem.
+
+Two implementation choices
+1. Direct entry-point table
+Every program is linked into the same binary and has a known entry symbol.
+
+struct resident_program {
+    const char *name;
+    void (*entry)(struct startup_info *);
+    cor_word_t stack_words;
+};
+Benefits
+Simplest implementation.
+
+No loader.
+
+No relocations.
+
+No executable format.
+
+Programs can share libc and kernel stubs.
+
+Easy to debug in the emulator.
+
+Very small runtime overhead.
+
+Risks
+All programs share the same global address space.
+
+Program-global variables require care if multiple instances run.
+
+The complete system must be relinked to add a program.
+
+Programs are not independently replaceable.
+
+This is the best first implementation.
+
+2. Embedded executable blobs
+Each application is compiled as a relocatable or position-independent image, concatenated into the main binary, and indexed.
+
+struct embedded_image {
+    const char *name;
+    const cor_word_t *start;
+    cor_word_t text_words;
+    cor_word_t data_words;
+    cor_word_t bss_words;
+    cor_word_t entry_offset;
+    cor_word_t stack_words;
+};
+At spawn time, the kernel:
+
+Finds the descriptor.
+
+Allocates RAM.
+
+Copies text and data from the embedded blob.
+
+Clears BSS.
+
+Applies relocations if needed.
+
+Sets PC = load_base + entry_offset.
+
+Creates the process stack.
+
+Benefits
+Multiple independent instances.
+
+Cleaner per-process globals.
+
+Later SPI loading can use the same executable format.
+
+More convincingly demonstrates program loading.
+
+Embedded and external programs share one loader.
+
+Risks
+Requires relocations or position-independent code.
+
+Requires a memory allocator.
+
+More work for Tiny C and the linker.
+
+More image metadata.
+
+This is a good later milestone.
+
+Recommended first version: shared text, private context
+Start with directly linked programs but give every process:
+
+its own stack;
+
+its own saved registers;
+
+its own process descriptor;
+
+its own startup arguments;
+
+optional per-process state area.
+
+Avoid ordinary writable C globals inside application code.
+
+Instead, pass a process-local state pointer:
+
+struct counter_state {
+    cor_word_t value;
+};
+
+void counter_main(void *state_ptr)
+{
+    struct counter_state *state = state_ptr;
+
+    for (;;) {
+        state->value++;
+        tty_print_number(state->value);
+        sleep_ticks(100);
+    }
+}
+The program descriptor can include state size:
+
+struct resident_program {
+    const char *name;
+    program_entry_t entry;
+    cor_word_t stack_words;
+    cor_word_t state_words;
+};
+On spawn:
+
+allocate process descriptor
+allocate stack
+allocate state block
+zero state block
+initialize initial stack frame
+set PC to entry
+mark READY
+This gives multiple instances without requiring copied executable text.
+
+Memory layout
+A practical monolithic image could be:
+
+low memory
++--------------------------+
+| reset vectors            |
+| interrupt entry          |
+| kernel text              |
+| kernel constants         |
+| resident program text    |
+| string/data blobs        |
+| program index            |
++--------------------------+
+| kernel mutable data      |
+| process table            |
+| IPC message pool         |
+| UART buffers             |
+| heap / state allocator   |
+| process stacks           |
++--------------------------+
+high memory
+With 1 MB SRAM, you can reserve fixed regions initially.
+
+Example:
+
+256K words   kernel and resident code
+128K words   read-only data and catalog
+128K words   kernel structures and buffers
+512K words   stacks and process-local state
+The exact split depends on whether the 1 MB figure means bytes or 24-bit words.
+
+Program index generation
+Do not maintain the table manually forever.
+
+A build tool can generate it from a manifest:
+
+[[program]]
+name = "hello"
+entry = "hello_main"
+stack_words = 128
+state_words = 0
+
+[[program]]
+name = "counter"
+entry = "counter_main"
+stack_words = 192
+state_words = 1
+
+[[program]]
+name = "ipc-demo"
+entry = "ipc_demo_main"
+stack_words = 256
+state_words = 8
+The build process generates:
+
+extern void hello_main(void *);
+extern void counter_main(void *);
+extern void ipc_demo_main(void *);
+
+const struct resident_program resident_programs[] = {
+    { "hello", hello_main, 128, 0 },
+    { "counter", counter_main, 192, 1 },
+    { "ipc-demo", ipc_demo_main, 256, 8 },
+};
+
+const cor_word_t resident_program_count = 3;
+This also gives you a natural path toward later executable blobs.
+
+Shell model
+The shell can remain extremely small:
+
+help
+ps
+run <program>
+kill <pid>
+sleep <ticks>
+uptime
+mem
+date
+echo
+run does:
+
+int shell_run(const char *name)
+{
+    const struct resident_program *program;
+
+    program = program_lookup(name);
+
+    if (program == 0)
+        return ERR_NOT_FOUND;
+
+    return process_spawn(program);
+}
+No path parsing, current directory, file descriptors, permissions, or inode handling is required.
+
+You may not need a filesystem API at all
+For the initial system, do not implement:
+
+open
+close
+read
+write
+seek
+stat
+directories
+mounts
+Instead expose purpose-specific services:
+
+TTY_WRITE
+TTY_READ_LINE
+PROGRAM_LIST
+PROGRAM_SPAWN
+PROCESS_LIST
+PROCESS_KILL
+CLOCK_SLEEP
+CLOCK_GET_TIME
+This is much more consistent with a small message-passing microkernel.
+
+Later, if SPI storage is added, introduce a storage service without forcing the early design to emulate UNIX.
+
+Read-only data blobs
+Programs may need static data, such as:
+
+help text;
+
+scripts;
+
+test input;
+
+object-code samples;
+
+fonts;
+
+lookup tables;
+
+demonstration documents.
+
+Use a second catalog:
+
+struct blob_descriptor {
+    const char *name;
+    const cor_word_t *data;
+    cor_word_t words;
+    cor_word_t type;
+};
+Example:
+
+help.txt
+banner.txt
+demo.cor24
+test-data.bin
+Programs can request blobs by name through a catalog service:
+
+BLOB_FIND
+BLOB_READ
+BLOB_SIZE
+Or, initially, directly access their descriptors.
+
+This provides file-like behavior without files.
+
+A unified image catalog
+Programs and data can share one descriptor format:
+
+enum image_kind {
+    IMAGE_PROGRAM,
+    IMAGE_DATA,
+    IMAGE_SERVICE,
+};
+
+struct image_descriptor {
+    const char *name;
+    cor_word_t kind;
+    const cor_word_t *base;
+    cor_word_t words;
+    cor_word_t entry_offset;
+    cor_word_t stack_words;
+    cor_word_t state_words;
+    cor_word_t flags;
+};
+Possible flags:
+
+IMAGE_RESIDENT
+IMAGE_SINGLE_INSTANCE
+IMAGE_PRIVILEGED
+IMAGE_AUTOSTART
+IMAGE_RESTARTABLE
+IMAGE_READ_ONLY
+This becomes the embedded equivalent of a filesystem directory plus executable metadata.
+
+Autostart services
+The same table can identify services that launch during boot:
+
+{
+    "tty",
+    IMAGE_SERVICE,
+    tty_image,
+    tty_words,
+    tty_entry_offset,
+    256,
+    32,
+    IMAGE_AUTOSTART | IMAGE_PRIVILEGED | IMAGE_RESTARTABLE
+}
+Boot logic:
+
+initialize kernel
+scan image catalog
+spawn all AUTOSTART entries
+start init or shell
+enable UART-hosted clock
+schedule
+This is clean and very MINIX-like: services are processes, but their binaries are resident.
+
+SPI later
+When SPI storage arrives, keep the same descriptor and executable format.
+
+You can have two image providers:
+
+resident image provider
+SPI image provider
+The program manager searches:
+
+1. resident catalog
+2. SPI catalog
+The shell does not care where the program resides.
+
+struct image_provider {
+    int (*find)(const char *name, struct image_descriptor *out);
+    int (*read)(const struct image_descriptor *image,
+                cor_word_t offset,
+                cor_word_t *buffer,
+                cor_word_t words);
+};
+Initially, only the resident provider exists.
+
+Later:
+
+resident -> direct memory reference
+SPI      -> block reads and loader
+This avoids redesigning run when storage is added.
+
+No network stack is the right choice
+A network stack would introduce:
+
+checksums;
+
+packet buffers;
+
+timers;
+
+retransmission;
+
+interfaces;
+
+address configuration;
+
+protocol state machines;
+
+many multiply/divide-like operations;
+
+substantially more testing.
+
+It would distract from the primary demonstrations:
+
+context switching;
+
+UART-driven timer preemption;
+
+IPC;
+
+process services;
+
+program spawning;
+
+failure recovery.
+
+Communication with the host can remain entirely over the enhanced UART transport.
+
+Later, the host terminal can offer higher-level control frames such as:
+
+UPLOAD_IMAGE
+LIST_HOST_FILES
+READ_HOST_BLOB
+DEBUG_PROCESS
+TRACE_IPC
+without implementing networking on COR24.
+
+Suggested minimal process set
+The first useful system could contain only:
+
+kernel pseudo-process
+idle
+tty service
+clock service
+process manager
+shell
+Resident applications:
+
+hello
+counter
+ps
+ipc-demo
+sleep-demo
+fault-demo
+mem
+uptime
+Potentially the clock logic stays in the kernel, reducing the core service set further.
+
+Recommended milestone order
+Milestone 1: linked tasks
+Static entry-point table.
+
+run by name.
+
+Separate stacks.
+
+Cooperative yield.
+
+Milestone 2: IPC
+Fixed-size messages.
+
+send, receive, sendrec.
+
+TTY as a service.
+
+Milestone 3: UART heartbeat clock
+Escaped heartbeat frames.
+
+Tick counter.
+
+Sleep queue.
+
+Preemptive scheduling if context switching from the ISR works.
+
+Milestone 4: generated catalog
+TOML or simple text manifest.
+
+Generated C or assembler descriptor table.
+
+Autostart and privilege flags.
+
+Milestone 5: process-local state
+Shared resident program text.
+
+Separate stack and state allocation.
+
+Multiple instances of selected programs.
+
+Milestone 6: embedded image blobs
+COR24 executable header.
+
+Copy/load from resident blob.
+
+Private data and BSS.
+
+Relocations if required.
+
+Milestone 7: SPI image provider
+SPI block device.
+
+Read-only catalog.
+
+Same loader used for embedded and SPI programs.
+
+What to call it
+Avoid claiming it is a MINIX 1 implementation if it does not reproduce MINIX APIs or source structure.
+
+A precise description would be:
+
+A clean-room MINIX-inspired microkernel for COR24, using UART-driven preemption, synchronous message passing, resident executable catalogs, and no MMU, network stack, or conventional filesystem.
+
+That still demonstrates the central MINIX ideas while remaining native to COR24.
+
+The direct-entry catalog is the right first choice. It removes the filesystem, loader, relocation, storage, and executable-format problems while retaining real process creation, scheduling, IPC, and service separation.
+
+
+no need for MINIX-related name, as this is a subset, not x86 specific, and is generic.  maybe swtos for Software Wrighter Tiny Operating System.  or SW/TOS?
+
+I actually like the idea of dropping the MINIX reference entirely. Once you remove:
+
+x86 assumptions,
+
+UNIX compatibility goals,
+
+the filesystem,
+
+networking,
+
+preemption via hardware timers,
+
+you're really creating a new operating system inspired by microkernel ideas, not a MINIX derivative.
+
+SWTOS is a good fit
+SWTOS = Software Wrighter Tiny Operating System
+
+Pros:
+
+Unique and personal to your ecosystem.
+
+Matches your existing sw-* branding.
+
+Doesn't promise POSIX or UNIX compatibility.
+
+Works equally well on COR24, emulators, FPGA soft CPUs, and future CPUs.
+
+I'd write it as:
+
+SWTOS (Software Wrighter Tiny Operating System)
+
+and avoid the slash. People naturally pronounce it "swit-toss" or "S-W-TOS."
+
+SW/TOS
+I would avoid the slash.
+
+Reasons:
+
+awkward in filenames
+
+awkward in GitHub repositories
+
+awkward in include paths
+
+awkward in URLs
+
+For example:
+
+github.com/sw-embed/swtos
+looks much cleaner than
+
+github.com/sw-embed/sw-tos
+What SWTOS should become
+I think SWTOS should be viewed as a microkernel framework, not merely an OS.
+
+Something like:
+
++-----------------------------------+
+| Applications                      |
++-----------------------------------+
+| Resident Services                 |
+|   shell                           |
+|   tty                             |
+|   process manager                 |
+|   catalog manager                 |
++-----------------------------------+
+| SWTOS Microkernel                 |
+|   scheduler                       |
+|   IPC                             |
+|   timers                          |
+|   memory                          |
++-----------------------------------+
+| COR24 HAL                         |
+|   UART                            |
+|   GPIO                            |
+|   SPI                             |
+|   I2C                             |
++-----------------------------------+
+Notice that nothing above mentions COR24 specifically.
+
+I'd define explicit design goals
+Instead of "UNIX compatible", something like:
+
+SWTOS Goals
+Tiny
+
+Fits comfortably on small FPGA CPUs.
+
+Portable
+
+Only the HAL depends on the ISA.
+
+Deterministic
+
+Everything is understandable.
+
+Educational
+
+Easy to read and modify.
+
+Cooperative-first
+
+Preemption optional.
+
+Message-passing
+
+Everything communicates through messages.
+
+No dynamic dependencies
+
+Entire system can be one binary.
+
+Resident applications
+
+Programs are cataloged instead of installed.
+
+Modular
+
+Services are replaceable.
+
+Emulator-first
+
+Runs identically in hardware and emulator.
+
+The resident catalog is becoming the defining feature
+I'm starting to think the catalog deserves to be one of the core concepts.
+
+Instead of
+
+Filesystem
+you have
+
+Object Catalog
+Every object has a descriptor.
+
+Program
+Data Blob
+Font
+Icon
+Image
+Script
+Configuration
+ROM table
+Everything is just another catalog object.
+
+enum object_type {
+    OBJ_PROGRAM,
+    OBJ_DATA,
+    OBJ_FONT,
+    OBJ_IMAGE,
+    OBJ_SCRIPT,
+    OBJ_DEVICE,
+};
+Later, SPI storage simply contributes another catalog provider.
+
+The shell doesn't know where something came from.
+
+run hello
+could execute
+
+resident catalog
+or
+
+SPI catalog
+without changing the API.
+
+I think you can simplify even further
+Earlier we discussed a process manager.
+
+I'd actually remove it.
+
+The kernel itself can own:
+
+process table
+
+scheduler
+
+IPC
+
+sleep queue
+
+The first user services could be only
+
+TTY
+Shell
+That's enough to demonstrate:
+
+multitasking
+
+IPC
+
+scheduling
+
+spawning
+
+sleeping
+
+Later you can split out:
+
+Process Manager
+
+Clock Server
+
+Catalog Server
+
+when it actually buys something.
+
+A naming convention
+Since you already have a consistent sw- ecosystem, I'd continue that.
+
+For example:
+
+swtos/
+    kernel/
+    hal/
+    ipc/
+    sched/
+    tty/
+    shell/
+    catalog/
+    apps/
+Applications:
+
+sw-hello
+sw-ps
+sw-ipc
+sw-counter
+sw-clock
+sw-mem
+Libraries:
+
+libswipc
+libswtty
+libswcatalog
+A slogan
+One thing I like about your projects is that they're educational rather than merely trying to clone existing systems.
+
+I'd lean into that.
+
+For example:
+
+SWTOS — A tiny message-passing operating system for small CPUs and FPGA soft cores.
+
+or
+
+SWTOS — A portable microkernel for educational and embedded systems.
+
+Notice neither mentions COR24, so the same OS could eventually run on:
+
+COR24
+
+RISC-V
+
+6502-derived soft cores
+
+your emulator
+
+perhaps even ARM Cortex-M
+
+with only a HAL replacement.
+
+I think you've now arrived at a coherent architecture:
+
+SWTOS is the operating system.
+
+It uses a microkernel with synchronous IPC.
+
+It has a resident object catalog instead of a filesystem.
+
+Programs are spawned from catalog objects, not loaded from files.
+
+Time comes from a UART-hosted virtual timer (or another monotonic source on future hardware).
+
+Storage providers (resident image today, SPI flash tomorrow) implement the same catalog interface.
+
+That combination is original enough that it stands on its own rather than feeling like "MINIX on a different CPU."
+
+

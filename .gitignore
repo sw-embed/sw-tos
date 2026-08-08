@@ -1,0 +1,22 @@
+# Build artifacts
+*.o
+*.bin
+*.hex
+*.elf
+*.map
+*.lst
+
+# Editor / IDE
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+
+# OS junk
+.DS_Store
+Thumbs.db
+
+# Temporary files
+*.tmp
+*.bak
