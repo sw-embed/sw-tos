@@ -1,10 +1,14 @@
 # Build artifacts
+build/
 *.o
 *.bin
 *.hex
 *.elf
 *.map
 *.lst
+
+# Tool binaries (built from sw-cor24-x-assembler and sw-cor24-emulator)
+tools/bin/
 
 # Editor / IDE
 .vscode/
