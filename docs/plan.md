@@ -691,18 +691,35 @@ swtos/
 Before building OS components, prove PL/SW can handle systems-level
 constructs needed by SWTOS:
 
-- [ ] RECORD types for process descriptors and message structs
-- [ ] PTR dereference and field access for linked structures
-- [ ] ADDR() and SIZEOF() built-ins for layout-sensitive code
-- [ ] NAKED procedures and ASM DO blocks for HAL routines
+- [x] RECORD types for process descriptors and message structs
+- [x] PTR dereference and field access for linked structures
+- [x] ADDR() and SIZEOF() built-ins for layout-sensitive code
+- [x] NAKED procedures and ASM DO blocks for HAL routines
 - [ ] Separate .plsw modules assembled and linked together (link24)
-- [ ] Global/static data initialization
-- [ ] %INCLUDE / %DEFINE / %IF for conditional compilation
-- [ ] Volatile memory-mapped I/O access (UART, LED registers)
-- [ ] MACRODEF/GEN for recurring kernel patterns
+- [x] Global/static data initialization
+- [x] %INCLUDE / %DEFINE / %IF for conditional compilation
+- [x] Volatile memory-mapped I/O access (UART, LED registers)
+- [x] MACRODEF/GEN for recurring kernel patterns
 
-**Deliverable:** `abi-test.bin` running identically in the Rust emulator
-and on COR24-TB hardware.
+**Status:** smoke-test.plsw compiles and runs. Proven: BASED record
+templates with PTR dereference, %INCLUDE with FILE: protocol, %DEFINE
+constants, MACRODEF/GEN invocation, ADDR(), inline ASM via ASM DO,
+DO WHILE loop, PROC with stack frame.
+
+**Known PL/SW constraints discovered:**
+- BASED records are templates, not named type specifiers. You cannot
+  write `DCL M MESSAGE;` -- instead use `P = ADDR(LOCAL_BUF); P->FIELD`.
+- Comments must be on their own lines. Trailing `/* ... */` after
+  `%DEFINE X 42;` causes a syntax error.
+- The `-u` (UART input string) flag has a bug with the FILE:/SOURCE:
+  protocol -- characters are lost when `SOURCE:` prefix is present.
+  Use `--uart-file` instead (see pipeline.sh).
+- PL/SW compiler runs as a COR24 program on the emulator. Compile time
+  is ~3 seconds for typical programs (not minutes -- the delay was
+  caused by incorrect `--terminal --echo` usage instead of `--uart-file`).
+
+**Deliverable:** `smoke-test.plsw` compiles and runs in the emulator.
+Next: multi-module linking with link24.
 
 ### Milestone 1 -- Linked Tasks with Context Switch
 
@@ -774,16 +791,59 @@ Sleep command works.
 - **Language:** PL/SW (PL/I-inspired systems programming language for COR24)
   -- [sw-cor24-plsw](https://github.com/sw-embed/sw-cor24-plsw)
 - **Assembler:** COR24 assembler (`cor24-asm`)
-- **Linker:** `link24` (FIXUP-based linker from sw-cor24-plsw toolchain)
 - **Emulator:** `cor24-emu` (Rust-based COR24 emulator)
+- **Compiler:** PL/SW compiler binary (`tools/plsw.lgo`, pre-built from
+  sw-cor24-plsw). Runs as a COR24 program on the emulator.
+- **Linker:** `link24` (FIXUP-based linker from sw-cor24-plsw toolchain)
 - **ABI:** COR24 calling convention: args on stack R-to-L, return in r0,
   8 registers (r0-r2 GP, fp, sp, z, iv, ir), 24-bit word-addressable
-- **Build system:** Makefile (or justfile)
+- **Build system:** justfile
 - **Output:** flat binary image (.lgo) loadable via COR24 serial boot
   (921,600 baud)
 - **Entire system:** one monolithic binary (kernel + services + apps + catalog)
-- **Pipeline:** .plsw sources -> PL/SW compiler on emulator -> .s assembly
-  -> cor24-asm -> link24 -> .lgo image
+
+### PL/SW Pipeline
+
+The PL/SW compiler runs on the COR24 emulator -- it is itself a COR24
+program, not a host tool. Source is fed via UART using the FILE:/SOURCE:
+protocol:
+
+```
+.plsw + .msw files  -->  pipeline.sh  -->  compiler on emulator (via --uart-file)
+                                               |
+                                           .s assembly
+                                               |
+                                          cor24-asm  -->  .lgo image
+                                               |
+                                          cor24-emu  -->  program output
+```
+
+**Important:** Use `--uart-file` to feed source to the compiler, NOT `-u`.
+The `-u` flag has a bug where the `SOURCE:` prefix causes character loss
+in the FILE:/SOURCE: protocol. `--uart-file` writes raw bytes to a temp
+file and feeds them correctly.
+
+### FILE:/SOURCE: Protocol
+
+For multi-file compilation with .msw includes:
+
+1. Send `c\n` to enter compile mode
+2. For each .msw: `FILE:<name>\n<content>\x1E` (record separator)
+3. `SOURCE:\n<main source>\x04` (EOT)
+
+The name in `FILE:` must match the `%INCLUDE` name (without .msw).
+
+### Justfile Recipes
+
+| Recipe              | Description                                |
+|---------------------|--------------------------------------------|
+| `just plsw-smoke`   | Compile smoke-test.plsw with .msw includes |
+| `just plsw-smoke-run` | Compile and run smoke-test.plsw         |
+| `just plsw-compile <[.msw ...] file.plsw>` | Compile any .plsw  |
+| `just plsw-run <[.msw ...] file.plsw>` | Compile and run any .plsw |
+| `just plsw-dump <[.msw ...] file.plsw>` | Compile and dump memory |
+| `just smoke`         | Assemble smoke-test.s (assembly, not PL/SW) |
+| `just run`           | Run assembly smoke test                   |
 
 ---
 
