@@ -1,0 +1,11 @@
+/* hello_app.msw -- Hello app for SWTOS menu */
+
+DCL HELLO_MSG(20) CHAR INIT('Hello from SWTOS!');
+DCL PRESS_MSG(28) CHAR INIT('App done. Press any key...');
+
+HELLO: PROC;
+    DCL CH BYTE;
+    CALL UART_PUTS(ADDR(HELLO_MSG));
+    CALL UART_PUTS(ADDR(PRESS_MSG));
+    CALL GETCHAR(CH);
+END;

@@ -1,0 +1,19 @@
+/* system.plsw -- SWTOS monolithic system image
+ *
+ * Includes: kernel types, menu shell, two demo apps.
+ * No kernel, no IPC, no multitasking.
+ * One app at a time, returns to menu.
+ *
+ * %INCLUDE order matters: menu.msw defines GETCHAR used by apps.
+ */
+
+%INCLUDE swtos;
+%INCLUDE menu;
+%INCLUDE hello_app;
+%INCLUDE counter_app;
+
+MAIN: PROC;
+    CALL UART_PUTS(ADDR(BANNER));
+    CALL UART_PUTCHAR(10);
+    CALL MENU;
+END;

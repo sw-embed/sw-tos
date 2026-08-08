@@ -31,6 +31,14 @@ debug: smoke
 dump: smoke
     {{COR24EMU}} --lgo build/smoke-test.lgo -n -1 --speed 0 --dump
 
+# Compile and run PL/SW system image (menu + apps)
+plsw-system:
+    {{PIPELINE}} include/swtos.msw include/menu.msw include/hello_app.msw include/counter_app.msw system.plsw
+
+# Run system interactively (requires --terminal mode)
+plsw-system-run: plsw-system
+    {{COR24EMU}} --lgo build/system.lgo --terminal --echo --speed 0 -t 300
+
 # ---- PL/SW compiler pipeline ----
 
 # Compile PL/SW smoke test (with .msw includes) to .s + .lgo

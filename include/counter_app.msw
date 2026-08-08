@@ -1,0 +1,33 @@
+/* counter_app.msw -- Counter app for SWTOS menu */
+
+DCL COUNT_MSG(8) CHAR INIT('Count: ');
+DCL DIGITS(12) CHAR;
+
+PRINT_INT: PROC(N INT);
+    DCL D INT;
+    DCL POS INT;
+    IF (N = 0) THEN DO;
+        CALL UART_PUTCHAR(48);
+        RETURN;
+    END;
+    POS = 0;
+    DO WHILE (N > 0);
+        D = N / 10;
+        DIGITS(POS) = N - D * 10 + 48;
+        N = D;
+        POS = POS + 1;
+    END;
+    DO WHILE (POS > 0);
+        POS = POS - 1;
+        CALL UART_PUTCHAR(DIGITS(POS));
+    END;
+END;
+
+COUNTER: PROC;
+    DCL I INT;
+    DO I = 1 TO 10;
+        CALL UART_PUTS(ADDR(COUNT_MSG));
+        CALL PRINT_INT(I);
+        CALL UART_PUTCHAR(10);
+    END;
+END;
