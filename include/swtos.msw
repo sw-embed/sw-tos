@@ -2,12 +2,12 @@
 
 /* ---- Hardware addresses (COR24-TB) ---- */
 
-%DEFINE UART_TX_DATA    16711936;   /* 0xFF0100 */
-%DEFINE UART_TX_STATUS  16711937;   /* 0xFF0101 */
-%DEFINE UART_RX_DATA    16711936;   /* 0xFF0100 (same, read = RX) */
+%DEFINE UART_TX_DATA    16711936;
+%DEFINE UART_TX_STATUS  16711937;
+%DEFINE UART_RX_DATA    16711936;
 %DEFINE UART_RX_STATUS  16711937;
-%DEFINE LED_REG         16711680;   /* 0xFF0000 (active-low: 0=ON) */
-%DEFINE INT_EN_REG      16711712;   /* 0xFF0010 */
+%DEFINE LED_REG         16711680;
+%DEFINE INT_EN_REG      16711712;
 
 /* ---- Process states ---- */
 
@@ -26,7 +26,7 @@
 %DEFINE MSG_PROGRAM_LIST   3;
 %DEFINE MSG_PROGRAM_SPAWN  4;
 %DEFINE MSG_PROCESS_LIST   5;
-%define MSG_PROCESS_KILL   6;
+%DEFINE MSG_PROCESS_KILL   6;
 %DEFINE MSG_CLOCK_SLEEP    7;
 %DEFINE MSG_CLOCK_GET_TIME 8;
 
@@ -45,7 +45,7 @@
 
 /* ---- Scheduling ---- */
 
-%DEFINE QUANTUM_DEFAULT 5;      /* ticks per time slice (50 ms at 100 Hz) */
+%DEFINE QUANTUM_DEFAULT 5;
 %DEFINE HEARTBEAT_HZ    100;
 
 /* ---- Fixed-size message (7 words = 21 bytes) ---- */
@@ -89,7 +89,7 @@ DCL 1 PROGRAM_DESC BASED,
 
 /* ---- Program kinds ---- */
 
-%define IMAGE_PROGRAM  0;
+%DEFINE IMAGE_PROGRAM  0;
 %DEFINE IMAGE_DATA    1;
 %DEFINE IMAGE_SERVICE  2;
 

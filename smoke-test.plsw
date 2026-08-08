@@ -1,12 +1,23 @@
-/* smoke-test.plsw -- SWTOS Milestone 0: minimal PL/SW systems readiness test */
+/* smoke-test.plsw -- SWTOS Milestone 0: PL/SW systems readiness test
+ *
+ * Validates:
+ *   - %INCLUDE of .msw header
+ *   - %DEFINE constants from include
+ *   - BASED record template + PTR dereference (->)
+ *   - ADDR() built-in
+ *   - MACRODEF/GEN invocation (?LED_ON, ?LED_OFF)
+ *   - DO WHILE loop
+ *   - PROC with body
+ */
 
 %INCLUDE swtos;
 
-DCL MSG MESSAGE;
-DCL MSGPTR PTR INIT(ADDR(MSG));
+DCL MSG_BUF(7) INT;
+DCL MSGPTR PTR;
 
 MAIN: PROC;
-    MSGPTR->MSG_TYPE = 1;
+    MSGPTR = ADDR(MSG_BUF);
+    MSGPTR->MSG_TYPE = MSG_TTY_WRITE;
     MSGPTR->MSG_FIELD1 = 42;
     ?LED_ON;
     ?LED_OFF;

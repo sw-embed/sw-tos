@@ -6,30 +6,60 @@ TOOLSDIR := "tools/bin"
 COR24ASM := TOOLSDIR + "/cor24-asm"
 COR24EMU := TOOLSDIR + "/cor24-emu"
 COR24DBG := TOOLSDIR + "/cor24-dbg"
+PLSWLGO := "tools/plsw.lgo"
+PIPELINE := "./scripts/plsw-pipeline.sh"
 
-# Default: assemble smoke test and verify in emulator
-default: smoke
+# Default: compile and run PL/SW smoke test
+default: plsw-smoke-run
+
+# ---- Assembly smoke test (pure .s, no PL/SW compiler) ----
 
 # Assemble smoke test
 smoke:
     mkdir -p build
     {{COR24ASM}} smoke-test.s -o build/smoke-test.lgo --listing build/smoke-test.lst
 
-# Run smoke test in emulator (no instruction limit)
+# Run assembly smoke test
 run: smoke
     {{COR24EMU}} --lgo build/smoke-test.lgo -n -1 --speed 0
 
-# Debug smoke test
+# Debug assembly smoke test
 debug: smoke
     {{COR24DBG}} --lgo build/smoke-test.lgo
 
-# Dump memory after smoke test halts
+# Dump memory after assembly smoke test halts
 dump: smoke
     {{COR24EMU}} --lgo build/smoke-test.lgo -n -1 --speed 0 --dump
 
-# Install toolchain binaries (requires sw-cor24-isa, sw-cor24-x-assembler,
-# sw-cor24-emulator repos as siblings, then clean up repos)
-# See docs/plan.md section 16 for details.
+# ---- PL/SW compiler pipeline ----
+
+# Compile PL/SW smoke test (with .msw includes) to .s + .lgo
+plsw-smoke:
+    {{PIPELINE}} include/swtos.msw smoke-test.plsw
+
+# Compile and run PL/SW smoke test
+plsw-smoke-run: plsw-smoke
+    {{COR24EMU}} --lgo build/smoke-test.lgo -n -1 --speed 0 --quiet
+
+# Compile and dump PL/SW smoke test
+plsw-smoke-dump: plsw-smoke
+    {{COR24EMU}} --lgo build/smoke-test.lgo -n -1 --speed 0 --dump
+
+# Compile any .plsw file: just plsw-compile [include.msw ...] file.plsw
+plsw-compile *ARGS:
+    {{PIPELINE}} {{ARGS}}
+
+# Compile and run any .plsw file: just plsw-run [include.msw ...] file.plsw
+plsw-run *ARGS:
+    {{PIPELINE}} {{ARGS}} --run
+
+# Compile and dump any .plsw file: just plsw-dump [include.msw ...] file.plsw
+plsw-dump *ARGS:
+    {{PIPELINE}} {{ARGS}} --dump
+
+# ---- Toolchain ----
+
+# Install toolchain binaries (see docs/plan.md section 16)
 install-tools:
     @echo "See docs/plan.md -- toolchain section for build instructions"
     @echo "Binaries should be placed in {{TOOLSDIR}}/"

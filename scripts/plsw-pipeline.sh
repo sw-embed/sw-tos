@@ -1,8 +1,11 @@
 #!/bin/bash
-# plsw-pipeline.sh -- Compile a .plsw file using the PL/SW compiler on the emulator,
-# then assemble the generated .s and optionally run it.
+# plsw-pipeline.sh -- Compile a .plsw file using the PL/SW compiler on the
+# emulator, assemble the generated .s, and optionally run it.
 #
 # Usage: ./scripts/plsw-pipeline.sh [include.msw ...] program.plsw [--run|--dump]
+#
+# Uses --uart-file to feed source to the compiler (avoids -u escape handling
+# bugs with the FILE:/SOURCE: protocol).
 
 set -euo pipefail
 
@@ -14,7 +17,7 @@ COR24ASM="$TOOLDIR/bin/cor24-asm"
 COR24EMU="$TOOLDIR/bin/cor24-emu"
 
 if [ ! -f "$PLSW_LGO" ]; then
-    echo "Error: $PLSW_LGO not found. Run 'just install-plsw-compiler' first." >&2
+    echo "Error: $PLSW_LGO not found." >&2
     exit 1
 fi
 
@@ -44,32 +47,32 @@ BASENAME=$(basename "$MAIN" .plsw)
 OUTDIR="$ROOT_DIR/build"
 mkdir -p "$OUTDIR"
 
-# Build UART input string with FILE:/SOURCE: protocol for includes
-build_input() {
-    printf 'c\\n'
+# Build UART input file with FILE:/SOURCE: protocol
+SCRATCH=$(mktemp -d /tmp/plsw-XXXXXX)
+trap "rm -rf $SCRATCH" EXIT
+UART_INPUT="$SCRATCH/input.bin"
+
+{
+    printf 'c\n'
     if [ ${#MACROS[@]} -gt 0 ]; then
         for m in "${MACROS[@]}"; do
-            printf 'FILE:%s\\n' "$(basename "$m")"
-            while IFS= read -r line; do
-                printf '%s\\n' "$line"
-            done < "$m"
-            printf '\\x1E'
+            NAME=$(basename "$m" .msw)
+            printf 'FILE:%s\n' "$NAME"
+            cat "$m"
+            printf '\x1e'
         done
-        printf 'SOURCE:\\n'
+        printf 'SOURCE:\n'
     fi
-    while IFS= read -r line; do
-        printf '%s\\n' "$line"
-    done < "$MAIN"
-    printf '\\x04'
-}
+    cat "$MAIN"
+    printf '\x04'
+} > "$UART_INPUT"
 
-INPUT=$(build_input)
-
-# Compile: feed source to PL/SW compiler running on emulator
+# Compile: feed source to PL/SW compiler running on emulator via --uart-file
 echo "=== Compiling $BASENAME ===" >&2
-COMPILER_OUT=$(cor24-emu --lgo "$PLSW_LGO" -u "$INPUT" -n 200000000 -t 120 --speed 0 2>&1)
+COMPILER_OUT=$($COR24EMU --lgo "$PLSW_LGO" --uart-file "$UART_INPUT" \
+    --quiet --speed 0 -n 200000000 -t 120 2>&1)
 
-UART_OUT=$(echo "$COMPILER_OUT" | sed -n '/^UART output:/,/^Executed /{/^Executed /d;p;}' | sed '1s/^UART output: //')
+UART_OUT="$COMPILER_OUT"
 
 if echo "$UART_OUT" | grep -q "compilation failed\|COMPILE ERROR\|ERROR:"; then
     echo "Compilation failed:" >&2
@@ -105,18 +108,12 @@ echo "Binary: $OUT_LGO" >&2
 
 if [ "$RUN_MODE" = "--run" ]; then
     echo "=== Running ===" >&2
-    RUN_OUT=$(cor24-emu --lgo "$OUT_LGO" -n -1 --speed 0 2>&1)
-    PROG_OUT=$(echo "$RUN_OUT" | sed -n '/^UART output:/,/^Executed /{/^Executed /d;p;}' | sed '1s/^UART output: //')
-    if [ -n "$PROG_OUT" ]; then
-        echo "$PROG_OUT"
+    RUN_OUT=$($COR24EMU --lgo "$OUT_LGO" -n -1 --speed 0 --quiet 2>&1)
+    if [ -n "$RUN_OUT" ]; then
+        echo "$RUN_OUT"
     fi
-    echo "$RUN_OUT" | grep -E "^  (Instructions|Halted):" >&2 || true
 elif [ "$RUN_MODE" = "--dump" ]; then
     echo "=== Dump ===" >&2
-    cor24-emu --lgo "$OUT_LGO" -n -1 --speed 0 --dump > "$OUTDIR/${BASENAME}-dump.txt" 2>&1
-    PROG_OUT=$(grep "^UART output:" "$OUTDIR/${BASENAME}-dump.txt" | sed 's/^UART output: //')
-    if [ -n "$PROG_OUT" ]; then
-        echo "$PROG_OUT"
-    fi
+    $COR24EMU --lgo "$OUT_LGO" -n -1 --speed 0 --dump > "$OUTDIR/${BASENAME}-dump.txt" 2>&1
     echo "Dump: $OUTDIR/${BASENAME}-dump.txt" >&2
 fi
