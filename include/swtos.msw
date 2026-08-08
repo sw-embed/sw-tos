@@ -1,0 +1,127 @@
+/* swtos.msw -- SWTOS kernel type declarations and constants */
+
+/* ---- Hardware addresses (COR24-TB) ---- */
+
+%DEFINE UART_TX_DATA    16711936;   /* 0xFF0100 */
+%DEFINE UART_TX_STATUS  16711937;   /* 0xFF0101 */
+%DEFINE UART_RX_DATA    16711936;   /* 0xFF0100 (same, read = RX) */
+%DEFINE UART_RX_STATUS  16711937;
+%DEFINE LED_REG         16711680;   /* 0xFF0000 (active-low: 0=ON) */
+%DEFINE INT_EN_REG      16711712;   /* 0xFF0010 */
+
+/* ---- Process states ---- */
+
+%DEFINE PROC_FREE       0;
+%DEFINE PROC_RUNNABLE   1;
+%DEFINE PROC_READY      2;
+%DEFINE PROC_RECV_BLOCK 3;
+%DEFINE PROC_SEND_BLOCK 4;
+%DEFINE PROC_SLEEPING    5;
+%DEFINE PROC_ZOMBIE     6;
+
+/* ---- Message types ---- */
+
+%DEFINE MSG_TTY_WRITE      1;
+%DEFINE MSG_TTY_READ_LINE  2;
+%DEFINE MSG_PROGRAM_LIST   3;
+%DEFINE MSG_PROGRAM_SPAWN  4;
+%DEFINE MSG_PROCESS_LIST   5;
+%define MSG_PROCESS_KILL   6;
+%DEFINE MSG_CLOCK_SLEEP    7;
+%DEFINE MSG_CLOCK_GET_TIME 8;
+
+/* ---- System call numbers ---- */
+
+%DEFINE SYS_YIELD       1;
+%DEFINE SYS_EXIT        2;
+%DEFINE SYS_SEND        3;
+%DEFINE SYS_RECEIVE     4;
+%DEFINE SYS_SENDREC     5;
+%DEFINE SYS_SLEEP       6;
+%DEFINE SYS_GETPID      7;
+%DEFINE SYS_KILL        8;
+%DEFINE SYS_SPAWN       9;
+%DEFINE SYS_CLOCK       10;
+
+/* ---- Scheduling ---- */
+
+%DEFINE QUANTUM_DEFAULT 5;      /* ticks per time slice (50 ms at 100 Hz) */
+%DEFINE HEARTBEAT_HZ    100;
+
+/* ---- Fixed-size message (7 words = 21 bytes) ---- */
+
+DCL 1 MESSAGE BASED,
+    3 MSG_SOURCE  INT,
+    3 MSG_TYPE    INT,
+    3 MSG_FIELD1  INT,
+    3 MSG_FIELD2  INT,
+    3 MSG_FIELD3  INT,
+    3 MSG_FIELD4  INT,
+    3 MSG_FIELD5  INT;
+
+/* ---- Process descriptor (minimal) ---- */
+
+DCL 1 PROC_DESC BASED,
+    3 PD_REGS0   INT,
+    3 PD_REGS1   INT,
+    3 PD_REGS2   INT,
+    3 PD_SP      INT,
+    3 PD_PC      INT,
+    3 PD_STATUS  INT,
+    3 PD_ENDPOINT INT,
+    3 PD_SENDER  INT,
+    3 PD_STATE   INT,
+    3 PD_PRIORITY INT,
+    3 PD_QUANTUM INT,
+    3 PD_MSGPTR  PTR;
+
+/* ---- Resident program descriptor ---- */
+
+DCL 1 PROGRAM_DESC BASED,
+    3 PD_NAME      PTR,
+    3 PD_KIND      INT,
+    3 PD_BASE      PTR,
+    3 PD_WORDS     INT,
+    3 PD_ENTRY_OFF INT,
+    3 PD_STACK_WD  INT,
+    3 PD_STATE_WD  INT,
+    3 PD_FLAGS     INT;
+
+/* ---- Program kinds ---- */
+
+%define IMAGE_PROGRAM  0;
+%DEFINE IMAGE_DATA    1;
+%DEFINE IMAGE_SERVICE  2;
+
+/* ---- Program flags ---- */
+
+%DEFINE IMAGE_RESIDENT     1;
+%DEFINE IMAGE_SINGLE_INST  2;
+%DEFINE IMAGE_PRIVILEGED   4;
+%DEFINE IMAGE_AUTOSTART    8;
+%DEFINE IMAGE_RESTARTABLE  16;
+%DEFINE IMAGE_READ_ONLY     32;
+
+/* ---- Image provider interface ---- */
+
+DCL 1 IMAGE_PROVIDER BASED,
+    3 IP_FIND  PTR,
+    3 IP_READ  PTR;
+
+/* ---- Macro: LED on/off ---- */
+
+MACRODEF LED_ON;
+    GEN DO;
+        'la      r2,16711680';
+        'lc      r0,0';
+        'sb      r0,0(r2)';
+    END;
+END;
+
+MACRODEF LED_OFF;
+    GEN DO;
+        'la      r2,16711680';
+        'lc      r0,1';
+        'sb      r0,0(r2)';
+    END;
+END;

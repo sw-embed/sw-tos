@@ -1,0 +1,15 @@
+/* smoke-test.plsw -- SWTOS Milestone 0: minimal PL/SW systems readiness test */
+
+%INCLUDE swtos;
+
+DCL MSG MESSAGE;
+DCL MSGPTR PTR INIT(ADDR(MSG));
+
+MAIN: PROC;
+    MSGPTR->MSG_TYPE = 1;
+    MSGPTR->MSG_FIELD1 = 42;
+    ?LED_ON;
+    ?LED_OFF;
+    DO WHILE (1);
+    END;
+END;
