@@ -24,6 +24,8 @@ _start:
         lw      r2,36(r2)
         la      r0,_counter_descriptor
         sw      r0,3(r2)        ; process-local descriptor selection
+        la      r0,_hello_descriptor
+        sw      r0,6(r2)
 
         la      r0,_proc_a
         la      r2,_current_proc
@@ -205,6 +207,14 @@ _plsw_counter_trampoline:
         la      r2,_halt
         jmp     (r2)
 
+_plsw_hello_trampoline:
+        push    r0
+        la      r2,_PLSW_HELLO
+        jal     r1,(r2)
+        add     sp,3
+        la      r2,_halt
+        jmp     (r2)
+
 ; PL/SW-callable cooperative yield.
         .globl  _TASK_YIELD
 _TASK_YIELD:
@@ -366,7 +376,7 @@ _launcher_descriptor:
         .word   0
         .word   0
         .word   64
-        .word   2
+        .word   3
         .word   1
 _launcher_name:
         .byte   115,104,101,108,108,0
@@ -381,6 +391,17 @@ _counter_descriptor:
         .word   1
 _counter_name:
         .byte   99,111,117,110,116,101,114,0
+_hello_descriptor:
+        .word   _hello_name
+        .word   0
+        .word   _plsw_hello_trampoline
+        .word   0
+        .word   0
+        .word   64
+        .word   1
+        .word   1
+_hello_name:
+        .byte   104,101,108,108,111,0
 _proc_a:
         .zero   39
 _proc_b:

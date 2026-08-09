@@ -879,16 +879,16 @@ The proof also keeps the kernel stack at
 below `0xFEE000` would leave the installed EBR window. The language/kernel ABI
 bridge and generic descriptor-driven runtime spawn entry are now proven.
 
-`just scheduled-shell-smoke` now links a writable-global-free PL/SW shell and
-counter with that scheduler. The shell parses two consecutive `run counter`
-commands, passes the descriptor from private state to `TASK_SPAWN`, and yields
-while each new process prints `B1 B2`. The counter calls `TASK_EXIT`, which
-marks its descriptor slot free, clears the spawn guard, and restores the
-shell's saved context; the second command proves the slot is reusable before
-the shell prints `RESUMED`.
+`just scheduled-shell-smoke` now links a writable-global-free persistent PL/SW
+menu, Hello, and Counter with that scheduler. Choices `1` and `2` pass their
+private-state descriptor pointers to `TASK_SPAWN`. Hello blocks for a key in
+its own process; Counter cooperatively produces `B1 B2`. Both call `TASK_EXIT`,
+which marks the slot free, clears the spawn guard, and restores the menu's
+saved context. The scripted `1`, key, `2`, `0` sequence proves both app paths
+and slot reuse.
 `just scheduled-shell-interactive` exposes the same path on a terminal. Next:
-make this scheduler-integrated shell the primary interactive image and migrate
-the complete menu/app surface from the compatibility image.
+migrate the Clock app and host heartbeat transport, then make this
+scheduler-integrated menu the primary interactive image.
 
 ### Milestone 5 -- Process-Local State
 

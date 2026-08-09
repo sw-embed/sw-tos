@@ -104,10 +104,10 @@ the exported `TASK_SPAWN(descriptor)` service with a descriptor pointer held in
 private state to create task B, then both tasks call back into the scheduler to
 yield.
 
-The scheduler-integrated PL/SW shell proof accepts two consecutive
-`run counter` commands. Each command spawns the selected descriptor as a second
-process, yields while it prints `B1` and `B2`, then reclaims the process slot
-and resumes its preserved shell frame:
+The scheduler-integrated persistent PL/SW menu supports `1: Hello`,
+`2: Counter`, and `0: Exit`. Hello waits for a key in its own process; Counter
+prints `B1` and `B2`. Each app exits, releases its process slot, and returns to
+the preserved menu context:
 
 ```
 just scheduled-shell-smoke
@@ -115,8 +115,8 @@ just scheduled-shell-interactive
 ```
 
 The original `plsw-system-interactive` menu remains available as the broader
-compatibility demo while its Hello, Counter, and Clock apps are migrated onto
-the scheduler-integrated image.
+compatibility demo until Clock heartbeat handling is migrated onto the
+scheduler-integrated image.
 
 Produces a flat binary image (.lgo) loadable via the COR24 serial boot
 protocol at 921,600 baud.

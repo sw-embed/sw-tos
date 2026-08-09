@@ -67,7 +67,7 @@ scheduled-shell-smoke:
 scheduled-shell-build:
     ./scripts/catalog-spawn-link.sh tests/catalog-shell.plsw scheduled-shell
 
-# Interactively enter: run counter
+# Interactively exercise scheduled Hello and Counter choices
 scheduled-shell-interactive: scheduled-shell-build
     {{COR24EMU}} --load-binary build/scheduled-shell/program.bin@0 --entry 0 --terminal --echo --speed 0 -t 300
 
