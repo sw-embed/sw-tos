@@ -78,8 +78,8 @@ just autostart-smoke
 ```
 
 The interactive shell retains choices `0` through `3` and also accepts
-`run <name>`, for example `run counter`, plus `ls` to enumerate every resident
-program and service. Lookup scans program descriptors by name and dispatches
+`run <name>`, for example `run counter`, `ls` to enumerate every resident
+program and service, and `ps` to inspect process slots. Lookup scans program descriptors by name and dispatches
 the linked resident entry. Verify lookup and listing with:
 
 ```
@@ -127,7 +127,9 @@ The scheduler scans a contiguous three-entry process table rather than
 switching between hardcoded A/B descriptors. Two child slots can run
 concurrently; `just scheduled-multislot-smoke` launches two Counter instances
 and verifies round-robin `B1 C1 B2 C2` output from independent private state.
-Their allocation generation is reclaimed when its last child exits.
+Their allocation generation is reclaimed when its last child exits. The
+scheduled shell's `ps` command walks the same table and prints each stable
+endpoint with its `FREE` or `RUNNABLE` state.
 
 The heartbeat-aware frontend accepts `--image`, so the same byte stuffing,
 Ctrl-] translation, and line-ending filtering serve both the compatibility and
@@ -145,7 +147,7 @@ just plsw-system-interactive
 This is now the scheduler-integrated image: Hello, Counter, and Clock run as
 descriptor-backed processes with private stacks/state and return to the
 persistent menu through `TASK_EXIT`. The shell also accepts `ls` and
-`run hello`, `run counter`, or `run clock`. `just plsw-system-run` remains an
+`ps`, plus `run hello`, `run counter`, or `run clock`. `just plsw-system-run` remains an
 alias.
 The terminal wrapper supplies timestamped UART heartbeats while Clock is
 active. Choose `3` to log uptime as `mm:ss` once per second, and press Ctrl-]

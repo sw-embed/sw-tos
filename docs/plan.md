@@ -915,15 +915,20 @@ states restart at `B1`. The scheduler now scans three contiguous process-table
 entries for the next runnable slot. `just scheduled-multislot-smoke` spawns two
 Counter children concurrently and proves round-robin `B1 C1 B2 C2` output,
 independent zeroed state, free-slot selection, join-on-all-children, and
-generation reclamation. Next: add a `ps` shell command backed by a kernel
-process-table listing service.
+generation reclamation. A kernel process-table listing service is wired to the
+scheduled shell: `ps` reports stable endpoint identities and symbolic `FREE` or
+`RUNNABLE` states for all three slots. Scheduled catalog coverage proves the
+idle shell view, while the multislot proof calls the same service after two
+spawns and observes all three slots runnable. Milestone 5 is complete. Next:
+define the embedded COR24 executable header and add generator-side validation
+for the first Milestone 6 image blob.
 
 ### Milestone 5 -- Process-Local State
 
 - [x] Shared resident text, private stack + state block
 - [x] Multiple instances of the same program (e.g., two counters)
 - [x] Process-global state accessed only via passed state pointer
-- [ ] `ps` shows all processes with endpoints and states
+- [x] `ps` shows all processes with endpoints and states
 
 ### Milestone 6 -- Embedded Executable Blobs (Later)
 

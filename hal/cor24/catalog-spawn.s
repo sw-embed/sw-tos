@@ -29,6 +29,15 @@ _start:
         la      r0,_scheduled_clock_descriptor
         sw      r0,9(r2)
 
+        ; Endpoint identities belong to process-table slots, including FREE
+        ; slots, so process inspection remains stable before first spawn.
+        la      r2,_proc_b
+        lc      r0,2
+        sw      r0,18(r2)
+        la      r2,_proc_c
+        lc      r0,3
+        sw      r0,18(r2)
+
         la      r0,_proc_a
         la      r2,_current_proc
         sw      r0,0(r2)
@@ -324,6 +333,56 @@ _task_catalog_list_done:
         pop     fp
         jmp     (r1)
 
+; TASK_PROCESS_LIST(): print every process-table slot as "endpoint state".
+        .globl  _TASK_PROCESS_LIST
+_TASK_PROCESS_LIST:
+        push    fp
+        push    r2
+        push    r1
+        mov     fp,sp
+        la      r2,_proc_table
+_task_process_list_next:
+        lw      r0,18(r2)
+        add     r0,48
+        push    r2
+        la      r2,_putchar
+        jal     r1,(r2)
+        lc      r0,32
+        la      r2,_putchar
+        jal     r1,(r2)
+        pop     r2
+        lw      r0,24(r2)
+        ceq     r0,z
+        brt     _task_process_list_free
+        lc      r1,1
+        ceq     r0,r1
+        brt     _task_process_list_runnable
+        la      r0,_state_unknown
+        bra     _task_process_list_state
+_task_process_list_free:
+        la      r0,_state_free
+        bra     _task_process_list_state
+_task_process_list_runnable:
+        la      r0,_state_runnable
+_task_process_list_state:
+        push    r2
+        la      r2,_puts
+        jal     r1,(r2)
+        lc      r0,10
+        la      r2,_putchar
+        jal     r1,(r2)
+        pop     r2
+        add     r2,39
+        la      r1,_proc_table_end
+        mov     r0,r2
+        ceq     r0,r1
+        brf     _task_process_list_next
+        mov     sp,fp
+        pop     r1
+        pop     r2
+        pop     fp
+        jmp     (r1)
+
 ; TASK_CATALOG_FIND(name, result): search generated program descriptors by
 ; name and write either the matching descriptor pointer or zero to result.
         .globl  _TASK_CATALOG_FIND
@@ -575,3 +634,9 @@ _child_count:
         .byte   0
 _banner:
         .byte   83,80,65,87,78,10,0
+_state_free:
+        .byte   70,82,69,69,0
+_state_runnable:
+        .byte   82,85,78,78,65,66,76,69,0
+_state_unknown:
+        .byte   85,78,75,78,79,87,78,0
