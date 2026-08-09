@@ -63,6 +63,10 @@ catalog-spawn-smoke:
 scheduled-shell-smoke:
     ./tests/test-scheduled-shell.sh
 
+# Verify scheduled ls and run <name> command paths
+scheduled-catalog-smoke:
+    ./tests/test-scheduled-catalog-commands.sh
+
 # Build the scheduler-integrated PL/SW shell image
 scheduled-shell-build:
     ./scripts/catalog-spawn-link.sh tests/catalog-shell.plsw scheduled-shell

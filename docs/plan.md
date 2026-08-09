@@ -861,7 +861,8 @@ The current interactive system has no independently scheduled PL/SW TTY
 service yet, so the shell is the first autostart service; TTY autostart will use
 the same path when that service is separated. `just catalog-run-smoke` proves
 `run counter` dispatches the matching program and a missing name is rejected.
-Dispatch is synchronous until catalog spawning is connected to the scheduler.
+The compatibility image dispatches synchronously; the primary scheduled image
+routes the corresponding names through `TASK_SPAWN`.
 `just catalog-list-smoke` proves `ls` enumerates all three programs and the
 shell service without leaking its line ending into the next prompt.
 `just catalog-spawn-smoke` consumes resident descriptor entry, stack, and state
@@ -892,9 +893,12 @@ division helper required for Clock conversion.
 a real PTY run proves Ctrl-] returns from Clock and `0` halts.
 `just plsw-system-interactive` now builds and runs this scheduler image, and
 `plsw-system-run` remains its alias. The former direct-call catalog shell is
-retained as `just plsw-system-compat-interactive`. Next: move its generated
-catalog `run <name>` and `ls` command paths into the primary scheduled shell,
-then retire the compatibility behavior.
+retained as `just plsw-system-compat-interactive`.
+`just scheduled-catalog-smoke` proves the primary shell handles `ls` and
+`run counter` through its private descriptor pointers and reusable process
+slot. The command behavior is migrated, but the scheduler descriptor records
+and printed names still mirror `catalog/catalog.toml` manually. Next: generate
+the scheduler catalog data from the TOML manifest and remove that duplication.
 
 ### Milestone 5 -- Process-Local State
 
@@ -986,6 +990,7 @@ The name in `FILE:` must match the `%INCLUDE` name (without .msw).
 | `just catalog-list-smoke` | Verify shell enumeration of catalog descriptors |
 | `just catalog-spawn-smoke` | Verify descriptor-sized stack/state process creation |
 | `just scheduled-shell-smoke` | Verify shell-to-spawn scheduled PL/SW dispatch |
+| `just scheduled-catalog-smoke` | Verify scheduled `ls` and `run <name>` commands |
 | `just scheduled-shell-interactive` | Run the scheduler-integrated shell proof |
 | `just plsw-compile <[.msw ...] file.plsw>` | Compile any .plsw  |
 | `just plsw-run <[.msw ...] file.plsw>` | Compile and run any .plsw |

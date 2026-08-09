@@ -130,18 +130,23 @@ just plsw-system-interactive
 
 This is now the scheduler-integrated image: Hello, Counter, and Clock run as
 descriptor-backed processes with private stacks/state and return to the
-persistent menu through `TASK_EXIT`. `just plsw-system-run` remains an alias.
+persistent menu through `TASK_EXIT`. The shell also accepts `ls` and
+`run hello`, `run counter`, or `run clock`. `just plsw-system-run` remains an
+alias.
 The terminal wrapper supplies timestamped UART heartbeats while Clock is
 active. Choose `3` to log uptime as `mm:ss` once per second, and press Ctrl-]
 to return to the menu. The wrapper translates that key because Ctrl-] is
 reserved by the emulator terminal itself.
 
-The former direct-call image remains available while its catalog `run` and
-`ls` commands are migrated into the scheduled shell:
+The former direct-call image remains available as a compatibility reference:
 
 ```
 just plsw-system-compat-interactive
 ```
+
+Scheduled command coverage is available with `just scheduled-catalog-smoke`.
+The scheduled descriptor definitions currently mirror the TOML catalog; their
+generation from the manifest is the next consolidation step.
 
 To test the Clock app without an interactive terminal:
 
