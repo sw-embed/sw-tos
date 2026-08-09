@@ -110,6 +110,16 @@ produces the alternating output, then replies synchronously. The task code
 calls reusable `send`, `receive`, and `sendrec` kernel entries using the PL/SW
 stack calling convention.
 
+To verify UART transport framing and the virtual clock arithmetic:
+
+```
+just heartbeat-smoke
+```
+
+The test distinguishes ordinary bytes from escaped `0xFF` data and heartbeat
+control frames, then verifies a three-tick delta across the 24-bit wrap from
+`0xFFFFFE` to `0x000001`.
+
 ## License
 
 MIT -- see [LICENSE](LICENSE).

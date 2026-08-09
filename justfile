@@ -64,6 +64,10 @@ context-switch-smoke:
 # Exercise fixed-message blocking send/receive through the TTY task
 ipc-smoke: context-switch-smoke
 
+# Exercise UART escape framing and wrapping 24-bit heartbeat deltas
+heartbeat-smoke:
+    ./tests/test-heartbeat.sh
+
 # Compile and dump PL/SW smoke test
 plsw-smoke-dump: plsw-smoke
     {{COR24EMU}} --lgo build/smoke-test.lgo -n -1 --speed 0 --dump

@@ -772,8 +772,9 @@ called normally by the demo tasks.
 ### Milestone 3 -- UART Heartbeat Clock
 
 - [ ] Escape framing in UART ISR
-- [ ] 24-bit heartbeat counter with wraparound
-- [ ] Monotonic tick counter in kernel
+- [x] Escape framing state machine proven in polling mode
+- [x] 24-bit heartbeat counter with wraparound
+- [x] Monotonic tick counter in kernel
 - [ ] Sleep queue with tick-based wakeup
 - [ ] Preemptive scheduling from ISR (if COR24 supports context
   switch from interrupt return)
@@ -781,6 +782,11 @@ called normally by the demo tasks.
 
 **Demo:** CPU-bound process preempted; shell remains responsive.
 Sleep command works.
+
+**Status:** `just heartbeat-smoke` separates ordinary UART data, escaped
+`0xFF`, and five-byte heartbeat frames, then verifies natural 24-bit delta
+arithmetic across wraparound. Next: move the proven parser into UART interrupt
+entry and connect monotonic ticks to sleeping-process wakeup.
 
 ### Milestone 4 -- Generated Catalog and Autostart
 
@@ -873,6 +879,7 @@ The name in `FILE:` must match the `%INCLUDE` name (without .msw).
 | `just plsw-link-smoke` | Compile, FIXUP-link, and run separate PL/SW modules |
 | `just context-switch-smoke` | Verify two-task cooperative context switching |
 | `just ipc-smoke` | Verify blocking fixed-message client/TTY IPC |
+| `just heartbeat-smoke` | Verify UART framing and 24-bit clock wraparound |
 | `just plsw-compile <[.msw ...] file.plsw>` | Compile any .plsw  |
 | `just plsw-run <[.msw ...] file.plsw>` | Compile and run any .plsw |
 | `just plsw-dump <[.msw ...] file.plsw>` | Compile and dump memory |
