@@ -1,0 +1,13 @@
+/* multimodule-lib.plsw -- separately compiled library module */
+
+%DEFINE LIBRARY;
+
+LINKED_HELLO: PROC;
+    CALL UART_PUTCHAR(76);
+    CALL UART_PUTCHAR(73);
+    CALL UART_PUTCHAR(78);
+    CALL UART_PUTCHAR(75);
+    CALL UART_PUTCHAR(69);
+    CALL UART_PUTCHAR(68);
+    CALL UART_PUTCHAR(10);
+END;

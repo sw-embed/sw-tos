@@ -1,0 +1,5 @@
+/* multimodule-main.plsw -- entry module for the separate-link smoke test */
+
+MAIN: PROC;
+    CALL LINKED_HELLO;
+END;

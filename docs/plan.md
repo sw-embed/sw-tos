@@ -695,7 +695,7 @@ constructs needed by SWTOS:
 - [x] PTR dereference and field access for linked structures
 - [x] ADDR() and SIZEOF() built-ins for layout-sensitive code
 - [x] NAKED procedures and ASM DO blocks for HAL routines
-- [ ] Separate .plsw modules assembled and linked together (link24)
+- [x] Separate .plsw modules assembled and linked together (link24)
 - [x] Global/static data initialization
 - [x] %INCLUDE / %DEFINE / %IF for conditional compilation
 - [x] Volatile memory-mapped I/O access (UART, LED registers)
@@ -719,18 +719,30 @@ DO WHILE loop, PROC with stack frame.
   caused by incorrect `--terminal --echo` usage instead of `--uart-file`).
 
 **Deliverable:** `smoke-test.plsw` compiles and runs in the emulator.
-Next: multi-module linking with link24.
+`just plsw-link-smoke` independently compiles an entry module and library,
+generates symbol/FIXUP metadata, performs two-pass assembly, links them with
+link24, and verifies the linked program output in the emulator.
+
+**Status:** Complete. Next: Milestone 1, linked tasks with cooperative context
+switching.
 
 ### Milestone 1 -- Linked Tasks with Context Switch
 
 - [ ] Boot stub: init UART, print banner
-- [ ] Static task table with 2-3 tasks
-- [ ] Separate stacks allocated from heap
-- [ ] Assembly context save/restore
-- [ ] Cooperative `yield()` round-robin
-- [ ] Polled UART output from tasks
+- [x] Static task table with 2 tasks
+- [x] Separate task stacks in fixed EBR regions
+- [ ] Stack allocation from heap
+- [x] Assembly context save/restore
+- [x] Cooperative `yield()` round-robin
+- [x] Polled UART output from tasks
 
 **Demo:** Tasks alternate printing: `A: 1`, `B: 1`, `A: 2`, `B: 2`
+
+**Status:** `just context-switch-smoke` fabricates initial contexts for two
+tasks on disjoint EBR stacks, saves and restores `r0`, `r1`/PC, `r2`, and
+`fp`, and verifies alternating output through three rounds. Next: replace the
+fixed stack addresses with allocator-owned stacks and integrate the switch
+with PL/SW process descriptors.
 
 ### Milestone 2 -- MINIX-Style IPC
 
@@ -842,6 +854,8 @@ The name in `FILE:` must match the `%INCLUDE` name (without .msw).
 | `just plsw-system`  | Compile the complete menu system to `.lgo` and `.bin` |
 | `just plsw-system-interactive` | Compile and run the menu with interactive UART input |
 | `just plsw-system-run` | Alias for `plsw-system-interactive` |
+| `just plsw-link-smoke` | Compile, FIXUP-link, and run separate PL/SW modules |
+| `just context-switch-smoke` | Verify two-task cooperative context switching |
 | `just plsw-compile <[.msw ...] file.plsw>` | Compile any .plsw  |
 | `just plsw-run <[.msw ...] file.plsw>` | Compile and run any .plsw |
 | `just plsw-dump <[.msw ...] file.plsw>` | Compile and dump memory |

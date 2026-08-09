@@ -53,6 +53,14 @@ plsw-smoke:
 plsw-smoke-run: plsw-smoke
     {{COR24EMU}} --lgo build/smoke-test.lgo -n -1 --speed 0 --quiet
 
+# Compile, FIXUP-link, and run two independent PL/SW modules
+plsw-link-smoke:
+    ./scripts/plsw-link-smoke.sh
+
+# Exercise cooperative context switching between two task stacks
+context-switch-smoke:
+    ./tests/test-context-switch.sh
+
 # Compile and dump PL/SW smoke test
 plsw-smoke-dump: plsw-smoke
     {{COR24EMU}} --lgo build/smoke-test.lgo -n -1 --speed 0 --dump

@@ -56,6 +56,7 @@ Requires the PL/SW toolchain (compiler, assembler, and linker):
 - [sw-cor24-plsw](https://github.com/sw-embed/sw-cor24-plsw) -- PL/SW compiler
 - `cor24-asm` -- COR24 assembler
 - `link24` -- FIXUP-based linker
+- `meta-gen` -- cross-module symbol and FIXUP metadata generator
 
 ```
 just build
@@ -74,6 +75,26 @@ just plsw-system-interactive
 `.lgo` and raw `.bin` images. Interactive execution uses the raw image because
 `cor24-emu` 0.1.0 does not honor `--terminal` when loading an `.lgo` image;
 its raw-binary execution path correctly connects terminal input to the UART.
+
+To verify separate PL/SW compilation and linking:
+
+```
+just plsw-link-smoke
+```
+
+This independently compiles an entry module and a library module, performs
+two-pass assembly, applies cross-module FIXUPs with `link24`, and checks the
+linked program's emulator output.
+
+To exercise the cooperative COR24 context switch:
+
+```
+just context-switch-smoke
+```
+
+The test creates two task contexts on disjoint EBR stacks, alternates them
+through `yield`, verifies saved register sentinels, and requires the UART
+sequence `A1`, `B1`, `A2`, `B2`, `A3`, `B3`.
 
 ## License
 
