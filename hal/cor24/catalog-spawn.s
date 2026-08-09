@@ -22,16 +22,6 @@ _start:
         lc      r0,1
         sw      r0,18(r2)
 
-        la      r0,_counter_descriptor
-        la      r2,_proc_b
-        la      r1,_spawn_process
-        sw      r2,0(r1)
-        la      r2,_spawn_resident
-        jal     r1,(r2)
-        la      r2,_proc_b
-        lc      r0,2
-        sw      r0,18(r2)
-
         la      r0,_proc_a
         la      r2,_current_proc
         sw      r0,0(r2)
@@ -81,6 +71,36 @@ _spawn_resident:
         lc      r0,1
         sw      r0,24(r2)       ; PROC_RUNNABLE
         pop     r1
+        jmp     (r1)
+
+; TASK_SPAWN_SECOND(): callable from PL/SW while task A's frames remain live.
+; The first caller materializes process B; later calls are harmless.
+        .globl  _TASK_SPAWN_SECOND
+_TASK_SPAWN_SECOND:
+        push    fp
+        push    r2
+        push    r1
+        mov     fp,sp
+        la      r2,_second_spawned
+        lbu     r0,0(r2)
+        ceq     r0,z
+        brf     _spawn_second_done
+        lc      r0,1
+        sb      r0,0(r2)
+        la      r2,_proc_b
+        la      r1,_spawn_process
+        sw      r2,0(r1)
+        la      r0,_counter_descriptor
+        la      r2,_spawn_resident
+        jal     r1,(r2)
+        la      r2,_proc_b
+        lc      r0,2
+        sw      r0,18(r2)
+_spawn_second_done:
+        mov     sp,fp
+        pop     r1
+        pop     r2
+        pop     fp
         jmp     (r1)
 
 ; Allocate r0 words downward and return the exclusive stack high address.
@@ -285,6 +305,8 @@ _allocated_base:
 _ebr_next:
         .word   0xFEE800
 _completed:
+        .byte   0
+_second_spawned:
         .byte   0
 _banner:
         .byte   83,80,65,87,78,10,0

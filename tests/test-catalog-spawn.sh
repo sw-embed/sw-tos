@@ -18,4 +18,4 @@ if [ "$output" != "$expected" ]; then
     exit 1
 fi
 
-echo "PASS: descriptor-sized spawn gave two instances private state"
+echo "PASS: running PL/SW task spawned a second private-state instance"

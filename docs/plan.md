@@ -868,12 +868,16 @@ fields to create two runnable contexts. Both share one counter entry point but
 receive separate zeroed EBR state blocks and produce `A1 B1 A2 B2`. The counter
 is a separately compiled PL/SW library module linked to the assembly scheduler;
 an entry trampoline converts the initial register state pointer into a PL/SW
-argument, and PL/SW calls the exported scheduler step/yield service. The process
-ABI has an explicit state pointer. The proof also keeps the kernel stack at
+argument. Boot creates only the first task; that running PL/SW process calls
+`TASK_SPAWN_SECOND`, which allocates and inserts the second runnable descriptor
+without disturbing the caller's live frames. Both then use the exported
+scheduler step/yield service. The process ABI has an explicit state pointer.
+The proof also keeps the kernel stack at
 `0xFEEC00` separate from the process arena starting at `0xFEE800`; allocating
 below `0xFEE000` would leave the installed EBR window. The language/kernel ABI
-bridge is now proven. Next: link the interactive PL/SW shell into the scheduler
-image and route `run` to this spawn primitive instead of synchronous dispatch.
+bridge and runtime spawn entry are now proven. Next: link the interactive PL/SW
+shell into the scheduler image and route `run` to this spawn primitive instead
+of synchronous dispatch.
 
 ### Milestone 5 -- Process-Local State
 
