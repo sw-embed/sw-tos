@@ -95,6 +95,7 @@ just context-switch-smoke
 The test creates two task contexts on disjoint EBR stacks, alternates them
 through `yield`, verifies saved register sentinels, and requires the UART
 sequence `A1`, `B1`, `A2`, `B2`, `A3`, `B3`.
+The complete output begins with the boot banner `SWTOS M1`.
 
 ## License
 

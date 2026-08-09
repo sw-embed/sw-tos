@@ -728,7 +728,7 @@ switching.
 
 ### Milestone 1 -- Linked Tasks with Context Switch
 
-- [ ] Boot stub: init UART, print banner
+- [x] Boot stub: initialize stack, poll UART, print banner
 - [x] Static task table with 2 tasks
 - [x] Separate task stacks in fixed EBR regions
 - [x] Stack allocation from EBR bump allocator
@@ -744,8 +744,11 @@ tasks on disjoint EBR stacks, saves and restores `r0`, `r1`/PC, `r2`, and
 assigned by a downward bump allocator rather than embedded task addresses.
 The scheduler stores allocated SPs, initial PCs, endpoints, and runnable state
 in records matching the PL/SW `PROC_DESC` ABI, and `yield` saves/restores via
-the current descriptor pointer. Next: add the boot banner and move scheduler
-policy into PL/SW.
+the current descriptor pointer. The boot trampoline establishes the kernel
+stack and prints `SWTOS M1` through the polling UART path before allocating
+tasks.
+
+**Status:** Complete. Next: Milestone 2, MINIX-style synchronous IPC.
 
 ### Milestone 2 -- MINIX-Style IPC
 

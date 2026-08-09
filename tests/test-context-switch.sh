@@ -15,7 +15,7 @@ mkdir -p "$OUT_DIR"
 
 output=$($EMU --lgo "$OUT_DIR/context-switch.lgo" \
     --speed 0 -n 100000 --quiet 2>/dev/null)
-expected=$'A1\nB1\nA2\nB2\nA3\nB3'
+expected=$'SWTOS M1\nA1\nB1\nA2\nB2\nA3\nB3'
 
 if [ "$output" != "$expected" ]; then
     echo "FAIL: cooperative context-switch output mismatch" >&2

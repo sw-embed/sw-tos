@@ -4,6 +4,13 @@
 ; task's own stack. The scheduler retains only the saved stack pointer.
 
 _start:
+        ; Boot trampoline: establish the kernel stack and prove polled UART.
+        la      r0,0xFEEC00
+        mov     sp,r0
+        la      r0,_boot_banner
+        la      r2,_puts
+        jal     r1,(r2)
+
         ; Allocate two 1 KiB stacks from the EBR stack arena.
         la      r2,_alloc_stack
         jal     r1,(r2)
@@ -203,6 +210,25 @@ _context_failure:
         jal     r1,(r2)
         bra     _halt
 
+_puts:
+        push    r1
+        push    r2
+        mov     r2,r0
+_puts_loop:
+        lbu     r0,0(r2)
+        ceq     r0,z
+        brt     _puts_done
+        push    r2
+        la      r2,_putchar
+        jal     r1,(r2)
+        pop     r2
+        add     r2,1
+        bra     _puts_loop
+_puts_done:
+        pop     r2
+        pop     r1
+        jmp     (r1)
+
 ; Polled UART output. r0 is the character; r1 is the return address.
 _putchar:
         push    r1
@@ -236,3 +262,5 @@ _task_b_count:
         .byte   0
 _stack_heap_next:
         .word   0xFEEC00
+_boot_banner:
+        .byte   83,87,84,79,83,32,77,49,10,0
