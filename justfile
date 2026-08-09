@@ -61,6 +61,9 @@ plsw-link-smoke:
 context-switch-smoke:
     ./tests/test-context-switch.sh
 
+# Verify tasks and blocking IPC remain cooperative before clock synchronization
+cooperative-fallback-smoke: context-switch-smoke
+
 # Exercise fixed-message blocking send/receive through the TTY task
 ipc-smoke: context-switch-smoke
 

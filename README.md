@@ -105,7 +105,13 @@ just context-switch-smoke
 The test creates two task contexts on disjoint EBR stacks, alternates them
 through `yield`, verifies saved register sentinels, and requires the UART
 sequence `A1`, `B1`, `A2`, `B2`, `A3`, `B3`.
-The complete output begins with the boot banner `SWTOS M1`.
+The complete output begins with `SWTOS M1 C0`: `C0` records that no heartbeat
+has synchronized the clock while cooperative scheduling and IPC remain live.
+The same fallback proof has an explicit recipe:
+
+```
+just cooperative-fallback-smoke
+```
 
 The same executable also provides the first synchronous IPC proof:
 

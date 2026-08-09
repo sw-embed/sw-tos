@@ -785,7 +785,7 @@ called normally by the demo tasks.
 - [x] Sleep queue scan with absolute tick-based wakeup
 - [ ] Preemptive scheduling from ISR (if COR24 supports context
   switch from interrupt return)
-- [ ] Cooperative fallback when no heartbeat
+- [x] Cooperative fallback before the first heartbeat
 
 **Demo:** CPU-bound process preempted; shell remains responsive.
 Sleep command works.
@@ -809,8 +809,22 @@ one task's interrupted PC and load another task's PC. Safe arbitrary-PC context
 switching directly from interrupt return is blocked unless COR24 gains an
 instruction for reading and writing `ir`, or the interrupt ABI is extended to
 save the interrupted PC in software-visible memory. SWTOS remains
-cooperative-first on the current target. Next: make heartbeat absence and
-cooperative fallback explicit and testable.
+cooperative-first on the current target.
+
+**Cooperative fallback:** `just cooperative-fallback-smoke` starts with no
+UART heartbeat input and reports `C0` (clock unsynchronized), then completes
+the cooperative two-task context-switch and blocking IPC sequence. This makes
+the boot-time fallback explicit: scheduler progress does not depend on clock
+synchronization. Once synchronized, total heartbeat loss cannot be detected
+from elapsed time because COR24 has no independent timer; the system continues
+cooperatively whenever tasks enter the kernel or call `yield`, but cannot
+declare the host clock stale by itself.
+
+**Status:** Complete for the current COR24 interrupt ABI: heartbeat framing,
+monotonic time, sleep wakeups, host clock generation, a resident Clock app,
+and pre-synchronization cooperative fallback are proven. Interrupt-time
+preemption remains an explicitly documented ISA blocker. Next: Milestone 4,
+the generated resident catalog and autostart metadata.
 
 ### Milestone 4 -- Generated Catalog and Autostart
 
@@ -902,6 +916,7 @@ The name in `FILE:` must match the `%INCLUDE` name (without .msw).
 | `just plsw-system-run` | Alias for `plsw-system-interactive` |
 | `just plsw-link-smoke` | Compile, FIXUP-link, and run separate PL/SW modules |
 | `just context-switch-smoke` | Verify two-task cooperative context switching |
+| `just cooperative-fallback-smoke` | Verify scheduling and IPC without heartbeat synchronization |
 | `just ipc-smoke` | Verify blocking fixed-message client/TTY IPC |
 | `just heartbeat-smoke` | Verify UART framing and 24-bit clock wraparound |
 | `just clock-smoke` | Verify the heartbeat-driven PL/SW Clock menu app |

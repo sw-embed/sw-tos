@@ -10,6 +10,14 @@ _start:
         la      r0,_boot_banner
         la      r2,_puts
         jal     r1,(r2)
+        la      r2,_clock_synced
+        lbu     r0,0(r2)
+        add     r0,48
+        la      r2,_putchar
+        jal     r1,(r2)
+        lc      r0,10
+        la      r2,_putchar
+        jal     r1,(r2)
 
         ; Allocate two 1 KiB stacks from the EBR stack arena.
         la      r2,_alloc_stack
@@ -466,5 +474,7 @@ _task_b_message:
         .zero   21
 _stack_heap_next:
         .word   0xFEEC00
+_clock_synced:
+        .byte   0
 _boot_banner:
-        .byte   83,87,84,79,83,32,77,49,10,0
+        .byte   83,87,84,79,83,32,77,49,32,67,0
