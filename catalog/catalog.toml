@@ -1,0 +1,27 @@
+[[program]]
+name = "hello"
+entry = "HELLO"
+stack_words = 128
+state_words = 0
+flags = ["resident"]
+
+[[program]]
+name = "counter"
+entry = "COUNTER"
+stack_words = 192
+state_words = 1
+flags = ["resident"]
+
+[[program]]
+name = "clock"
+entry = "CLOCK"
+stack_words = 192
+state_words = 4
+flags = ["resident", "single_instance"]
+
+[[service]]
+name = "shell"
+entry = "MENU"
+stack_words = 256
+state_words = 0
+flags = ["resident", "single_instance", "privileged", "autostart"]

@@ -62,6 +62,14 @@ Requires the PL/SW toolchain (compiler, assembler, and linker):
 just build
 ```
 
+The resident catalog is generated from `catalog/catalog.toml`. To regenerate
+it and verify that the checked-in PL/SW descriptor table is current and
+compiles into the complete system image:
+
+```
+just catalog-smoke
+```
+
 Produces a flat binary image (.lgo) loadable via the COR24 serial boot
 protocol at 921,600 baud.
 

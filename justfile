@@ -31,9 +31,17 @@ debug: smoke
 dump: smoke
     {{COR24EMU}} --lgo build/smoke-test.lgo -n -1 --speed 0 --dump
 
+# Generate the resident program/service descriptor table
+catalog-generate:
+    python3 scripts/generate-catalog.py
+
+# Verify the checked-in catalog matches its manifest and compiles into SWTOS
+catalog-smoke: plsw-system
+    python3 scripts/generate-catalog.py --check
+
 # Compile and run PL/SW system image (menu + apps)
-plsw-system:
-    {{PIPELINE}} include/swtos.msw include/menu.msw include/hello_app.msw include/counter_app.msw include/clock_app.msw system.plsw
+plsw-system: catalog-generate
+    {{PIPELINE}} include/swtos.msw include/menu.msw include/hello_app.msw include/counter_app.msw include/clock_app.msw include/catalog_generated.msw system.plsw
 
 # Run the menu interactively. cor24-emu 0.1.0 ignores --terminal for --lgo,
 # so use its raw-binary path, which correctly bridges stdin to the UART.

@@ -438,6 +438,14 @@ flags = ["autostart", "privileged", "restartable"]
 The build tool generates the descriptor table from this manifest.
 No manual table maintenance.
 
+The implemented manifest is `catalog/catalog.toml`; generation is handled by
+`scripts/generate-catalog.py`. It validates the schema, names, linked entry
+symbols, sizes, kinds, flags, and duplicates before emitting
+`include/catalog_generated.msw`. PL/SW cannot take `ADDR()` of a procedure, so
+the generated initializer uses PL/SW for descriptor data and a small inline
+assembly block for linked entry addresses. `just catalog-smoke` checks that the
+generated file is current and compiles it into the complete system image.
+
 ### Program Spawning
 
 The simplest v1 uses a direct entry-point table:
@@ -828,14 +836,20 @@ the generated resident catalog and autostart metadata.
 
 ### Milestone 4 -- Generated Catalog and Autostart
 
-- [ ] TOML manifest for programs and services
-- [ ] Build tool generates PL/SW descriptor table from manifest
+- [x] TOML manifest for programs and services
+- [x] Build tool generates PL/SW descriptor table from manifest
 - [ ] `AUTOSTART` flag launches TTY service at boot
 - [ ] Shell `run <name>` spawns from catalog
 - [ ] `ls` lists catalog entries
 - [ ] Per-process state allocation for multiple instances
 
 **Demo:** `run hello`, `run counter`, `run ipc-demo` all work from catalog.
+
+**Status:** The manifest currently catalogs the resident `hello`, `counter`,
+and `clock` programs plus the `shell` service. The deterministic generated
+table contains name, kind, linked entry, image metadata, stack size, state
+size, and flags for every object. Next: consume `IMAGE_AUTOSTART` metadata at
+boot instead of calling the shell service directly.
 
 ### Milestone 5 -- Process-Local State
 
@@ -920,6 +934,7 @@ The name in `FILE:` must match the `%INCLUDE` name (without .msw).
 | `just ipc-smoke` | Verify blocking fixed-message client/TTY IPC |
 | `just heartbeat-smoke` | Verify UART framing and 24-bit clock wraparound |
 | `just clock-smoke` | Verify the heartbeat-driven PL/SW Clock menu app |
+| `just catalog-smoke` | Validate, generate, and compile the resident catalog |
 | `just plsw-compile <[.msw ...] file.plsw>` | Compile any .plsw  |
 | `just plsw-run <[.msw ...] file.plsw>` | Compile and run any .plsw |
 | `just plsw-dump <[.msw ...] file.plsw>` | Compile and dump memory |
