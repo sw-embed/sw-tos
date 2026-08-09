@@ -880,9 +880,12 @@ below `0xFEE000` would leave the installed EBR window. The language/kernel ABI
 bridge and generic descriptor-driven runtime spawn entry are now proven.
 
 `just scheduled-shell-smoke` now links a writable-global-free PL/SW shell and
-counter with that scheduler. The shell parses `run counter`, passes the
-descriptor from private state to `TASK_SPAWN`, yields while the new process
-prints `B1 B2`, then resumes its preserved frame and prints `RESUMED`.
+counter with that scheduler. The shell parses two consecutive `run counter`
+commands, passes the descriptor from private state to `TASK_SPAWN`, and yields
+while each new process prints `B1 B2`. The counter calls `TASK_EXIT`, which
+marks its descriptor slot free, clears the spawn guard, and restores the
+shell's saved context; the second command proves the slot is reusable before
+the shell prints `RESUMED`.
 `just scheduled-shell-interactive` exposes the same path on a terminal. Next:
 make this scheduler-integrated shell the primary interactive image and migrate
 the complete menu/app surface from the compatibility image.

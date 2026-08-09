@@ -10,9 +10,9 @@ OUT_DIR="$ROOT_DIR/build/scheduled-shell"
     "$ROOT_DIR/tests/catalog-shell.plsw" scheduled-shell
 
 output=$($EMU --load-binary "$OUT_DIR/program.bin@0" --entry 0 \
-    -u 'run counter\n' --speed 0 -n 500000 --quiet 2>/dev/null \
+    -u 'run counter\nrun counter\n' --speed 0 -n 800000 --quiet 2>/dev/null \
     | sed '/^Entry point:/d')
-expected=$'SPAWN\nSHELL\nB1\nB2\nRESUMED'
+expected=$'SPAWN\nSHELL\nB1\nB2\nREADY\nB1\nB2\nREADY\nRESUMED'
 
 if [ "$output" != "$expected" ]; then
     echo "FAIL: scheduled shell run path mismatch" >&2

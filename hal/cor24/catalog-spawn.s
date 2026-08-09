@@ -265,6 +265,27 @@ _TASK_HALT:
         la      r2,_halt
         jmp     (r2)
 
+; TASK_EXIT(): terminate spawned process B, release its slot, and resume shell.
+        .globl  _TASK_EXIT
+_TASK_EXIT:
+        la      r2,_current_proc
+        lw      r2,0(r2)
+        lbu     r0,18(r2)
+        lc      r1,2
+        ceq     r0,r1
+        brf     _TASK_HALT
+        lc      r0,0
+        sw      r0,24(r2)       ; PROC_FREE
+        la      r2,_second_spawned
+        sb      r0,0(r2)
+        la      r2,_proc_a
+        la      r1,_current_proc
+        sw      r2,0(r1)
+        lw      r0,9(r2)
+        mov     sp,r0
+        la      r2,_restore_context
+        jmp     (r2)
+
 ; TASK_STEP(value): PL/SW callback that reports one step and cooperatively
 ; yields. Its call frame remains on the process stack across the switch.
         .globl  _TASK_STEP
@@ -289,17 +310,6 @@ _TASK_STEP:
         la      r2,_putchar
         jal     r1,(r2)
 
-        lw      r0,9(fp)
-        lc      r1,2
-        ceq     r0,r1
-        brf     _counter_yield
-        la      r2,_completed
-        lbu     r0,0(r2)
-        add     r0,1
-        sb      r0,0(r2)
-        lc      r1,2
-        ceq     r0,r1
-        brt     _halt
 _counter_yield:
         la      r2,_yield
         jal     r1,(r2)
@@ -387,8 +397,6 @@ _allocated_base:
         .zero   3
 _ebr_next:
         .word   0xFEE800
-_completed:
-        .byte   0
 _second_spawned:
         .byte   0
 _banner:
