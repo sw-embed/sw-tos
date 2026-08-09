@@ -4,8 +4,19 @@
 ; task's own stack. The scheduler retains only the saved stack pointer.
 
 _start:
-        ; Build task A's initial context at the top of its stack region.
-        la      r0,0xFEE800
+        ; Allocate two 1 KiB stacks from the EBR stack arena.
+        la      r2,_alloc_stack
+        jal     r1,(r2)
+        la      r2,_task_a_sp
+        sw      r0,0(r2)
+        la      r2,_alloc_stack
+        jal     r1,(r2)
+        la      r2,_task_b_sp
+        sw      r0,0(r2)
+
+        ; Build task A's initial context at its allocated stack top.
+        la      r2,_task_a_sp
+        lw      r0,0(r2)
         mov     sp,r0
         lc      r0,0
         push    r0              ; saved r0
@@ -18,8 +29,9 @@ _start:
         la      r2,_task_a_sp
         sw      r0,0(r2)
 
-        ; Build task B's initial context in a disjoint stack region.
-        la      r0,0xFEE400
+        ; Build task B's initial context in its disjoint stack region.
+        la      r2,_task_b_sp
+        lw      r0,0(r2)
         mov     sp,r0
         lc      r0,0
         push    r0
@@ -40,6 +52,22 @@ _start:
         lw      r0,0(r2)
         mov     sp,r0
         bra     _restore_context
+
+; Allocate a fixed-size stack from the top of the EBR stack arena.
+; Returns the new stack's exclusive high address in r0.
+_alloc_stack:
+        push    r1
+        push    r2
+        la      r2,_stack_heap_next
+        lw      r0,0(r2)
+        push    r0
+        la      r1,0x000400
+        sub     r0,r1
+        sw      r0,0(r2)
+        pop     r0
+        pop     r2
+        pop     r1
+        jmp     (r1)
 
 ; Save the running task and restore the other runnable task.
 _yield:
@@ -192,3 +220,5 @@ _task_a_count:
         .byte   0
 _task_b_count:
         .byte   0
+_stack_heap_next:
+        .word   0xFEEC00

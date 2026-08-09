@@ -731,7 +731,7 @@ switching.
 - [ ] Boot stub: init UART, print banner
 - [x] Static task table with 2 tasks
 - [x] Separate task stacks in fixed EBR regions
-- [ ] Stack allocation from heap
+- [x] Stack allocation from EBR bump allocator
 - [x] Assembly context save/restore
 - [x] Cooperative `yield()` round-robin
 - [x] Polled UART output from tasks
@@ -740,9 +740,9 @@ switching.
 
 **Status:** `just context-switch-smoke` fabricates initial contexts for two
 tasks on disjoint EBR stacks, saves and restores `r0`, `r1`/PC, `r2`, and
-`fp`, and verifies alternating output through three rounds. Next: replace the
-fixed stack addresses with allocator-owned stacks and integrate the switch
-with PL/SW process descriptors.
+`fp`, and verifies alternating output through three rounds. Stack regions are
+assigned by a downward bump allocator rather than embedded task addresses.
+Next: integrate the switch with PL/SW process descriptors.
 
 ### Milestone 2 -- MINIX-Style IPC
 
