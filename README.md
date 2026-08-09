@@ -75,6 +75,16 @@ just plsw-system-interactive
 `.lgo` and raw `.bin` images. Interactive execution uses the raw image because
 `cor24-emu` 0.1.0 does not honor `--terminal` when loading an `.lgo` image;
 its raw-binary execution path correctly connects terminal input to the UART.
+The terminal wrapper supplies timestamped UART heartbeats while the Clock app
+is active. Choose `3` to log uptime as `mm:ss` once per second, and press
+Ctrl-] to return to the menu. The wrapper translates that key for the app
+because Ctrl-] is reserved by the emulator terminal itself.
+
+To test the Clock app without an interactive terminal:
+
+```
+just clock-smoke
+```
 
 To verify separate PL/SW compilation and linking:
 

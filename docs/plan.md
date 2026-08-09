@@ -362,6 +362,13 @@ scheduling. Processes are expected to call syscalls or `yield()`.
 - Set low-latency serial options where available
 - Optionally negotiate heartbeat mode via control frame exchange
 
+The emulator client is `scripts/swtos-terminal.py`, used by
+`just plsw-system-interactive`. It starts one wall-clock timestamp heartbeat
+per second when menu choice `3` launches the resident PL/SW Clock app. The
+timestamp remains expressed in 100 Hz ticks, so delayed delivery still
+preserves elapsed time. Ctrl-] is translated to the app's escape byte and
+stops heartbeat generation before control returns to the menu.
+
 ---
 
 ## 8. Resident Object Catalog
@@ -789,8 +796,11 @@ arithmetic across wraparound. The parser runs one byte per UART interrupt,
 preserves registers and the condition flag, and returns through `ir`; a
 foreground counter proves interrupted execution resumes. The same test scans
 sleeping entries after the clock update and marks deadlines at or before the
-monotonic tick runnable. Next: host-side periodic heartbeat generation and
-interrupt-driven rescheduling.
+monotonic tick runnable. `just plsw-system-interactive` now provides the
+host-side clock source, and menu choice `3` runs a PL/SW Clock app that logs
+`mm:ss` once per second until Ctrl-]. `just clock-smoke` verifies timestamps
+from `00:00` through `00:02` and the return to the menu. Next: interrupt-driven
+rescheduling and explicit cooperative fallback behavior.
 
 ### Milestone 4 -- Generated Catalog and Autostart
 
@@ -884,6 +894,7 @@ The name in `FILE:` must match the `%INCLUDE` name (without .msw).
 | `just context-switch-smoke` | Verify two-task cooperative context switching |
 | `just ipc-smoke` | Verify blocking fixed-message client/TTY IPC |
 | `just heartbeat-smoke` | Verify UART framing and 24-bit clock wraparound |
+| `just clock-smoke` | Verify the heartbeat-driven PL/SW Clock menu app |
 | `just plsw-compile <[.msw ...] file.plsw>` | Compile any .plsw  |
 | `just plsw-run <[.msw ...] file.plsw>` | Compile and run any .plsw |
 | `just plsw-dump <[.msw ...] file.plsw>` | Compile and dump memory |

@@ -11,6 +11,7 @@
 %INCLUDE menu;
 %INCLUDE hello_app;
 %INCLUDE counter_app;
+%INCLUDE clock_app;
 
 MAIN: PROC;
     CALL UART_PUTS(ADDR(BANNER));
