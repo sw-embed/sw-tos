@@ -61,6 +61,9 @@ plsw-link-smoke:
 context-switch-smoke:
     ./tests/test-context-switch.sh
 
+# Exercise fixed-message blocking send/receive through the TTY task
+ipc-smoke: context-switch-smoke
+
 # Compile and dump PL/SW smoke test
 plsw-smoke-dump: plsw-smoke
     {{COR24EMU}} --lgo build/smoke-test.lgo -n -1 --speed 0 --dump

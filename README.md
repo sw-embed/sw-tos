@@ -97,6 +97,17 @@ through `yield`, verifies saved register sentinels, and requires the UART
 sequence `A1`, `B1`, `A2`, `B2`, `A3`, `B3`.
 The complete output begins with the boot banner `SWTOS M1`.
 
+The same executable also provides the first synchronous IPC proof:
+
+```
+just ipc-smoke
+```
+
+The TTY task starts first and blocks in `receive`. The client fills a fixed
+seven-word `TTY_WRITE` message, blocks in `send`, and wakes the TTY task. The
+TTY task copies the message to a private buffer, acknowledges the sender, and
+produces the alternating output.
+
 ## License
 
 MIT -- see [LICENSE](LICENSE).

@@ -753,11 +753,18 @@ tasks.
 ### Milestone 2 -- MINIX-Style IPC
 
 - [ ] `send()`, `receive()`, `sendrec()` in kernel
-- [ ] Fixed-size message struct
-- [ ] Blocking semantics (process blocks if peer not ready)
-- [ ] TTY as a service task receiving `TTY_WRITE` messages
+- [x] Fixed-size seven-word message struct and kernel copy
+- [x] Blocking send/receive semantics with peer wakeup
+- [x] TTY service task receiving `TTY_WRITE` messages
 
 **Demo:** Client process sends a string to TTY service; TTY prints it.
+
+**Status:** `just ipc-smoke` starts the TTY task first so it enters
+`PROC_RECV_BLOCK`, then runs a client that enters `PROC_SEND_BLOCK` with a
+seven-word `TTY_WRITE` message. The receiver copies all message words into a
+private buffer, wakes the sender, and emits the payload. Next: expose reusable
+`send`, `receive`, and `sendrec` kernel entry points rather than inline demo
+paths.
 
 ### Milestone 3 -- UART Heartbeat Clock
 
@@ -862,6 +869,7 @@ The name in `FILE:` must match the `%INCLUDE` name (without .msw).
 | `just plsw-system-run` | Alias for `plsw-system-interactive` |
 | `just plsw-link-smoke` | Compile, FIXUP-link, and run separate PL/SW modules |
 | `just context-switch-smoke` | Verify two-task cooperative context switching |
+| `just ipc-smoke` | Verify blocking fixed-message client/TTY IPC |
 | `just plsw-compile <[.msw ...] file.plsw>` | Compile any .plsw  |
 | `just plsw-run <[.msw ...] file.plsw>` | Compile and run any .plsw |
 | `just plsw-dump <[.msw ...] file.plsw>` | Compile and dump memory |

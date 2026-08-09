@@ -66,8 +66,8 @@ _start:
         la      r2,_proc_b
         sw      r0,9(r2)
 
-        ; Start task A by restoring its fabricated context.
-        la      r0,_proc_a
+        ; Start task B first so RECEIVE proves its blocking path before A sends.
+        la      r0,_proc_b
         la      r2,_current_proc
         sw      r0,0(r2)
         mov     r2,r0
@@ -137,17 +137,25 @@ _task_a:
         add     r0,1
         sb      r0,0(r2)
 
-        lc      r0,65           ; A
-        la      r2,_putchar
-        jal     r1,(r2)
+        ; Build a fixed seven-word TTY_WRITE message.
+        la      r2,_ipc_message
+        lc      r0,1
+        sw      r0,0(r2)        ; MSG_SOURCE = endpoint A
+        sw      r0,3(r2)        ; MSG_TYPE = MSG_TTY_WRITE
         la      r2,_task_a_count
         lbu     r0,0(r2)
-        add     r0,48
-        la      r2,_putchar
-        jal     r1,(r2)
-        lc      r0,10
-        la      r2,_putchar
-        jal     r1,(r2)
+        la      r2,_ipc_message
+        sw      r0,6(r2)        ; MSG_FIELD1 = counter payload
+
+        ; SEND blocks A until B copies and acknowledges the message.
+        lc      r0,4            ; PROC_SEND_BLOCK
+        la      r2,_proc_a
+        sw      r0,24(r2)
+        la      r0,_ipc_message
+        sw      r0,33(r2)       ; PD_MSGPTR
+        lc      r0,1            ; wake blocked receiver
+        la      r2,_proc_b
+        sw      r0,24(r2)
 
         la      r0,0x654321
         push    r0
@@ -157,15 +165,72 @@ _task_a:
         jal     r1,(r2)
         la      r2,0x123456
         ceq     r0,r2
-        brf     _context_failure
+        brt     _task_a_r0_ok
+        la      r2,_context_failure
+        jmp     (r2)
+_task_a_r0_ok:
         lw      r0,0(fp)
         la      r1,0x654321
         ceq     r0,r1
-        brf     _context_failure
+        brt     _task_a_fp_ok
+        la      r2,_context_failure
+        jmp     (r2)
+_task_a_fp_ok:
         pop     r2
         bra     _task_a
 
 _task_b:
+_task_b_receive:
+        ; RECEIVE blocks until endpoint A is waiting in SEND_BLOCK.
+        la      r2,_proc_a
+        lbu     r0,24(r2)
+        lc      r1,4
+        ceq     r0,r1
+        brt     _task_b_message_ready
+        lc      r0,3            ; PROC_RECV_BLOCK
+        la      r2,_proc_b
+        sw      r0,24(r2)
+        la      r2,_yield
+        jal     r1,(r2)
+        bra     _task_b_receive
+
+_task_b_message_ready:
+        ; Kernel copy: sender and receiver do not share the receive buffer.
+        la      r1,_ipc_message
+        la      r2,_task_b_message
+        lw      r0,0(r1)
+        sw      r0,0(r2)
+        lw      r0,3(r1)
+        sw      r0,3(r2)
+        lw      r0,6(r1)
+        sw      r0,6(r2)
+        lw      r0,9(r1)
+        sw      r0,9(r2)
+        lw      r0,12(r1)
+        sw      r0,12(r2)
+        lw      r0,15(r1)
+        sw      r0,15(r2)
+        lw      r0,18(r1)
+        sw      r0,18(r2)
+        lc      r0,1
+        la      r2,_proc_a
+        sw      r0,24(r2)       ; acknowledge and wake sender
+        la      r2,_proc_b
+        sw      r0,24(r2)
+
+        ; TTY service consumes the private copy.
+        lc      r0,65           ; A
+        la      r2,_putchar
+        jal     r1,(r2)
+        la      r2,_task_b_message
+        lw      r0,6(r2)
+        add     r0,48
+        la      r2,_putchar
+        jal     r1,(r2)
+        lc      r0,10
+        la      r2,_putchar
+        jal     r1,(r2)
+
         la      r2,_task_b_count
         lbu     r0,0(r2)
         add     r0,1
@@ -202,7 +267,8 @@ _task_b:
         ceq     r0,r1
         brf     _context_failure
         pop     r2
-        bra     _task_b
+        la      r2,_task_b
+        jmp     (r2)
 
 _context_failure:
         lc      r0,88           ; X
@@ -260,6 +326,10 @@ _task_a_count:
         .byte   0
 _task_b_count:
         .byte   0
+_ipc_message:
+        .zero   21
+_task_b_message:
+        .zero   21
 _stack_heap_next:
         .word   0xFEEC00
 _boot_banner:

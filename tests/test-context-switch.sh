@@ -23,4 +23,4 @@ if [ "$output" != "$expected" ]; then
     exit 1
 fi
 
-echo "PASS: cooperative tasks used separate stacks and alternated output"
+echo "PASS: blocked IPC client and TTY service alternated on separate stacks"
