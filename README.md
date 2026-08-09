@@ -123,6 +123,12 @@ count. `TASK_EXIT` also restores the app slot's saved EBR arena pointer,
 reclaiming its private state and stack as one LIFO allocation. Verify repeated
 reuse with `just scheduled-reclaim-smoke`.
 
+The scheduler scans a contiguous three-entry process table rather than
+switching between hardcoded A/B descriptors. Two child slots can run
+concurrently; `just scheduled-multislot-smoke` launches two Counter instances
+and verifies round-robin `B1 C1 B2 C2` output from independent private state.
+Their allocation generation is reclaimed when its last child exits.
+
 The heartbeat-aware frontend accepts `--image`, so the same byte stuffing,
 Ctrl-] translation, and line-ending filtering serve both the compatibility and
 scheduler-integrated images. The latter is ready to become the primary demo.

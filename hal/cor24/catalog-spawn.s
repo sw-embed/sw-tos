@@ -1,8 +1,8 @@
 ; catalog-spawn.s -- descriptor-sized stack/state spawn proof
 ;
-; Two processes share one resident entry point. Spawn allocates each process a
-; descriptor-sized EBR stack and zeroed private state block, then fabricates
-; the initial cooperative context expected by the SWTOS scheduler.
+; A persistent shell and two child slots share resident entry points. Spawn
+; allocates descriptor-sized EBR stacks and zeroed private state blocks, then
+; fabricates the initial cooperative contexts expected by the SWTOS scheduler.
 
 _start:
         ; Keep the kernel call stack above the process allocation arena.
@@ -80,34 +80,56 @@ _spawn_resident:
         pop     r1
         jmp     (r1)
 
-; TASK_SPAWN(descriptor): callable from PL/SW while task A's frames remain
-; live. The first caller materializes process B; later calls are harmless.
+; TASK_SPAWN(descriptor): allocate the first free child process-table slot.
         .globl  _TASK_SPAWN
 _TASK_SPAWN:
         push    fp
         push    r2
         push    r1
         mov     fp,sp
-        la      r2,_second_spawned
+        la      r2,_child_count
         lbu     r0,0(r2)
         ceq     r0,z
-        brf     _spawn_second_done
-        lc      r0,1
-        sb      r0,0(r2)
+        brf     _spawn_have_arena_mark
         la      r2,_ebr_next
         lw      r0,0(r2)
         la      r2,_spawn_arena_mark
         sw      r0,0(r2)       ; app allocations are reclaimed at TASK_EXIT
+_spawn_have_arena_mark:
         la      r2,_proc_b
+_spawn_find_slot:
+        lw      r0,24(r2)
+        ceq     r0,z
+        brt     _spawn_slot_found
+        add     r2,39
+        la      r1,_proc_table_end
+        mov     r0,r2
+        ceq     r0,r1
+        brt     _spawn_child_done
+        bra     _spawn_find_slot
+_spawn_slot_found:
         la      r1,_spawn_process
         sw      r2,0(r1)
         lw      r0,9(fp)        ; selected PROGRAM_DESC pointer
         la      r2,_spawn_resident
         jal     r1,(r2)
-        la      r2,_proc_b
+        la      r2,_spawn_process
+        lw      r2,0(r2)
+        la      r1,_proc_b
+        mov     r0,r2
+        ceq     r0,r1
+        brf     _spawn_endpoint_three
         lc      r0,2
+        bra     _spawn_set_endpoint
+_spawn_endpoint_three:
+        lc      r0,3
+_spawn_set_endpoint:
         sw      r0,18(r2)
-_spawn_second_done:
+        la      r2,_child_count
+        lbu     r0,0(r2)
+        add     r0,1
+        sb      r0,0(r2)
+_spawn_child_done:
         mov     sp,fp
         pop     r1
         pop     r2
@@ -176,14 +198,18 @@ _yield:
         lw      r2,0(r2)
         mov     r0,sp
         sw      r0,9(r2)
-        lbu     r0,18(r2)
+_scan_runnable:
+        add     r2,39
+        la      r1,_proc_table_end
+        mov     r0,r2
+        ceq     r0,r1
+        brf     _scan_check_state
+        la      r2,_proc_table
+_scan_check_state:
+        lw      r0,24(r2)
         lc      r1,1
         ceq     r0,r1
-        brt     _switch_b
-        la      r2,_proc_a
-        bra     _select_context
-_switch_b:
-        la      r2,_proc_b
+        brf     _scan_runnable
 _select_context:
         la      r1,_current_proc
         sw      r2,0(r1)
@@ -362,7 +388,7 @@ _TASK_JOIN:
         push    r1
         mov     fp,sp
 _task_join_wait:
-        la      r2,_second_spawned
+        la      r2,_child_count
         lbu     r0,0(r2)
         ceq     r0,z
         brt     _task_join_done
@@ -421,24 +447,29 @@ _TASK_HALT:
         la      r2,_halt
         jmp     (r2)
 
-; TASK_EXIT(): terminate spawned process B, release its slot, and resume shell.
+; TASK_EXIT(): terminate a child slot and resume the persistent shell.
         .globl  _TASK_EXIT
 _TASK_EXIT:
         la      r2,_current_proc
         lw      r2,0(r2)
         lbu     r0,18(r2)
-        lc      r1,2
+        lc      r1,1
         ceq     r0,r1
-        brf     _TASK_HALT
+        brt     _TASK_HALT
         lc      r0,0
         sw      r0,24(r2)       ; PROC_FREE
+        la      r2,_child_count
+        lbu     r0,0(r2)
+        add     r0,-1
+        sb      r0,0(r2)
+        ceq     r0,z
+        brf     _task_exit_keep_arena
+        ; The last child releases the allocation generation.
         la      r2,_spawn_arena_mark
         lw      r0,0(r2)
         la      r2,_ebr_next
-        sw      r0,0(r2)        ; release app state and stack as one LIFO region
-        lc      r0,0
-        la      r2,_second_spawned
-        sb      r0,0(r2)
+        sw      r0,0(r2)
+_task_exit_keep_arena:
         la      r2,_proc_a
         la      r1,_current_proc
         sw      r2,0(r1)
@@ -518,10 +549,14 @@ _putchar_wait:
 _halt:
         bra     _halt
 
+_proc_table:
 _proc_a:
         .zero   39
 _proc_b:
         .zero   39
+_proc_c:
+        .zero   39
+_proc_table_end:
 _current_proc:
         .zero   3
 _spawn_descriptor:
@@ -536,7 +571,7 @@ _spawn_arena_mark:
         .zero   3
 _ebr_next:
         .word   0xFEEB00
-_second_spawned:
+_child_count:
         .byte   0
 _banner:
         .byte   83,80,65,87,78,10,0

@@ -906,20 +906,23 @@ descriptor records and name storage are generated from
 `catalog/catalog.toml`; the kernel no longer contains hand-maintained Hello,
 Counter, Clock, or shell descriptors. The manifest's larger stack/state sizes
 also pass within the installed EBR window using a process-arena high address of
-`0xFEEB00`. `TASK_SPAWN` saves the arena pointer before allocating the reusable
-app slot, and `TASK_EXIT` restores that mark after the app stops. This releases
-the app's state and stack together while preserving the persistent shell below
-them. `just scheduled-reclaim-smoke` completes 20 sequential Counter launches,
+`0xFEEB00`. `TASK_SPAWN` saves the arena pointer before allocating the first
+child in a generation, and the last child to call `TASK_EXIT` restores that
+mark. This releases all child state and stacks together while preserving the
+persistent shell below them. `just scheduled-reclaim-smoke` completes 20 sequential Counter launches,
 which exceeds the former bump-only arena capacity, and verifies all 20 private
-states restart at `B1`. Next: replace the fixed A/B scheduler choice with a
-process-table scan so multiple app instances can coexist before extending
-reclamation beyond the current single-child LIFO rule.
+states restart at `B1`. The scheduler now scans three contiguous process-table
+entries for the next runnable slot. `just scheduled-multislot-smoke` spawns two
+Counter children concurrently and proves round-robin `B1 C1 B2 C2` output,
+independent zeroed state, free-slot selection, join-on-all-children, and
+generation reclamation. Next: add a `ps` shell command backed by a kernel
+process-table listing service.
 
 ### Milestone 5 -- Process-Local State
 
-- [ ] Shared resident text, private stack + state block
-- [ ] Multiple instances of the same program (e.g., two counters)
-- [ ] Process-global state accessed only via passed state pointer
+- [x] Shared resident text, private stack + state block
+- [x] Multiple instances of the same program (e.g., two counters)
+- [x] Process-global state accessed only via passed state pointer
 - [ ] `ps` shows all processes with endpoints and states
 
 ### Milestone 6 -- Embedded Executable Blobs (Later)
@@ -1007,6 +1010,7 @@ The name in `FILE:` must match the `%INCLUDE` name (without .msw).
 | `just scheduled-shell-smoke` | Verify shell-to-spawn scheduled PL/SW dispatch |
 | `just scheduled-catalog-smoke` | Verify scheduled `ls` and `run <name>` commands |
 | `just scheduled-reclaim-smoke` | Stress repeated app stack/state reclamation |
+| `just scheduled-multislot-smoke` | Schedule two concurrent private-state children |
 | `just scheduled-shell-interactive` | Run the scheduler-integrated shell proof |
 | `just plsw-compile <[.msw ...] file.plsw>` | Compile any .plsw  |
 | `just plsw-run <[.msw ...] file.plsw>` | Compile and run any .plsw |

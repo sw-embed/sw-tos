@@ -71,6 +71,10 @@ scheduled-catalog-smoke:
 scheduled-reclaim-smoke:
     ./tests/test-scheduled-reclaim.sh
 
+# Verify round-robin process-table scanning across two concurrent child slots
+scheduled-multislot-smoke:
+    ./tests/test-scheduled-multislot.sh
+
 # Build the scheduler-integrated PL/SW shell image
 scheduled-shell-build:
     ./scripts/catalog-spawn-link.sh tests/catalog-shell.plsw scheduled-shell
