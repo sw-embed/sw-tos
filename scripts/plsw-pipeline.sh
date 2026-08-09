@@ -97,13 +97,14 @@ fi
 
 OUT_S="$OUTDIR/${BASENAME}.s"
 OUT_LGO="$OUTDIR/${BASENAME}.lgo"
+OUT_BIN="$OUTDIR/${BASENAME}.bin"
 
 echo "$ASM" > "$OUT_S"
 ASM_LINES=$(echo "$ASM" | wc -l | tr -d ' ')
 echo "Assembly: $ASM_LINES lines -> $OUT_S" >&2
 
 # Assemble
-$COR24ASM "$OUT_S" -o "$OUT_LGO"
+$COR24ASM "$OUT_S" -o "$OUT_LGO" --bin "$OUT_BIN"
 echo "Binary: $OUT_LGO" >&2
 
 if [ "$RUN_MODE" = "--run" ]; then

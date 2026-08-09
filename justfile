@@ -35,9 +35,13 @@ dump: smoke
 plsw-system:
     {{PIPELINE}} include/swtos.msw include/menu.msw include/hello_app.msw include/counter_app.msw system.plsw
 
-# Run system interactively (requires --terminal mode)
-plsw-system-run: plsw-system
-    {{COR24EMU}} --lgo build/system.lgo --terminal --echo --speed 0 -t 300
+# Run the menu interactively. cor24-emu 0.1.0 ignores --terminal for --lgo,
+# so use its raw-binary path, which correctly bridges stdin to the UART.
+plsw-system-interactive: plsw-system
+    {{COR24EMU}} --load-binary build/system.bin@0 --entry 0 --terminal --echo --speed 0 -t 300
+
+# Backward-compatible alias.
+plsw-system-run: plsw-system-interactive
 
 # ---- PL/SW compiler pipeline ----
 

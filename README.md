@@ -64,6 +64,17 @@ just build
 Produces a flat binary image (.lgo) loadable via the COR24 serial boot
 protocol at 921,600 baud.
 
+To compile and run the SWTOS menu interactively in the emulator:
+
+```
+just plsw-system-interactive
+```
+
+`just plsw-system-run` is retained as an alias. The PL/SW pipeline emits both
+`.lgo` and raw `.bin` images. Interactive execution uses the raw image because
+`cor24-emu` 0.1.0 does not honor `--terminal` when loading an `.lgo` image;
+its raw-binary execution path correctly connects terminal input to the UART.
+
 ## License
 
 MIT -- see [LICENSE](LICENSE).

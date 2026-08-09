@@ -839,6 +839,9 @@ The name in `FILE:` must match the `%INCLUDE` name (without .msw).
 |---------------------|--------------------------------------------|
 | `just plsw-smoke`   | Compile smoke-test.plsw with .msw includes |
 | `just plsw-smoke-run` | Compile and run smoke-test.plsw         |
+| `just plsw-system`  | Compile the complete menu system to `.lgo` and `.bin` |
+| `just plsw-system-interactive` | Compile and run the menu with interactive UART input |
+| `just plsw-system-run` | Alias for `plsw-system-interactive` |
 | `just plsw-compile <[.msw ...] file.plsw>` | Compile any .plsw  |
 | `just plsw-run <[.msw ...] file.plsw>` | Compile and run any .plsw |
 | `just plsw-dump <[.msw ...] file.plsw>` | Compile and dump memory |
