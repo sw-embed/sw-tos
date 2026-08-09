@@ -880,15 +880,18 @@ below `0xFEE000` would leave the installed EBR window. The language/kernel ABI
 bridge and generic descriptor-driven runtime spawn entry are now proven.
 
 `just scheduled-shell-smoke` now links a writable-global-free persistent PL/SW
-menu, Hello, and Counter with that scheduler. Choices `1` and `2` pass their
-private-state descriptor pointers to `TASK_SPAWN`. Hello blocks for a key in
-its own process; Counter cooperatively produces `B1 B2`. Both call `TASK_EXIT`,
+menu, Hello, Counter, and Clock with that scheduler. Choices `1`, `2`, and `3`
+pass their private-state descriptor pointers to `TASK_SPAWN`. Hello blocks for
+a key in its own process; Counter cooperatively produces `B1 B2`; Clock decodes
+timestamped UART frames and logs `mm:ss` until Escape. All call `TASK_EXIT`,
 which marks the slot free, clears the spawn guard, and restores the menu's
-saved context. The scripted `1`, key, `2`, `0` sequence proves both app paths
-and slot reuse.
-`just scheduled-shell-interactive` exposes the same path on a terminal. Next:
-migrate the Clock app and host heartbeat transport, then make this
-scheduler-integrated menu the primary interactive image.
+saved context. The scripted `1`, key, `2`, `3`, heartbeat frames, Escape, `0`
+sequence proves all app paths and slot reuse. The kernel exports the PL/SW
+division helper required for Clock conversion.
+`just scheduled-shell-interactive` uses the generalized heartbeat frontend;
+a real PTY run proves Ctrl-] returns from Clock and `0` halts. Next: make this
+scheduler-integrated menu the primary interactive image while retaining an
+explicit compatibility target for the former direct-call image.
 
 ### Milestone 5 -- Process-Local State
 

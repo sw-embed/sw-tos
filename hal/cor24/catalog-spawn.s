@@ -26,6 +26,8 @@ _start:
         sw      r0,3(r2)        ; process-local descriptor selection
         la      r0,_hello_descriptor
         sw      r0,6(r2)
+        la      r0,_clock_descriptor
+        sw      r0,9(r2)
 
         la      r0,_proc_a
         la      r2,_current_proc
@@ -215,6 +217,14 @@ _plsw_hello_trampoline:
         la      r2,_halt
         jmp     (r2)
 
+_plsw_clock_trampoline:
+        push    r0
+        la      r2,_PLSW_CLOCK
+        jal     r1,(r2)
+        add     sp,3
+        la      r2,_halt
+        jmp     (r2)
+
 ; PL/SW-callable cooperative yield.
         .globl  _TASK_YIELD
 _TASK_YIELD:
@@ -264,6 +274,30 @@ _UART_PUTCHAR:
         lw      r0,9(fp)
         la      r2,_putchar
         jal     r1,(r2)
+        mov     sp,fp
+        pop     r1
+        pop     r2
+        pop     fp
+        jmp     (r1)
+
+; PL/SW compiler runtime helper for positive 24-bit integer division.
+        .globl  __plsw_div
+__plsw_div:
+        push    fp
+        push    r2
+        push    r1
+        mov     fp,sp
+        lw      r0,9(fp)
+        lw      r1,12(fp)
+        lc      r2,0
+_plsw_div_loop:
+        cls     r0,r1
+        brt     _plsw_div_done
+        sub     r0,r1
+        add     r2,1
+        bra     _plsw_div_loop
+_plsw_div_done:
+        mov     r0,r2
         mov     sp,fp
         pop     r1
         pop     r2
@@ -376,7 +410,7 @@ _launcher_descriptor:
         .word   0
         .word   0
         .word   64
-        .word   3
+        .word   4
         .word   1
 _launcher_name:
         .byte   115,104,101,108,108,0
@@ -402,6 +436,17 @@ _hello_descriptor:
         .word   1
 _hello_name:
         .byte   104,101,108,108,111,0
+_clock_descriptor:
+        .word   _clock_name
+        .word   0
+        .word   _plsw_clock_trampoline
+        .word   0
+        .word   0
+        .word   96
+        .word   1
+        .word   3
+_clock_name:
+        .byte   99,108,111,99,107,0
 _proc_a:
         .zero   39
 _proc_b:

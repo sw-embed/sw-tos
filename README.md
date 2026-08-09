@@ -105,18 +105,19 @@ private state to create task B, then both tasks call back into the scheduler to
 yield.
 
 The scheduler-integrated persistent PL/SW menu supports `1: Hello`,
-`2: Counter`, and `0: Exit`. Hello waits for a key in its own process; Counter
-prints `B1` and `B2`. Each app exits, releases its process slot, and returns to
-the preserved menu context:
+`2: Counter`, `3: Clock`, and `0: Exit`. Hello waits for a key in its own
+process; Counter prints `B1` and `B2`; Clock logs `mm:ss` from host UART
+heartbeats until Ctrl-]. Each app exits, releases its process slot, and returns
+to the preserved menu context:
 
 ```
 just scheduled-shell-smoke
 just scheduled-shell-interactive
 ```
 
-The original `plsw-system-interactive` menu remains available as the broader
-compatibility demo until Clock heartbeat handling is migrated onto the
-scheduler-integrated image.
+The heartbeat-aware frontend accepts `--image`, so the same byte stuffing,
+Ctrl-] translation, and line-ending filtering serve both the compatibility and
+scheduler-integrated images. The latter is ready to become the primary demo.
 
 Produces a flat binary image (.lgo) loadable via the COR24 serial boot
 protocol at 921,600 baud.

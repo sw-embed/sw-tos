@@ -69,7 +69,7 @@ scheduled-shell-build:
 
 # Interactively exercise scheduled Hello and Counter choices
 scheduled-shell-interactive: scheduled-shell-build
-    {{COR24EMU}} --load-binary build/scheduled-shell/program.bin@0 --entry 0 --terminal --echo --speed 0 -t 300
+    ./scripts/swtos-terminal.py --image build/scheduled-shell/program.bin
 
 # Run the menu interactively. cor24-emu 0.1.0 ignores --terminal for --lgo,
 # so use its raw-binary path, which correctly bridges stdin to the UART.

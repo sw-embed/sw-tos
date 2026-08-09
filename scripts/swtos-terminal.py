@@ -2,6 +2,7 @@
 """Interactive SWTOS terminal with a UART heartbeat source for Clock."""
 
 import os
+import argparse
 import pty
 import select
 import subprocess
@@ -13,7 +14,7 @@ import tty
 
 ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 EMU = os.path.join(ROOT, "tools", "bin", "cor24-emu")
-IMAGE = os.path.join(ROOT, "build", "system.bin")
+DEFAULT_IMAGE = os.path.join(ROOT, "build", "system.bin")
 CTRL_RIGHT_BRACKET = 0x1D
 APP_ESCAPE = 0x1B
 
@@ -30,10 +31,14 @@ def filter_menu_input(byte: int, menu_prompt: bool, discard_newline: bool):
 
 
 def main() -> int:
+    parser = argparse.ArgumentParser()
+    parser.add_argument("--image", default=DEFAULT_IMAGE)
+    args = parser.parse_args()
+    image = os.path.abspath(args.image)
     command = [
         EMU,
         "--load-binary",
-        f"{IMAGE}@0",
+        f"{image}@0",
         "--entry",
         "0",
         "--terminal",
