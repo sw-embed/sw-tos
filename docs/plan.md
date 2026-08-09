@@ -845,7 +845,8 @@ the generated resident catalog and autostart metadata.
 - [x] Build tool generates PL/SW descriptor table from manifest
 - [x] `AUTOSTART` flag launches the shell service at boot
 - [x] Shell `run <name>` looks up and dispatches resident programs
-- [ ] Shell dispatch creates a separately scheduled process
+- [x] Scheduled shell dispatch creates a separate process
+- [ ] Primary interactive menu uses the scheduler-integrated image
 - [x] `ls` lists catalog entries
 - [x] Per-process stack/state allocation for multiple instances
 
@@ -876,9 +877,15 @@ scheduler step/yield service. The process ABI has an explicit state pointer.
 The proof also keeps the kernel stack at
 `0xFEEC00` separate from the process arena starting at `0xFEE800`; allocating
 below `0xFEE000` would leave the installed EBR window. The language/kernel ABI
-bridge and generic descriptor-driven runtime spawn entry are now proven. Next:
-link the interactive PL/SW shell into the scheduler image and pass its catalog
-lookup result to `TASK_SPAWN` instead of synchronously calling the entry.
+bridge and generic descriptor-driven runtime spawn entry are now proven.
+
+`just scheduled-shell-smoke` now links a writable-global-free PL/SW shell and
+counter with that scheduler. The shell parses `run counter`, passes the
+descriptor from private state to `TASK_SPAWN`, yields while the new process
+prints `B1 B2`, then resumes its preserved frame and prints `RESUMED`.
+`just scheduled-shell-interactive` exposes the same path on a terminal. Next:
+make this scheduler-integrated shell the primary interactive image and migrate
+the complete menu/app surface from the compatibility image.
 
 ### Milestone 5 -- Process-Local State
 
@@ -968,6 +975,8 @@ The name in `FILE:` must match the `%INCLUDE` name (without .msw).
 | `just catalog-run-smoke` | Verify shell catalog lookup and program dispatch |
 | `just catalog-list-smoke` | Verify shell enumeration of catalog descriptors |
 | `just catalog-spawn-smoke` | Verify descriptor-sized stack/state process creation |
+| `just scheduled-shell-smoke` | Verify shell-to-spawn scheduled PL/SW dispatch |
+| `just scheduled-shell-interactive` | Run the scheduler-integrated shell proof |
 | `just plsw-compile <[.msw ...] file.plsw>` | Compile any .plsw  |
 | `just plsw-run <[.msw ...] file.plsw>` | Compile and run any .plsw |
 | `just plsw-dump <[.msw ...] file.plsw>` | Compile and dump memory |

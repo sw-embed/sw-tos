@@ -4,20 +4,22 @@ set -euo pipefail
 
 ROOT_DIR="$(cd "$(dirname "$0")/.." && pwd)"
 TOOL_DIR="$ROOT_DIR/tools/bin"
-OUT_DIR="$ROOT_DIR/build/catalog-spawn"
+PLSW_SOURCE="${1:-$ROOT_DIR/tests/catalog-counter.plsw}"
+BUILD_NAME="${2:-catalog-spawn}"
+OUT_DIR="$ROOT_DIR/build/$BUILD_NAME"
 ASM="$TOOL_DIR/cor24-asm"
 EMU="$TOOL_DIR/cor24-emu"
 META_GEN="$TOOL_DIR/meta-gen"
 LINK="$TOOL_DIR/link24"
 PLSW="$ROOT_DIR/tools/plsw.lgo"
-MODULES=(catalog-spawn catalog-counter)
+MODULES=(kernel app)
 
 mkdir -p "$OUT_DIR"
 scratch=$(mktemp -d /tmp/swtos-catalog-spawn-XXXXXX)
 trap 'rm -rf "$scratch"' EXIT
 {
     printf 'c\n'
-    sed -n 'p' "$ROOT_DIR/tests/catalog-counter.plsw"
+    sed -n 'p' "$PLSW_SOURCE"
     printf '\x04'
 } > "$scratch/input.bin"
 
@@ -30,8 +32,8 @@ if echo "$compiler_output" | grep -q 'compilation failed\|COMPILE ERROR\|ERROR:'
 fi
 echo "$compiler_output" | sed -n \
     '/--- generated assembly ---/,/--- end assembly ---/{/--- generated assembly ---/d;/--- end assembly ---/d;p;}' \
-    > "$OUT_DIR/catalog-counter.raw.s"
-cp "$ROOT_DIR/hal/cor24/catalog-spawn.s" "$OUT_DIR/catalog-spawn.raw.s"
+    > "$OUT_DIR/app.raw.s"
+cp "$ROOT_DIR/hal/cor24/catalog-spawn.s" "$OUT_DIR/kernel.raw.s"
 
 sizes=()
 for module in "${MODULES[@]}"; do
@@ -53,6 +55,6 @@ for i in "${!MODULES[@]}"; do
     base=$((base + sizes[i]))
 done
 
-"$LINK" --entry catalog-spawn --dir "$OUT_DIR" \
-    --map "$OUT_DIR/program.map" catalog-spawn catalog-counter \
+"$LINK" --entry kernel --dir "$OUT_DIR" \
+    --map "$OUT_DIR/program.map" kernel app \
     -o "$OUT_DIR/program.bin"

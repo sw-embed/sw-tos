@@ -59,6 +59,18 @@ catalog-list-smoke: plsw-system
 catalog-spawn-smoke:
     ./tests/test-catalog-spawn.sh
 
+# Route a scheduled PL/SW shell run command through TASK_SPAWN
+scheduled-shell-smoke:
+    ./tests/test-scheduled-shell.sh
+
+# Build the scheduler-integrated PL/SW shell image
+scheduled-shell-build:
+    ./scripts/catalog-spawn-link.sh tests/catalog-shell.plsw scheduled-shell
+
+# Interactively enter: run counter
+scheduled-shell-interactive: scheduled-shell-build
+    {{COR24EMU}} --load-binary build/scheduled-shell/program.bin@0 --entry 0 --terminal --echo --speed 0 -t 300
+
 # Run the menu interactively. cor24-emu 0.1.0 ignores --terminal for --lgo,
 # so use its raw-binary path, which correctly bridges stdin to the UART.
 plsw-system-interactive: plsw-system

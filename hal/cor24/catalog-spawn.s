@@ -12,7 +12,7 @@ _start:
         la      r2,_puts
         jal     r1,(r2)
 
-        la      r0,_counter_descriptor
+        la      r0,_launcher_descriptor
         la      r2,_proc_a
         la      r1,_spawn_process
         sw      r2,0(r1)
@@ -189,12 +189,81 @@ _restore_context:
         jmp     (r1)
 
 ; Convert scheduler entry ABI (r0 = state pointer) to a PL/SW argument.
+_plsw_launcher_trampoline:
+        push    r0
+        la      r2,_PLSW_LAUNCHER
+        jal     r1,(r2)
+        add     sp,3
+        la      r2,_halt
+        jmp     (r2)
+
 _plsw_counter_trampoline:
         push    r0
         la      r2,_PLSW_COUNTER
         jal     r1,(r2)
         add     sp,3
-        bra     _halt
+        la      r2,_halt
+        jmp     (r2)
+
+; PL/SW-callable cooperative yield.
+        .globl  _TASK_YIELD
+_TASK_YIELD:
+        push    fp
+        push    r2
+        push    r1
+        mov     fp,sp
+        la      r2,_yield
+        jal     r1,(r2)
+        mov     sp,fp
+        pop     r1
+        pop     r2
+        pop     fp
+        jmp     (r1)
+
+; TASK_GETCHAR(destination): polled UART input for the scheduled shell.
+        .globl  _TASK_GETCHAR
+_TASK_GETCHAR:
+        push    fp
+        push    r2
+        push    r1
+        mov     fp,sp
+_task_getchar_wait:
+        la      r2,0xFF0101
+        lbu     r0,0(r2)
+        lcu     r1,1
+        and     r0,r1
+        ceq     r0,z
+        brt     _task_getchar_wait
+        la      r2,0xFF0100
+        lbu     r0,0(r2)
+        lw      r2,9(fp)
+        sb      r0,0(r2)
+        mov     sp,fp
+        pop     r1
+        pop     r2
+        pop     fp
+        jmp     (r1)
+
+; PL/SW runtime-compatible UART output entry.
+        .globl  _UART_PUTCHAR
+_UART_PUTCHAR:
+        push    fp
+        push    r2
+        push    r1
+        mov     fp,sp
+        lw      r0,9(fp)
+        la      r2,_putchar
+        jal     r1,(r2)
+        mov     sp,fp
+        pop     r1
+        pop     r2
+        pop     fp
+        jmp     (r1)
+
+        .globl  _TASK_HALT
+_TASK_HALT:
+        la      r2,_halt
+        jmp     (r2)
 
 ; TASK_STEP(value): PL/SW callback that reports one step and cooperatively
 ; yields. Its call frame remains on the process stack across the switch.
@@ -280,6 +349,17 @@ _halt:
 
 ; PROGRAM_DESC: name, kind, entry, words, entry_off, stack_words,
 ; state_words, flags.
+_launcher_descriptor:
+        .word   _launcher_name
+        .word   0
+        .word   _plsw_launcher_trampoline
+        .word   0
+        .word   0
+        .word   64
+        .word   2
+        .word   1
+_launcher_name:
+        .byte   115,104,101,108,108,0
 _counter_descriptor:
         .word   _counter_name
         .word   0
