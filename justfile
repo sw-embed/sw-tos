@@ -47,6 +47,10 @@ plsw-system: catalog-generate
 autostart-smoke: plsw-system
     ./tests/test-autostart.sh
 
+# Verify shell run <name> lookup and resident program dispatch
+catalog-run-smoke: plsw-system
+    ./tests/test-catalog-run.sh
+
 # Run the menu interactively. cor24-emu 0.1.0 ignores --terminal for --lgo,
 # so use its raw-binary path, which correctly bridges stdin to the UART.
 plsw-system-interactive: plsw-system

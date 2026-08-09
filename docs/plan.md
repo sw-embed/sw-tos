@@ -447,7 +447,8 @@ assembly block for linked entry addresses. `just catalog-smoke` checks that the
 generated file is current and compiles it into the complete system image.
 At boot, `CATALOG_AUTOSTART` scans the generated descriptor flags and invokes
 each selected entry through `CATALOG_CALL_ENTRY`; `system.plsw` contains no
-direct shell call.
+direct shell call. `CATALOG_FIND_PROGRAM` compares a requested name against
+program descriptors and returns the linked entry for indirect dispatch.
 
 ### Program Spawning
 
@@ -842,7 +843,8 @@ the generated resident catalog and autostart metadata.
 - [x] TOML manifest for programs and services
 - [x] Build tool generates PL/SW descriptor table from manifest
 - [x] `AUTOSTART` flag launches the shell service at boot
-- [ ] Shell `run <name>` spawns from catalog
+- [x] Shell `run <name>` looks up and dispatches resident programs
+- [ ] Shell dispatch creates a separately scheduled process
 - [ ] `ls` lists catalog entries
 - [ ] Per-process state allocation for multiple instances
 
@@ -855,8 +857,10 @@ size, and flags for every object. `just autostart-smoke` proves boot scans the
 flags and invokes the shell's catalog entry without a direct `CALL MENU`.
 The current interactive system has no independently scheduled PL/SW TTY
 service yet, so the shell is the first autostart service; TTY autostart will use
-the same path when that service is separated. Next: catalog name lookup and
-shell `run <name>` dispatch.
+the same path when that service is separated. `just catalog-run-smoke` proves
+`run counter` dispatches the matching program and a missing name is rejected.
+Dispatch is synchronous until catalog spawning is connected to the scheduler.
+Next: implement `ls` by enumerating the same catalog descriptors.
 
 ### Milestone 5 -- Process-Local State
 
@@ -943,6 +947,7 @@ The name in `FILE:` must match the `%INCLUDE` name (without .msw).
 | `just clock-smoke` | Verify the heartbeat-driven PL/SW Clock menu app |
 | `just catalog-smoke` | Validate, generate, and compile the resident catalog |
 | `just autostart-smoke` | Verify metadata-driven shell service startup |
+| `just catalog-run-smoke` | Verify shell catalog lookup and program dispatch |
 | `just plsw-compile <[.msw ...] file.plsw>` | Compile any .plsw  |
 | `just plsw-run <[.msw ...] file.plsw>` | Compile and run any .plsw |
 | `just plsw-dump <[.msw ...] file.plsw>` | Compile and dump memory |

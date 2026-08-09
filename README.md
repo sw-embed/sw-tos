@@ -77,6 +77,15 @@ entry directly. To verify metadata-driven `IMAGE_AUTOSTART` dispatch:
 just autostart-smoke
 ```
 
+The interactive shell retains choices `0` through `3` and also accepts
+`run <name>`, for example `run counter`. Lookup scans program descriptors by
+name and dispatches the linked resident entry. Verify successful and missing
+lookups with:
+
+```
+just catalog-run-smoke
+```
+
 Produces a flat binary image (.lgo) loadable via the COR24 serial boot
 protocol at 921,600 baud.
 

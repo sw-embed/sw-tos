@@ -1,5 +1,64 @@
 /* catalog.msw -- resident catalog runtime */
 
+DCL CATALOG_MATCH INT;
+DCL CATALOG_FOUND INT;
+DCL CATALOG_FOUND_ENTRY PTR;
+
+CATALOG_NAMES_EQUAL: PROC(LEFT_PTR PTR, RIGHT_PTR PTR);
+    ASM DO;
+        'lw      r0,9(fp)';
+        'lw      r1,12(fp)';
+        '_catalog_name_loop:';
+        'push    r0';
+        'lbu     r0,0(r0)';
+        'lbu     r2,0(r1)';
+        'ceq     r0,r2';
+        'pop     r0';
+        'brf     _catalog_name_mismatch';
+        'push    r0';
+        'lbu     r0,0(r0)';
+        'ceq     r0,z';
+        'pop     r0';
+        'brt     _catalog_name_match';
+        'add     r0,1';
+        'add     r1,1';
+        'bra     _catalog_name_loop';
+        '_catalog_name_mismatch:';
+        'lc      r0,0';
+        'la      r2,_CATALOG_MATCH';
+        'sw      r0,0(r2)';
+        'bra     _catalog_name_done';
+        '_catalog_name_match:';
+        'lc      r0,1';
+        'la      r2,_CATALOG_MATCH';
+        'sw      r0,0(r2)';
+        '_catalog_name_done:';
+    END;
+END;
+
+CATALOG_FIND_PROGRAM: PROC(NAME_PTR PTR);
+    DCL I INT;
+    DCL OFFSET INT;
+    DCL CATALOG_NAME_PTR PTR;
+    CATALOG_FOUND = 0;
+    CATALOG_FOUND_ENTRY = 0;
+    I = 0;
+    DO WHILE (I < CATALOG_COUNT);
+        IF (CATALOG_FOUND = 0) THEN DO;
+            OFFSET = I * CATALOG_DESC_WORDS;
+            IF (CATALOG_TABLE(OFFSET + 1) = IMAGE_PROGRAM) THEN DO;
+                CATALOG_NAME_PTR = CATALOG_TABLE(OFFSET);
+                CALL CATALOG_NAMES_EQUAL(NAME_PTR, CATALOG_NAME_PTR);
+                IF (CATALOG_MATCH = 1) THEN DO;
+                    CATALOG_FOUND_ENTRY = CATALOG_TABLE(OFFSET + 2);
+                    CATALOG_FOUND = 1;
+                END;
+            END;
+        END;
+        I = I + 1;
+    END;
+END;
+
 CATALOG_CALL_ENTRY: PROC(ENTRY_PTR PTR);
     ASM DO;
         'lw      r2,9(fp)';
