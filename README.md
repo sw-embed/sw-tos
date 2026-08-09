@@ -115,6 +115,12 @@ just scheduled-shell-smoke
 just scheduled-shell-interactive
 ```
 
+Its `ls` command walks the generated scheduler descriptor table, and
+`run <name>` searches that same table for program descriptors. A scheduler
+join service keeps the shell suspended until the selected app exits, so adding
+a cataloged program does not require a shell name branch or guessed yield
+count.
+
 The heartbeat-aware frontend accepts `--image`, so the same byte stuffing,
 Ctrl-] translation, and line-ending filtering serve both the compatibility and
 scheduler-integrated images. The latter is ready to become the primary demo.

@@ -150,6 +150,7 @@ def render_scheduled(entries: list[dict], manifest: Path) -> str:
     for entry in entries:
         label = entry["name"].replace("-", "_")
         lines.append(f"        .word   _scheduled_{label}_descriptor")
+    lines.append("        .word   0")
     lines.append("")
     for entry in entries:
         label = entry["name"].replace("-", "_")

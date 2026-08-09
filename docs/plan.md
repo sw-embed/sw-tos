@@ -898,14 +898,16 @@ a real PTY run proves Ctrl-] returns from Clock and `0` halts.
 `plsw-system-run` remains its alias. The former direct-call catalog shell is
 retained as `just plsw-system-compat-interactive`.
 `just scheduled-catalog-smoke` proves the primary shell handles `ls` and
-`run counter` through its private descriptor pointers and reusable process
-slot. Scheduler descriptor records and name storage are now generated from
+`run counter` by walking the generated scheduler table, rejects missing names
+and the non-program shell service, and reuses the process slot. The shell no
+longer contains literal catalog names or app-specific yield counts: a generic
+join service suspends it until the spawned app calls `TASK_EXIT`. Scheduler
+descriptor records and name storage are generated from
 `catalog/catalog.toml`; the kernel no longer contains hand-maintained Hello,
 Counter, Clock, or shell descriptors. The manifest's larger stack/state sizes
 also pass within the installed EBR window using a process-arena high address of
-`0xFEEB00`. Next: make scheduled `ls` walk the generated assembly table instead
-of printing command literals, then generalize scheduled name lookup over that
-same table.
+`0xFEEB00`. Next: reclaim each exited process's stack/state allocation so
+repeated interactive launches cannot exhaust the downward EBR arena.
 
 ### Milestone 5 -- Process-Local State
 

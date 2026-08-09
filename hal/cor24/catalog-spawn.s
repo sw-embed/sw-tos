@@ -264,6 +264,114 @@ _task_getchar_wait:
         pop     fp
         jmp     (r1)
 
+; TASK_CATALOG_LIST(): enumerate the generated, zero-terminated descriptor
+; table. Each descriptor begins with its NUL-terminated name pointer.
+        .globl  _TASK_CATALOG_LIST
+_TASK_CATALOG_LIST:
+        push    fp
+        push    r2
+        push    r1
+        mov     fp,sp
+        la      r2,_scheduled_catalog_table
+_task_catalog_list_next:
+        lw      r0,0(r2)
+        ceq     r0,z
+        brt     _task_catalog_list_done
+        push    r2
+        lw      r0,0(r0)
+        la      r2,_puts
+        jal     r1,(r2)
+        lc      r0,10
+        la      r2,_putchar
+        jal     r1,(r2)
+        pop     r2
+        add     r2,3
+        bra     _task_catalog_list_next
+_task_catalog_list_done:
+        mov     sp,fp
+        pop     r1
+        pop     r2
+        pop     fp
+        jmp     (r1)
+
+; TASK_CATALOG_FIND(name, result): search generated program descriptors by
+; name and write either the matching descriptor pointer or zero to result.
+        .globl  _TASK_CATALOG_FIND
+_TASK_CATALOG_FIND:
+        push    fp
+        push    r2
+        push    r1
+        mov     fp,sp
+        lw      r2,12(fp)
+        lc      r0,0
+        sw      r0,0(r2)
+        la      r2,_scheduled_catalog_table
+_task_catalog_find_next:
+        lw      r0,0(r2)
+        ceq     r0,z
+        brt     _task_catalog_find_done
+        lw      r1,3(r0)       ; IMAGE_PROGRAM kind is zero
+        ceq     r1,z
+        brf     _task_catalog_find_advance
+        push    r2
+        lw      r1,0(r0)       ; descriptor name
+        lw      r2,9(fp)       ; requested name
+_task_catalog_find_compare:
+        push    r1
+        lbu     r0,0(r1)
+        push    r0
+        lbu     r0,0(r2)
+        pop     r1
+        ceq     r0,r1
+        pop     r1
+        brf     _task_catalog_find_mismatch
+        ceq     r0,z
+        brt     _task_catalog_find_match
+        add     r1,1
+        add     r2,1
+        bra     _task_catalog_find_compare
+_task_catalog_find_mismatch:
+        pop     r2
+        bra     _task_catalog_find_advance
+_task_catalog_find_match:
+        pop     r2
+        lw      r0,0(r2)
+        lw      r1,12(fp)
+        sw      r0,0(r1)
+        bra     _task_catalog_find_done
+_task_catalog_find_advance:
+        add     r2,3
+        bra     _task_catalog_find_next
+_task_catalog_find_done:
+        mov     sp,fp
+        pop     r1
+        pop     r2
+        pop     fp
+        jmp     (r1)
+
+; TASK_JOIN(): cooperate until the spawned process exits. TASK_EXIT restores
+; the shell inside _yield, after which this loop observes the released slot.
+        .globl  _TASK_JOIN
+_TASK_JOIN:
+        push    fp
+        push    r2
+        push    r1
+        mov     fp,sp
+_task_join_wait:
+        la      r2,_second_spawned
+        lbu     r0,0(r2)
+        ceq     r0,z
+        brt     _task_join_done
+        la      r2,_yield
+        jal     r1,(r2)
+        bra     _task_join_wait
+_task_join_done:
+        mov     sp,fp
+        pop     r1
+        pop     r2
+        pop     fp
+        jmp     (r1)
+
 ; PL/SW runtime-compatible UART output entry.
         .globl  _UART_PUTCHAR
 _UART_PUTCHAR:

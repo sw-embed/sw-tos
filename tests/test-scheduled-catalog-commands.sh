@@ -10,7 +10,8 @@ OUT_DIR="$ROOT_DIR/build/scheduled-shell"
     "$ROOT_DIR/tests/catalog-shell.plsw" scheduled-shell
 
 output=$($EMU --load-binary "$OUT_DIR/program.bin@0" --entry 0 \
-    -u 'ls\nrun counter\n0' --speed 0 -n 2000000 --quiet 2>/dev/null \
+    -u 'ls\nrun missing\nrun shell\nrun counter\n0' \
+    --speed 0 -n 2000000 --quiet 2>/dev/null \
     | sed '/^Entry point:/d')
 
 for expected in hello counter clock shell B1 B2 READY BYE; do
@@ -21,8 +22,10 @@ for expected in hello counter clock shell B1 B2 READY BYE; do
     fi
 done
 
-if echo "$output" | grep -q '^BAD$'; then
-    echo "FAIL: valid scheduled catalog command was rejected" >&2
+bad_count=$(echo "$output" | grep -o 'BAD' | wc -l | tr -d ' ')
+if [ "$bad_count" -ne 2 ]; then
+    echo "FAIL: expected missing program and service name to be rejected" >&2
+    echo "$output" >&2
     exit 1
 fi
 

@@ -6,6 +6,7 @@ _scheduled_catalog_table:
         .word   _scheduled_counter_descriptor
         .word   _scheduled_clock_descriptor
         .word   _scheduled_shell_descriptor
+        .word   0
 
 _scheduled_hello_descriptor:
         .word   _scheduled_hello_name
