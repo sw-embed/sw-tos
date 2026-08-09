@@ -7,49 +7,64 @@ _start:
         ; Allocate two 1 KiB stacks from the EBR stack arena.
         la      r2,_alloc_stack
         jal     r1,(r2)
-        la      r2,_task_a_sp
-        sw      r0,0(r2)
+        la      r2,_proc_a
+        sw      r0,9(r2)        ; PD_SP
         la      r2,_alloc_stack
         jal     r1,(r2)
-        la      r2,_task_b_sp
-        sw      r0,0(r2)
+        la      r2,_proc_b
+        sw      r0,9(r2)        ; PD_SP
+
+        ; Populate the descriptor fields used by the scheduler.
+        la      r2,_proc_a
+        la      r0,_task_a
+        sw      r0,12(r2)       ; PD_PC
+        lc      r0,1
+        sw      r0,18(r2)       ; PD_ENDPOINT
+        sw      r0,24(r2)       ; PD_STATE = PROC_RUNNABLE
+        la      r2,_proc_b
+        la      r0,_task_b
+        sw      r0,12(r2)
+        lc      r0,2
+        sw      r0,18(r2)
+        lc      r0,1
+        sw      r0,24(r2)
 
         ; Build task A's initial context at its allocated stack top.
-        la      r2,_task_a_sp
-        lw      r0,0(r2)
+        la      r2,_proc_a
+        lw      r0,9(r2)
         mov     sp,r0
         lc      r0,0
         push    r0              ; saved r0
-        la      r0,_task_a
+        lw      r0,12(r2)
         push    r0              ; initial PC in saved r1 slot
         lc      r0,0
         push    r0              ; saved r2
         push    r0              ; saved fp
         mov     r0,sp
-        la      r2,_task_a_sp
-        sw      r0,0(r2)
+        la      r2,_proc_a
+        sw      r0,9(r2)
 
         ; Build task B's initial context in its disjoint stack region.
-        la      r2,_task_b_sp
-        lw      r0,0(r2)
+        la      r2,_proc_b
+        lw      r0,9(r2)
         mov     sp,r0
         lc      r0,0
         push    r0
-        la      r0,_task_b
+        lw      r0,12(r2)
         push    r0
         lc      r0,0
         push    r0
         push    r0
         mov     r0,sp
-        la      r2,_task_b_sp
-        sw      r0,0(r2)
+        la      r2,_proc_b
+        sw      r0,9(r2)
 
         ; Start task A by restoring its fabricated context.
-        lc      r0,0
-        la      r2,_current_task
-        sb      r0,0(r2)
-        la      r2,_task_a_sp
-        lw      r0,0(r2)
+        la      r0,_proc_a
+        la      r2,_current_proc
+        sw      r0,0(r2)
+        mov     r2,r0
+        lw      r0,9(r2)
         mov     sp,r0
         bra     _restore_context
 
@@ -76,32 +91,30 @@ _yield:
         push    r2
         push    fp
 
-        la      r2,_current_task
-        lbu     r0,0(r2)
-        ceq     r0,z
-        brt     _save_task_a
-
-_save_task_b:
+        ; Save SP through the current PL/SW PROC_DESC, then choose the
+        ; other descriptor by endpoint.
+        la      r2,_current_proc
+        lw      r2,0(r2)
         mov     r0,sp
-        la      r2,_task_b_sp
-        sw      r0,0(r2)
-        lc      r0,0
-        la      r2,_current_task
-        sb      r0,0(r2)
-        la      r2,_task_a_sp
-        lw      r0,0(r2)
+        sw      r0,9(r2)
+        lbu     r0,18(r2)
+        lc      r1,1
+        ceq     r0,r1
+        brt     _switch_to_b
+
+_switch_to_a:
+        la      r2,_proc_a
+        la      r1,_current_proc
+        sw      r2,0(r1)
+        lw      r0,9(r2)
         mov     sp,r0
         bra     _restore_context
 
-_save_task_a:
-        mov     r0,sp
-        la      r2,_task_a_sp
-        sw      r0,0(r2)
-        lc      r0,1
-        la      r2,_current_task
-        sb      r0,0(r2)
-        la      r2,_task_b_sp
-        lw      r0,0(r2)
+_switch_to_b:
+        la      r2,_proc_b
+        la      r1,_current_proc
+        sw      r2,0(r1)
+        lw      r0,9(r2)
         mov     sp,r0
 
 _restore_context:
@@ -210,12 +223,13 @@ _putchar_wait:
 _halt:
         bra     _halt
 
-_task_a_sp:
+; PROC_DESC storage. Layout matches include/swtos.msw (36 bytes each).
+_proc_a:
+        .zero   36
+_proc_b:
+        .zero   36
+_current_proc:
         .zero   3
-_task_b_sp:
-        .zero   3
-_current_task:
-        .byte   0
 _task_a_count:
         .byte   0
 _task_b_count:

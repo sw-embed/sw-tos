@@ -742,7 +742,10 @@ switching.
 tasks on disjoint EBR stacks, saves and restores `r0`, `r1`/PC, `r2`, and
 `fp`, and verifies alternating output through three rounds. Stack regions are
 assigned by a downward bump allocator rather than embedded task addresses.
-Next: integrate the switch with PL/SW process descriptors.
+The scheduler stores allocated SPs, initial PCs, endpoints, and runnable state
+in records matching the PL/SW `PROC_DESC` ABI, and `yield` saves/restores via
+the current descriptor pointer. Next: add the boot banner and move scheduler
+policy into PL/SW.
 
 ### Milestone 2 -- MINIX-Style IPC
 
