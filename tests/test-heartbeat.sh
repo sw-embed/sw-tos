@@ -17,7 +17,7 @@ mkdir -p "$OUT_DIR"
 output=$($EMU --lgo "$OUT_DIR/heartbeat.lgo" \
     -u 'x\xFF\x00\xFF\x01\xFE\xFF\xFF\xFF\x01\x01\x00\x00' \
     --speed 0 -n 200000 --quiet 2>/dev/null)
-expected='T3 D2'
+expected='T3 D2 W2'
 
 if [ "$output" != "$expected" ]; then
     echo "FAIL: expected '$expected', got '$output'" >&2

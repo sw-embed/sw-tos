@@ -85,9 +85,40 @@ _clock_store_tick:
         sb      r0,0(r2)
         lc      r1,2
         ceq     r0,r1
-        brt     _report
+        brt     _wake_sleepers
         la      r2,_transport_loop
         jmp     (r2)
+
+_wake_sleepers:
+        ; Wake every sleeping entry whose absolute deadline has arrived.
+        la      r2,_monotonic_ticks
+        lw      r0,0(r2)
+        la      r2,_sleep_a_deadline
+        lw      r1,0(r2)
+        clu     r0,r1
+        brt     _wake_check_b
+        lc      r0,1
+        la      r2,_sleep_a_state
+        sb      r0,0(r2)
+        la      r2,_wake_count
+        lbu     r0,0(r2)
+        add     r0,1
+        sb      r0,0(r2)
+
+_wake_check_b:
+        la      r2,_monotonic_ticks
+        lw      r0,0(r2)
+        la      r2,_sleep_b_deadline
+        lw      r1,0(r2)
+        clu     r0,r1
+        brt     _report
+        lc      r0,1
+        la      r2,_sleep_b_state
+        sb      r0,0(r2)
+        la      r2,_wake_count
+        lbu     r0,0(r2)
+        add     r0,1
+        sb      r0,0(r2)
 
 _report:
         lc      r0,84           ; T
@@ -105,6 +136,17 @@ _report:
         la      r2,_putchar
         jal     r1,(r2)
         la      r2,_data_count
+        lbu     r0,0(r2)
+        add     r0,48
+        la      r2,_putchar
+        jal     r1,(r2)
+        lc      r0,32
+        la      r2,_putchar
+        jal     r1,(r2)
+        lc      r0,87           ; W
+        la      r2,_putchar
+        jal     r1,(r2)
+        la      r2,_wake_count
         lbu     r0,0(r2)
         add     r0,48
         la      r2,_putchar
@@ -160,3 +202,13 @@ _frame_count:
         .byte   0
 _data_count:
         .byte   0
+_wake_count:
+        .byte   0
+_sleep_a_state:
+        .byte   5
+_sleep_a_deadline:
+        .word   2
+_sleep_b_state:
+        .byte   5
+_sleep_b_deadline:
+        .word   3

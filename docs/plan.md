@@ -775,7 +775,7 @@ called normally by the demo tasks.
 - [x] Escape framing state machine proven in polling mode
 - [x] 24-bit heartbeat counter with wraparound
 - [x] Monotonic tick counter in kernel
-- [ ] Sleep queue with tick-based wakeup
+- [x] Sleep queue scan with absolute tick-based wakeup
 - [ ] Preemptive scheduling from ISR (if COR24 supports context
   switch from interrupt return)
 - [ ] Cooperative fallback when no heartbeat
@@ -786,7 +786,8 @@ Sleep command works.
 **Status:** `just heartbeat-smoke` separates ordinary UART data, escaped
 `0xFF`, and five-byte heartbeat frames, then verifies natural 24-bit delta
 arithmetic across wraparound. Next: move the proven parser into UART interrupt
-entry and connect monotonic ticks to sleeping-process wakeup.
+entry. The same test scans sleeping entries after the clock update and marks
+deadlines at or before the monotonic tick runnable.
 
 ### Milestone 4 -- Generated Catalog and Autostart
 
