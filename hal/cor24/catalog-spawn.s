@@ -165,14 +165,23 @@ _restore_context:
         pop     r0
         jmp     (r1)
 
-_counter_entry:
-        push    r0              ; retain private state pointer
+; Convert scheduler entry ABI (r0 = state pointer) to a PL/SW argument.
+_plsw_counter_trampoline:
+        push    r0
+        la      r2,_PLSW_COUNTER
+        jal     r1,(r2)
+        add     sp,3
+        bra     _halt
+
+; TASK_STEP(value): PL/SW callback that reports one step and cooperatively
+; yields. Its call frame remains on the process stack across the switch.
+        .globl  _TASK_STEP
+_TASK_STEP:
+        push    fp
+        push    r2
+        push    r1
         mov     fp,sp
-_counter_loop:
-        lw      r2,0(fp)
-        lw      r0,0(r2)
-        add     r0,1
-        sw      r0,0(r2)
+        lw      r0,9(fp)
         push    r0
         la      r2,_current_proc
         lw      r2,0(r2)
@@ -188,8 +197,7 @@ _counter_loop:
         la      r2,_putchar
         jal     r1,(r2)
 
-        lw      r2,0(fp)
-        lw      r0,0(r2)
+        lw      r0,9(fp)
         lc      r1,2
         ceq     r0,r1
         brf     _counter_yield
@@ -203,7 +211,11 @@ _counter_loop:
 _counter_yield:
         la      r2,_yield
         jal     r1,(r2)
-        bra     _counter_loop
+        mov     sp,fp
+        pop     r1
+        pop     r2
+        pop     fp
+        jmp     (r1)
 
 _puts:
         push    r1
@@ -248,7 +260,7 @@ _halt:
 _counter_descriptor:
         .word   _counter_name
         .word   0
-        .word   _counter_entry
+        .word   _plsw_counter_trampoline
         .word   0
         .word   0
         .word   64

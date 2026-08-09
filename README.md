@@ -87,8 +87,9 @@ just catalog-run-smoke
 just catalog-list-smoke
 ```
 
-The scheduler-side catalog spawn proof consumes descriptor stack/state sizes,
-allocates private EBR regions, and launches two contexts sharing one resident
+The scheduler-side catalog spawn proof separately compiles and links a PL/SW
+resident task with the assembly kernel, consumes descriptor stack/state sizes,
+allocates private EBR regions, and launches two contexts sharing that PL/SW
 entry point:
 
 ```
@@ -96,7 +97,9 @@ just catalog-spawn-smoke
 ```
 
 The expected task output is `A1`, `B1`, `A2`, `B2`, demonstrating independent
-zero-initialized state for both instances.
+zero-initialized state for both instances. An assembly trampoline translates
+the scheduler's initial `r0` state pointer into the normal PL/SW stack calling
+convention; the task calls back into the scheduler to yield.
 
 Produces a flat binary image (.lgo) loadable via the COR24 serial boot
 protocol at 921,600 baud.

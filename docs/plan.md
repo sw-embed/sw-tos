@@ -865,12 +865,15 @@ Dispatch is synchronous until catalog spawning is connected to the scheduler.
 shell service without leaking its line ending into the next prompt.
 `just catalog-spawn-smoke` consumes resident descriptor entry, stack, and state
 fields to create two runnable contexts. Both share one counter entry point but
-receive separate zeroed EBR state blocks and produce `A1 B1 A2 B2`. The process
-ABI now has an explicit state pointer. The proof also keeps the kernel stack at
+receive separate zeroed EBR state blocks and produce `A1 B1 A2 B2`. The counter
+is a separately compiled PL/SW library module linked to the assembly scheduler;
+an entry trampoline converts the initial register state pointer into a PL/SW
+argument, and PL/SW calls the exported scheduler step/yield service. The process
+ABI has an explicit state pointer. The proof also keeps the kernel stack at
 `0xFEEC00` separate from the process arena starting at `0xFEE800`; allocating
-below `0xFEE000` would leave the installed EBR window. Next: connect the PL/SW
-shell's catalog lookup to this scheduler spawn path instead of synchronous
-entry dispatch.
+below `0xFEE000` would leave the installed EBR window. The language/kernel ABI
+bridge is now proven. Next: link the interactive PL/SW shell into the scheduler
+image and route `run` to this spawn primitive instead of synchronous dispatch.
 
 ### Milestone 5 -- Process-Local State
 

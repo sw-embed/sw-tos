@@ -3,17 +3,13 @@
 set -euo pipefail
 
 ROOT_DIR="$(cd "$(dirname "$0")/.." && pwd)"
-ASM="$ROOT_DIR/tools/bin/cor24-asm"
 EMU="$ROOT_DIR/tools/bin/cor24-emu"
-SOURCE="$ROOT_DIR/hal/cor24/catalog-spawn.s"
 OUT_DIR="$ROOT_DIR/build/catalog-spawn"
 
-mkdir -p "$OUT_DIR"
-"$ASM" "$SOURCE" -o "$OUT_DIR/catalog-spawn.lgo" \
-    --bin "$OUT_DIR/catalog-spawn.bin" --listing "$OUT_DIR/catalog-spawn.lst"
+"$ROOT_DIR/scripts/catalog-spawn-link.sh"
 
-output=$($EMU --lgo "$OUT_DIR/catalog-spawn.lgo" \
-    --speed 0 -n 200000 --quiet 2>/dev/null)
+output=$($EMU --load-binary "$OUT_DIR/program.bin@0" --entry 0 \
+    --speed 0 -n 300000 --quiet 2>/dev/null | sed '/^Entry point:/d')
 expected=$'SPAWN\nA1\nB1\nA2\nB2'
 
 if [ "$output" != "$expected" ]; then
