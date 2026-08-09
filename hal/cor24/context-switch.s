@@ -457,11 +457,11 @@ _putchar_wait:
 _halt:
         bra     _halt
 
-; PROC_DESC storage. Layout matches include/swtos.msw (36 bytes each).
+; PROC_DESC storage. Layout matches include/swtos.msw (39 bytes each).
 _proc_a:
-        .zero   36
+        .zero   39
 _proc_b:
-        .zero   36
+        .zero   39
 _current_proc:
         .zero   3
 _task_a_count:

@@ -847,7 +847,7 @@ the generated resident catalog and autostart metadata.
 - [x] Shell `run <name>` looks up and dispatches resident programs
 - [ ] Shell dispatch creates a separately scheduled process
 - [x] `ls` lists catalog entries
-- [ ] Per-process state allocation for multiple instances
+- [x] Per-process stack/state allocation for multiple instances
 
 **Demo:** `run hello`, `run counter`, `run ipc-demo` all work from catalog.
 
@@ -862,9 +862,15 @@ the same path when that service is separated. `just catalog-run-smoke` proves
 `run counter` dispatches the matching program and a missing name is rejected.
 Dispatch is synchronous until catalog spawning is connected to the scheduler.
 `just catalog-list-smoke` proves `ls` enumerates all three programs and the
-shell service without leaking its line ending into the next prompt. Next:
-connect catalog dispatch to process creation with descriptor-sized stacks and
-state blocks.
+shell service without leaking its line ending into the next prompt.
+`just catalog-spawn-smoke` consumes resident descriptor entry, stack, and state
+fields to create two runnable contexts. Both share one counter entry point but
+receive separate zeroed EBR state blocks and produce `A1 B1 A2 B2`. The process
+ABI now has an explicit state pointer. The proof also keeps the kernel stack at
+`0xFEEC00` separate from the process arena starting at `0xFEE800`; allocating
+below `0xFEE000` would leave the installed EBR window. Next: connect the PL/SW
+shell's catalog lookup to this scheduler spawn path instead of synchronous
+entry dispatch.
 
 ### Milestone 5 -- Process-Local State
 
@@ -953,6 +959,7 @@ The name in `FILE:` must match the `%INCLUDE` name (without .msw).
 | `just autostart-smoke` | Verify metadata-driven shell service startup |
 | `just catalog-run-smoke` | Verify shell catalog lookup and program dispatch |
 | `just catalog-list-smoke` | Verify shell enumeration of catalog descriptors |
+| `just catalog-spawn-smoke` | Verify descriptor-sized stack/state process creation |
 | `just plsw-compile <[.msw ...] file.plsw>` | Compile any .plsw  |
 | `just plsw-run <[.msw ...] file.plsw>` | Compile and run any .plsw |
 | `just plsw-dump <[.msw ...] file.plsw>` | Compile and dump memory |

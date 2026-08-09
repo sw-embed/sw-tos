@@ -55,6 +55,10 @@ catalog-run-smoke: plsw-system
 catalog-list-smoke: plsw-system
     ./tests/test-catalog-list.sh
 
+# Spawn two scheduled instances with descriptor-sized stacks and state
+catalog-spawn-smoke:
+    ./tests/test-catalog-spawn.sh
+
 # Run the menu interactively. cor24-emu 0.1.0 ignores --terminal for --lgo,
 # so use its raw-binary path, which correctly bridges stdin to the UART.
 plsw-system-interactive: plsw-system
