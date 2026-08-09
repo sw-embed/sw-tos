@@ -70,6 +70,18 @@ compiles into the complete system image:
 just catalog-smoke
 ```
 
+The first embedded executable format is also defined and validated. Its
+27-byte header records `C24IMG` magic, version, text/data/BSS word counts,
+entry offset, relocation count, and a payload checksum. Build the deterministic
+loader fixture and exercise corruption rejection with:
+
+```
+just cor24-image-smoke
+```
+
+This currently validates the provider artifact; runtime loading is the next
+Milestone 6 step.
+
 Boot initializes that table and scans its flags rather than naming the shell
 entry directly. To verify metadata-driven `IMAGE_AUTOSTART` dispatch:
 

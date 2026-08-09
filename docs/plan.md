@@ -498,6 +498,28 @@ catalog interface is retained. The image descriptor includes `base`,
 `text_words`, `data_words`, `bss_words`, and `entry_offset`. The loader
 copies text/data, clears BSS, applies relocations, and sets PC.
 
+The implemented version 1 on-storage header is nine COR24 words (27 bytes).
+Every word is encoded most-significant byte first so host tooling is independent
+of native integer layout:
+
+| Word | Field | Meaning |
+|------|-------|---------|
+| 0-1 | magic | ASCII `C24IMG` |
+| 2 | version | Format version, currently `1` |
+| 3 | text words | Payload text length |
+| 4 | data words | Payload initialized-data length |
+| 5 | BSS words | Zero-filled words not stored in payload |
+| 6 | entry offset | Word offset into text |
+| 7 | relocation count | Must be zero in version 1 |
+| 8 | checksum | Low 24 bits of payload CRC-32 |
+
+Text words followed by data words form the packed three-byte-word payload.
+`scripts/cor24-image.py` validates 24-bit ranges, exact payload length, entry
+bounds, format version, relocation policy, and checksum. The first deterministic
+manifest is `catalog/images/loader-smoke.toml`; `just cor24-image-smoke` builds
+it and proves rejection of corrupt magic, payload, and length. This establishes
+the provider-facing artifact but does not yet load or execute it.
+
 Two image providers coexist:
 
 ```
@@ -930,11 +952,16 @@ for the first Milestone 6 image blob.
 - [x] Process-global state accessed only via passed state pointer
 - [x] `ps` shows all processes with endpoints and states
 
-### Milestone 6 -- Embedded Executable Blobs (Later)
+### Milestone 6 -- Embedded Executable Blobs
 
-- [ ] COR24 executable format (magic, version, text/data/bss sizes, entry)
+- [x] COR24 executable format (magic, version, text/data/bss sizes, entry)
 - [ ] Loader: allocate RAM, copy text/data, clear BSS, apply relocations
 - [ ] Same `run` command works for both resident and embedded programs
+
+**Status:** The versioned header, deterministic builder, strict validator, and
+corruption coverage are complete. Version 1 deliberately requires zero
+relocations. Next: add an in-memory loader proof that copies text/data to an
+allocated region, clears BSS, and returns the relocated entry address.
 
 ### Milestone 7 -- SPI Image Provider (Future)
 
@@ -1008,6 +1035,7 @@ The name in `FILE:` must match the `%INCLUDE` name (without .msw).
 | `just heartbeat-smoke` | Verify UART framing and 24-bit clock wraparound |
 | `just clock-smoke` | Verify the heartbeat-driven PL/SW Clock menu app |
 | `just catalog-smoke` | Validate, generate, and compile the resident catalog |
+| `just cor24-image-smoke` | Build and corruption-test a versioned COR24 image |
 | `just autostart-smoke` | Verify metadata-driven shell service startup |
 | `just catalog-run-smoke` | Verify shell catalog lookup and program dispatch |
 | `just catalog-list-smoke` | Verify shell enumeration of catalog descriptors |

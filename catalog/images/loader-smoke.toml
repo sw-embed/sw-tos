@@ -1,0 +1,8 @@
+name = "loader-smoke"
+version = 1
+text_words = 2
+data_words = 1
+bss_words = 2
+entry_offset = 0
+relocation_count = 0
+payload_hex = "000000 000000 535754"

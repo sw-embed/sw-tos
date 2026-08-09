@@ -39,6 +39,10 @@ catalog-generate:
 catalog-smoke: plsw-system
     python3 scripts/generate-catalog.py --check
 
+# Build and validate the first versioned COR24 embedded executable blob
+cor24-image-smoke:
+    ./tests/test-cor24-image.sh
+
 # Compile and run PL/SW system image (menu + apps)
 plsw-system: catalog-generate
     {{PIPELINE}} include/swtos.msw include/menu.msw include/hello_app.msw include/counter_app.msw include/clock_app.msw include/catalog_generated.msw include/catalog.msw system.plsw

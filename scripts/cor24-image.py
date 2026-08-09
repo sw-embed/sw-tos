@@ -1,0 +1,157 @@
+#!/usr/bin/env python3
+"""Build and validate SWTOS COR24 executable image blobs."""
+
+import argparse
+import binascii
+import sys
+import tomllib
+from pathlib import Path
+
+
+MAGIC = b"C24IMG"
+VERSION = 1
+WORD_BYTES = 3
+HEADER_WORDS = 9
+HEADER_BYTES = HEADER_WORDS * WORD_BYTES
+MANIFEST_KEYS = {
+    "name",
+    "version",
+    "text_words",
+    "data_words",
+    "bss_words",
+    "entry_offset",
+    "relocation_count",
+    "payload_hex",
+}
+
+
+def word(value: int) -> bytes:
+    if not isinstance(value, int) or isinstance(value, bool) or not 0 <= value <= 0xFFFFFF:
+        raise ValueError("header word is outside unsigned 24-bit range")
+    return value.to_bytes(WORD_BYTES, "big")
+
+
+def read_word(data: bytes, offset: int) -> int:
+    return int.from_bytes(data[offset : offset + WORD_BYTES], "big")
+
+
+def checksum(payload: bytes) -> int:
+    return binascii.crc32(payload) & 0xFFFFFF
+
+
+def load_manifest(path: Path) -> dict:
+    with path.open("rb") as stream:
+        manifest = tomllib.load(stream)
+    unknown = set(manifest) - MANIFEST_KEYS
+    missing = MANIFEST_KEYS - set(manifest)
+    if unknown:
+        raise ValueError(f"unknown manifest key: {sorted(unknown)[0]}")
+    if missing:
+        raise ValueError(f"missing manifest key: {sorted(missing)[0]}")
+    if not isinstance(manifest["name"], str) or not manifest["name"]:
+        raise ValueError("name must be a nonempty string")
+    for key in MANIFEST_KEYS - {"name", "payload_hex"}:
+        word(manifest[key])
+    if manifest["version"] != VERSION:
+        raise ValueError(f"unsupported image version: {manifest['version']}")
+    if manifest["relocation_count"] != 0:
+        raise ValueError("version 1 does not yet support relocations")
+    if not isinstance(manifest["payload_hex"], str):
+        raise ValueError("payload_hex must be a string")
+    try:
+        payload = bytes.fromhex(manifest["payload_hex"])
+    except ValueError as error:
+        raise ValueError("payload_hex is invalid") from error
+    expected_bytes = (manifest["text_words"] + manifest["data_words"]) * WORD_BYTES
+    if len(payload) != expected_bytes:
+        raise ValueError(f"payload is {len(payload)} bytes; expected {expected_bytes}")
+    if manifest["text_words"] == 0:
+        raise ValueError("text_words must be positive")
+    if manifest["entry_offset"] >= manifest["text_words"]:
+        raise ValueError("entry_offset must address a text word")
+    return manifest | {"payload": payload}
+
+
+def build_image(manifest: dict) -> bytes:
+    payload = manifest["payload"]
+    fields = (
+        manifest["version"],
+        manifest["text_words"],
+        manifest["data_words"],
+        manifest["bss_words"],
+        manifest["entry_offset"],
+        manifest["relocation_count"],
+        checksum(payload),
+    )
+    return MAGIC + b"".join(word(value) for value in fields) + payload
+
+
+def validate_image(data: bytes) -> dict:
+    if len(data) < HEADER_BYTES:
+        raise ValueError("image is shorter than the 27-byte header")
+    if data[: len(MAGIC)] != MAGIC:
+        raise ValueError("invalid COR24 image magic")
+    fields = [read_word(data, len(MAGIC) + index * WORD_BYTES) for index in range(7)]
+    version, text_words, data_words, bss_words, entry_offset, relocations, expected_crc = fields
+    if version != VERSION:
+        raise ValueError(f"unsupported image version: {version}")
+    if text_words == 0 or entry_offset >= text_words:
+        raise ValueError("entry offset is outside text")
+    if relocations != 0:
+        raise ValueError("version 1 does not yet support relocations")
+    payload = data[HEADER_BYTES:]
+    expected_bytes = (text_words + data_words) * WORD_BYTES
+    if len(payload) != expected_bytes:
+        raise ValueError(f"payload is {len(payload)} bytes; expected {expected_bytes}")
+    if checksum(payload) != expected_crc:
+        raise ValueError("payload checksum mismatch")
+    return {
+        "version": version,
+        "text_words": text_words,
+        "data_words": data_words,
+        "bss_words": bss_words,
+        "entry_offset": entry_offset,
+        "relocation_count": relocations,
+        "checksum": expected_crc,
+    }
+
+
+def main() -> int:
+    parser = argparse.ArgumentParser()
+    subparsers = parser.add_subparsers(dest="command", required=True)
+    build_parser = subparsers.add_parser("build")
+    build_parser.add_argument("manifest", type=Path)
+    build_parser.add_argument("output", type=Path)
+    build_parser.add_argument("--check", action="store_true")
+    validate_parser = subparsers.add_parser("validate")
+    validate_parser.add_argument("image", type=Path)
+    args = parser.parse_args()
+
+    try:
+        if args.command == "build":
+            manifest = load_manifest(args.manifest)
+            expected = build_image(manifest)
+            validate_image(expected)
+            if args.check:
+                if args.output.read_bytes() != expected:
+                    raise ValueError("generated image is missing or stale")
+                print(f"PASS: {manifest['name']} image is current and valid")
+            else:
+                args.output.parent.mkdir(parents=True, exist_ok=True)
+                args.output.write_bytes(expected)
+                print(f"Built {manifest['name']}: {len(expected)} bytes -> {args.output}")
+        else:
+            metadata = validate_image(args.image.read_bytes())
+            print(
+                "PASS: COR24 image valid "
+                f"(text={metadata['text_words']} data={metadata['data_words']} "
+                f"bss={metadata['bss_words']} entry={metadata['entry_offset']})"
+            )
+    except (OSError, tomllib.TOMLDecodeError, ValueError) as error:
+        print(f"COR24 image error: {error}", file=sys.stderr)
+        return 1
+    return 0
+
+
+if __name__ == "__main__":
+    raise SystemExit(main())
