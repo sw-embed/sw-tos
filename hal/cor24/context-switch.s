@@ -151,7 +151,7 @@ _task_a:
         push    r0              ; message (second argument)
         lc      r0,2
         push    r0              ; destination (first argument)
-        la      r2,_send
+        la      r2,_sendrec
         jal     r1,(r2)
         add     sp,6
 
@@ -198,6 +198,16 @@ _task_b:
         lc      r0,10
         la      r2,_putchar
         jal     r1,(r2)
+
+        ; Reply with the copied message. SENDREC cannot complete until this
+        ; synchronous acknowledgement is received by task A.
+        la      r0,_task_b_message
+        push    r0
+        lc      r0,1
+        push    r0
+        la      r2,_send
+        jal     r1,(r2)
+        add     sp,6
 
         la      r2,_task_b_count
         lbu     r0,0(r2)
@@ -356,6 +366,36 @@ _receive_wake_sender:
         la      r2,_current_proc
         lw      r2,0(r2)
         sw      r0,24(r2)
+
+        lc      r0,0
+        mov     sp,fp
+        pop     r1
+        pop     r2
+        pop     fp
+        jmp     (r1)
+
+; SENDREC(destination, message): send request, then receive peer reply.
+_sendrec:
+        push    fp
+        push    r2
+        push    r1
+        mov     fp,sp
+
+        lw      r0,12(fp)
+        push    r0
+        lw      r0,9(fp)
+        push    r0
+        la      r2,_send
+        jal     r1,(r2)
+        add     sp,6
+
+        lw      r0,12(fp)
+        push    r0
+        lw      r0,9(fp)
+        push    r0
+        la      r2,_receive
+        jal     r1,(r2)
+        add     sp,6
 
         lc      r0,0
         mov     sp,fp

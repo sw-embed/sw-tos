@@ -753,7 +753,7 @@ tasks.
 ### Milestone 2 -- MINIX-Style IPC
 
 - [x] Callable `send()` and `receive()` kernel entries
-- [ ] `sendrec()` combined kernel entry
+- [x] `sendrec()` combined kernel entry with reply delivery
 - [x] Fixed-size seven-word message struct and kernel copy
 - [x] Blocking send/receive semantics with peer wakeup
 - [x] TTY service task receiving `TTY_WRITE` messages
@@ -763,9 +763,11 @@ tasks.
 **Status:** `just ipc-smoke` starts the TTY task first so it enters
 `PROC_RECV_BLOCK`, then runs a client that enters `PROC_SEND_BLOCK` with a
 seven-word `TTY_WRITE` message. The receiver copies all message words into a
-private buffer, wakes the sender, and emits the payload. Next: expose reusable
-`sendrec` and exercise reply delivery. `send` and `receive` now use the PL/SW
-stack calling convention and are called normally by the demo tasks.
+private buffer, wakes the sender, emits the payload, and synchronously replies.
+`send`, `receive`, and `sendrec` use the PL/SW stack calling convention and are
+called normally by the demo tasks.
+
+**Status:** Complete. Next: Milestone 3, UART heartbeat clock and sleep queue.
 
 ### Milestone 3 -- UART Heartbeat Clock
 
