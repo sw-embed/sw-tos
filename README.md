@@ -145,8 +145,10 @@ just plsw-system-compat-interactive
 ```
 
 Scheduled command coverage is available with `just scheduled-catalog-smoke`.
-The scheduled descriptor definitions currently mirror the TOML catalog; their
-generation from the manifest is the next consolidation step.
+Catalog generation emits both `include/catalog_generated.msw` and
+`hal/cor24/catalog_generated.s`; the direct-call and scheduled images therefore
+share names, kinds, entry metadata, stack/state sizes, and flags from one TOML
+manifest.
 
 To test the Clock app without an interactive terminal:
 

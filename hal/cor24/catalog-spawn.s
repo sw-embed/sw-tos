@@ -12,7 +12,7 @@ _start:
         la      r2,_puts
         jal     r1,(r2)
 
-        la      r0,_launcher_descriptor
+        la      r0,_scheduled_shell_descriptor
         la      r2,_proc_a
         la      r1,_spawn_process
         sw      r2,0(r1)
@@ -22,11 +22,11 @@ _start:
         lc      r0,1
         sw      r0,18(r2)
         lw      r2,36(r2)
-        la      r0,_counter_descriptor
+        la      r0,_scheduled_counter_descriptor
         sw      r0,3(r2)        ; process-local descriptor selection
-        la      r0,_hello_descriptor
+        la      r0,_scheduled_hello_descriptor
         sw      r0,6(r2)
-        la      r0,_clock_descriptor
+        la      r0,_scheduled_clock_descriptor
         sw      r0,9(r2)
 
         la      r0,_proc_a
@@ -401,52 +401,6 @@ _putchar_wait:
 _halt:
         bra     _halt
 
-; PROGRAM_DESC: name, kind, entry, words, entry_off, stack_words,
-; state_words, flags.
-_launcher_descriptor:
-        .word   _launcher_name
-        .word   0
-        .word   _plsw_launcher_trampoline
-        .word   0
-        .word   0
-        .word   64
-        .word   4
-        .word   1
-_launcher_name:
-        .byte   115,104,101,108,108,0
-_counter_descriptor:
-        .word   _counter_name
-        .word   0
-        .word   _plsw_counter_trampoline
-        .word   0
-        .word   0
-        .word   64
-        .word   2
-        .word   1
-_counter_name:
-        .byte   99,111,117,110,116,101,114,0
-_hello_descriptor:
-        .word   _hello_name
-        .word   0
-        .word   _plsw_hello_trampoline
-        .word   0
-        .word   0
-        .word   64
-        .word   1
-        .word   1
-_hello_name:
-        .byte   104,101,108,108,111,0
-_clock_descriptor:
-        .word   _clock_name
-        .word   0
-        .word   _plsw_clock_trampoline
-        .word   0
-        .word   0
-        .word   96
-        .word   1
-        .word   3
-_clock_name:
-        .byte   99,108,111,99,107,0
 _proc_a:
         .zero   39
 _proc_b:
@@ -462,7 +416,7 @@ _zero_remaining:
 _allocated_base:
         .zero   3
 _ebr_next:
-        .word   0xFEE800
+        .word   0xFEEB00
 _second_spawned:
         .byte   0
 _banner:

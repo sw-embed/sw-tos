@@ -1,6 +1,7 @@
 [[program]]
 name = "hello"
 entry = "HELLO"
+scheduled_entry = "_plsw_hello_trampoline"
 stack_words = 128
 state_words = 0
 flags = ["resident"]
@@ -8,6 +9,7 @@ flags = ["resident"]
 [[program]]
 name = "counter"
 entry = "COUNTER"
+scheduled_entry = "_plsw_counter_trampoline"
 stack_words = 192
 state_words = 1
 flags = ["resident"]
@@ -15,6 +17,7 @@ flags = ["resident"]
 [[program]]
 name = "clock"
 entry = "CLOCK"
+scheduled_entry = "_plsw_clock_trampoline"
 stack_words = 192
 state_words = 4
 flags = ["resident", "single_instance"]
@@ -22,6 +25,7 @@ flags = ["resident", "single_instance"]
 [[service]]
 name = "shell"
 entry = "MENU"
+scheduled_entry = "_plsw_launcher_trampoline"
 stack_words = 256
-state_words = 0
+state_words = 4
 flags = ["resident", "single_instance", "privileged", "autostart"]

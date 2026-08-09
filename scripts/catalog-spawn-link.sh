@@ -15,6 +15,7 @@ PLSW="$ROOT_DIR/tools/plsw.lgo"
 MODULES=(kernel app)
 
 mkdir -p "$OUT_DIR"
+python3 "$ROOT_DIR/scripts/generate-catalog.py"
 scratch=$(mktemp -d /tmp/swtos-catalog-spawn-XXXXXX)
 trap 'rm -rf "$scratch"' EXIT
 {
@@ -34,6 +35,7 @@ echo "$compiler_output" | sed -n \
     '/--- generated assembly ---/,/--- end assembly ---/{/--- generated assembly ---/d;/--- end assembly ---/d;p;}' \
     > "$OUT_DIR/app.raw.s"
 cp "$ROOT_DIR/hal/cor24/catalog-spawn.s" "$OUT_DIR/kernel.raw.s"
+sed -n 'p' "$ROOT_DIR/hal/cor24/catalog_generated.s" >> "$OUT_DIR/kernel.raw.s"
 
 sizes=()
 for module in "${MODULES[@]}"; do

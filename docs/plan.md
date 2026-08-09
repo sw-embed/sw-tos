@@ -444,7 +444,10 @@ symbols, sizes, kinds, flags, and duplicates before emitting
 `include/catalog_generated.msw`. PL/SW cannot take `ADDR()` of a procedure, so
 the generated initializer uses PL/SW for descriptor data and a small inline
 assembly block for linked entry addresses. `just catalog-smoke` checks that the
-generated file is current and compiles it into the complete system image.
+generated files are current and compiles the PL/SW table into the compatibility
+image. The same generator emits `hal/cor24/catalog_generated.s`, whose
+descriptors and name storage are appended to the scheduler kernel before
+assembly and linking.
 At boot, `CATALOG_AUTOSTART` scans the generated descriptor flags and invokes
 each selected entry through `CATALOG_CALL_ENTRY`; `system.plsw` contains no
 direct shell call. `CATALOG_FIND_PROGRAM` compares a requested name against
@@ -896,9 +899,13 @@ a real PTY run proves Ctrl-] returns from Clock and `0` halts.
 retained as `just plsw-system-compat-interactive`.
 `just scheduled-catalog-smoke` proves the primary shell handles `ls` and
 `run counter` through its private descriptor pointers and reusable process
-slot. The command behavior is migrated, but the scheduler descriptor records
-and printed names still mirror `catalog/catalog.toml` manually. Next: generate
-the scheduler catalog data from the TOML manifest and remove that duplication.
+slot. Scheduler descriptor records and name storage are now generated from
+`catalog/catalog.toml`; the kernel no longer contains hand-maintained Hello,
+Counter, Clock, or shell descriptors. The manifest's larger stack/state sizes
+also pass within the installed EBR window using a process-arena high address of
+`0xFEEB00`. Next: make scheduled `ls` walk the generated assembly table instead
+of printing command literals, then generalize scheduled name lookup over that
+same table.
 
 ### Milestone 5 -- Process-Local State
 
