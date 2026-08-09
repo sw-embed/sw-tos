@@ -18,6 +18,17 @@ CTRL_RIGHT_BRACKET = 0x1D
 APP_ESCAPE = 0x1B
 
 
+def filter_menu_input(byte: int, menu_prompt: bool, discard_newline: bool):
+    """Drop the optional line ending typed after a numeric menu choice."""
+    if discard_newline and byte in (ord("\r"), ord("\n")):
+        return None, True
+    if discard_newline:
+        discard_newline = False
+    if menu_prompt and byte in b"0123":
+        discard_newline = True
+    return byte, discard_newline
+
+
 def main() -> int:
     command = [
         EMU,
@@ -52,6 +63,7 @@ def main() -> int:
     clock_active = False
     clock_started = 0.0
     menu_prompt = False
+    discard_menu_newline = False
     output_tail = b""
     next_heartbeat = time.monotonic()
     try:
@@ -71,6 +83,11 @@ def main() -> int:
             if stdin_fd in readable:
                 data = os.read(stdin_fd, 64)
                 for byte in data:
+                    byte, discard_menu_newline = filter_menu_input(
+                        byte, menu_prompt, discard_menu_newline
+                    )
+                    if byte is None:
+                        continue
                     if clock_active and byte == CTRL_RIGHT_BRACKET:
                         os.write(child_master, bytes([APP_ESCAPE]))
                         clock_active = False

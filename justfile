@@ -70,6 +70,7 @@ heartbeat-smoke:
 
 # Verify menu Clock app heartbeat logging and return to menu
 clock-smoke: plsw-system
+    python3 tests/test-terminal-input.py
     ./tests/test-clock.sh
 
 # Compile and dump PL/SW smoke test
