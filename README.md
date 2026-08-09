@@ -100,8 +100,9 @@ The expected task output is `A1`, `B1`, `A2`, `B2`, demonstrating independent
 zero-initialized state for both instances. An assembly trampoline translates
 the scheduler's initial `r0` state pointer into the normal PL/SW stack calling
 convention. Boot starts only task A; while its PL/SW frames are live, it calls
-the exported spawn service to create task B, then both tasks call back into the
-scheduler to yield.
+the exported `TASK_SPAWN(descriptor)` service with a descriptor pointer held in
+private state to create task B, then both tasks call back into the scheduler to
+yield.
 
 Produces a flat binary image (.lgo) loadable via the COR24 serial boot
 protocol at 921,600 baud.

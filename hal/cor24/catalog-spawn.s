@@ -21,6 +21,9 @@ _start:
         la      r2,_proc_a
         lc      r0,1
         sw      r0,18(r2)
+        lw      r2,36(r2)
+        la      r0,_counter_descriptor
+        sw      r0,3(r2)        ; process-local descriptor selection
 
         la      r0,_proc_a
         la      r2,_current_proc
@@ -73,10 +76,10 @@ _spawn_resident:
         pop     r1
         jmp     (r1)
 
-; TASK_SPAWN_SECOND(): callable from PL/SW while task A's frames remain live.
-; The first caller materializes process B; later calls are harmless.
-        .globl  _TASK_SPAWN_SECOND
-_TASK_SPAWN_SECOND:
+; TASK_SPAWN(descriptor): callable from PL/SW while task A's frames remain
+; live. The first caller materializes process B; later calls are harmless.
+        .globl  _TASK_SPAWN
+_TASK_SPAWN:
         push    fp
         push    r2
         push    r1
@@ -90,7 +93,7 @@ _TASK_SPAWN_SECOND:
         la      r2,_proc_b
         la      r1,_spawn_process
         sw      r2,0(r1)
-        la      r0,_counter_descriptor
+        lw      r0,9(fp)        ; selected PROGRAM_DESC pointer
         la      r2,_spawn_resident
         jal     r1,(r2)
         la      r2,_proc_b
@@ -284,7 +287,7 @@ _counter_descriptor:
         .word   0
         .word   0
         .word   64
-        .word   1
+        .word   2
         .word   1
 _counter_name:
         .byte   99,111,117,110,116,101,114,0
