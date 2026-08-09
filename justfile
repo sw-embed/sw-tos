@@ -68,12 +68,14 @@ scheduled-shell-build:
     ./scripts/catalog-spawn-link.sh tests/catalog-shell.plsw scheduled-shell
 
 # Interactively exercise scheduled Hello and Counter choices
-scheduled-shell-interactive: scheduled-shell-build
+scheduled-shell-interactive: plsw-system-interactive
+
+# Run the scheduler-integrated menu with heartbeat-aware UART input.
+plsw-system-interactive: scheduled-shell-build
     ./scripts/swtos-terminal.py --image build/scheduled-shell/program.bin
 
-# Run the menu interactively. cor24-emu 0.1.0 ignores --terminal for --lgo,
-# so use its raw-binary path, which correctly bridges stdin to the UART.
-plsw-system-interactive: plsw-system
+# Run the former direct-call image for compatibility and catalog command work.
+plsw-system-compat-interactive: plsw-system
     ./scripts/swtos-terminal.py
 
 # Backward-compatible alias.

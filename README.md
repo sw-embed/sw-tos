@@ -128,14 +128,20 @@ To compile and run the SWTOS menu interactively in the emulator:
 just plsw-system-interactive
 ```
 
-`just plsw-system-run` is retained as an alias. The PL/SW pipeline emits both
-`.lgo` and raw `.bin` images. Interactive execution uses the raw image because
-`cor24-emu` 0.1.0 does not honor `--terminal` when loading an `.lgo` image;
-its raw-binary execution path correctly connects terminal input to the UART.
-The terminal wrapper supplies timestamped UART heartbeats while the Clock app
-is active. Choose `3` to log uptime as `mm:ss` once per second, and press
-Ctrl-] to return to the menu. The wrapper translates that key for the app
-because Ctrl-] is reserved by the emulator terminal itself.
+This is now the scheduler-integrated image: Hello, Counter, and Clock run as
+descriptor-backed processes with private stacks/state and return to the
+persistent menu through `TASK_EXIT`. `just plsw-system-run` remains an alias.
+The terminal wrapper supplies timestamped UART heartbeats while Clock is
+active. Choose `3` to log uptime as `mm:ss` once per second, and press Ctrl-]
+to return to the menu. The wrapper translates that key because Ctrl-] is
+reserved by the emulator terminal itself.
+
+The former direct-call image remains available while its catalog `run` and
+`ls` commands are migrated into the scheduled shell:
+
+```
+just plsw-system-compat-interactive
+```
 
 To test the Clock app without an interactive terminal:
 

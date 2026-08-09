@@ -846,7 +846,7 @@ the generated resident catalog and autostart metadata.
 - [x] `AUTOSTART` flag launches the shell service at boot
 - [x] Shell `run <name>` looks up and dispatches resident programs
 - [x] Scheduled shell dispatch creates a separate process
-- [ ] Primary interactive menu uses the scheduler-integrated image
+- [x] Primary interactive menu uses the scheduler-integrated image
 - [x] `ls` lists catalog entries
 - [x] Per-process stack/state allocation for multiple instances
 
@@ -889,9 +889,12 @@ saved context. The scripted `1`, key, `2`, `3`, heartbeat frames, Escape, `0`
 sequence proves all app paths and slot reuse. The kernel exports the PL/SW
 division helper required for Clock conversion.
 `just scheduled-shell-interactive` uses the generalized heartbeat frontend;
-a real PTY run proves Ctrl-] returns from Clock and `0` halts. Next: make this
-scheduler-integrated menu the primary interactive image while retaining an
-explicit compatibility target for the former direct-call image.
+a real PTY run proves Ctrl-] returns from Clock and `0` halts.
+`just plsw-system-interactive` now builds and runs this scheduler image, and
+`plsw-system-run` remains its alias. The former direct-call catalog shell is
+retained as `just plsw-system-compat-interactive`. Next: move its generated
+catalog `run <name>` and `ls` command paths into the primary scheduled shell,
+then retire the compatibility behavior.
 
 ### Milestone 5 -- Process-Local State
 
@@ -968,8 +971,9 @@ The name in `FILE:` must match the `%INCLUDE` name (without .msw).
 | `just plsw-smoke`   | Compile smoke-test.plsw with .msw includes |
 | `just plsw-smoke-run` | Compile and run smoke-test.plsw         |
 | `just plsw-system`  | Compile the complete menu system to `.lgo` and `.bin` |
-| `just plsw-system-interactive` | Compile and run the menu with interactive UART input |
+| `just plsw-system-interactive` | Build and run the scheduler-integrated menu |
 | `just plsw-system-run` | Alias for `plsw-system-interactive` |
+| `just plsw-system-compat-interactive` | Run the former direct-call catalog shell |
 | `just plsw-link-smoke` | Compile, FIXUP-link, and run separate PL/SW modules |
 | `just context-switch-smoke` | Verify two-task cooperative context switching |
 | `just cooperative-fallback-smoke` | Verify scheduling and IPC without heartbeat synchronization |
