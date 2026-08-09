@@ -771,7 +771,7 @@ called normally by the demo tasks.
 
 ### Milestone 3 -- UART Heartbeat Clock
 
-- [ ] Escape framing in UART ISR
+- [x] Escape framing in UART ISR
 - [x] Escape framing state machine proven in polling mode
 - [x] 24-bit heartbeat counter with wraparound
 - [x] Monotonic tick counter in kernel
@@ -785,9 +785,12 @@ Sleep command works.
 
 **Status:** `just heartbeat-smoke` separates ordinary UART data, escaped
 `0xFF`, and five-byte heartbeat frames, then verifies natural 24-bit delta
-arithmetic across wraparound. Next: move the proven parser into UART interrupt
-entry. The same test scans sleeping entries after the clock update and marks
-deadlines at or before the monotonic tick runnable.
+arithmetic across wraparound. The parser runs one byte per UART interrupt,
+preserves registers and the condition flag, and returns through `ir`; a
+foreground counter proves interrupted execution resumes. The same test scans
+sleeping entries after the clock update and marks deadlines at or before the
+monotonic tick runnable. Next: host-side periodic heartbeat generation and
+interrupt-driven rescheduling.
 
 ### Milestone 4 -- Generated Catalog and Autostart
 

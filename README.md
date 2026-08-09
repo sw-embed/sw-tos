@@ -120,6 +120,8 @@ The test distinguishes ordinary bytes from escaped `0xFF` data and heartbeat
 control frames, then verifies a three-tick delta across the 24-bit wrap from
 `0xFFFFFE` to `0x000001`. It also scans two sleeping entries with deadlines
 two and three and verifies that both become runnable at monotonic tick three.
+UART bytes are parsed one per interrupt, and a foreground-work sentinel proves
+that `jmp (ir)` resumes interrupted execution.
 
 ## License
 
