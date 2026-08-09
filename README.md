@@ -106,7 +106,8 @@ just ipc-smoke
 The TTY task starts first and blocks in `receive`. The client fills a fixed
 seven-word `TTY_WRITE` message, blocks in `send`, and wakes the TTY task. The
 TTY task copies the message to a private buffer, acknowledges the sender, and
-produces the alternating output.
+produces the alternating output. The task code calls reusable `send` and
+`receive` kernel entries using the PL/SW stack calling convention.
 
 ## License
 

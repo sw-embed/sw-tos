@@ -147,15 +147,13 @@ _task_a:
         la      r2,_ipc_message
         sw      r0,6(r2)        ; MSG_FIELD1 = counter payload
 
-        ; SEND blocks A until B copies and acknowledges the message.
-        lc      r0,4            ; PROC_SEND_BLOCK
-        la      r2,_proc_a
-        sw      r0,24(r2)
         la      r0,_ipc_message
-        sw      r0,33(r2)       ; PD_MSGPTR
-        lc      r0,1            ; wake blocked receiver
-        la      r2,_proc_b
-        sw      r0,24(r2)
+        push    r0              ; message (second argument)
+        lc      r0,2
+        push    r0              ; destination (first argument)
+        la      r2,_send
+        jal     r1,(r2)
+        add     sp,6
 
         la      r0,0x654321
         push    r0
@@ -180,43 +178,13 @@ _task_a_fp_ok:
         bra     _task_a
 
 _task_b:
-_task_b_receive:
-        ; RECEIVE blocks until endpoint A is waiting in SEND_BLOCK.
-        la      r2,_proc_a
-        lbu     r0,24(r2)
-        lc      r1,4
-        ceq     r0,r1
-        brt     _task_b_message_ready
-        lc      r0,3            ; PROC_RECV_BLOCK
-        la      r2,_proc_b
-        sw      r0,24(r2)
-        la      r2,_yield
-        jal     r1,(r2)
-        bra     _task_b_receive
-
-_task_b_message_ready:
-        ; Kernel copy: sender and receiver do not share the receive buffer.
-        la      r1,_ipc_message
-        la      r2,_task_b_message
-        lw      r0,0(r1)
-        sw      r0,0(r2)
-        lw      r0,3(r1)
-        sw      r0,3(r2)
-        lw      r0,6(r1)
-        sw      r0,6(r2)
-        lw      r0,9(r1)
-        sw      r0,9(r2)
-        lw      r0,12(r1)
-        sw      r0,12(r2)
-        lw      r0,15(r1)
-        sw      r0,15(r2)
-        lw      r0,18(r1)
-        sw      r0,18(r2)
+        la      r0,_task_b_message
+        push    r0              ; message (second argument)
         lc      r0,1
-        la      r2,_proc_a
-        sw      r0,24(r2)       ; acknowledge and wake sender
-        la      r2,_proc_b
-        sw      r0,24(r2)
+        push    r0              ; source (first argument)
+        la      r2,_receive
+        jal     r1,(r2)
+        add     sp,6
 
         ; TTY service consumes the private copy.
         lc      r0,65           ; A
@@ -252,7 +220,10 @@ _task_b_message_ready:
         lbu     r0,0(r2)
         lc      r2,3
         ceq     r0,r2
-        brt     _halt
+        brf     _task_b_continue
+        la      r2,_halt
+        jmp     (r2)
+_task_b_continue:
         la      r0,0x765432
         push    r0
         mov     fp,sp
@@ -261,14 +232,137 @@ _task_b_message_ready:
         jal     r1,(r2)
         la      r2,0x234567
         ceq     r0,r2
-        brf     _context_failure
+        brt     _task_b_r0_ok
+        la      r2,_context_failure
+        jmp     (r2)
+_task_b_r0_ok:
         lw      r0,0(fp)
         la      r1,0x765432
         ceq     r0,r1
-        brf     _context_failure
+        brt     _task_b_fp_ok
+        la      r2,_context_failure
+        jmp     (r2)
+_task_b_fp_ok:
         pop     r2
         la      r2,_task_b
         jmp     (r2)
+
+; SEND(destination, message): synchronous two-endpoint kernel entry.
+_send:
+        push    fp
+        push    r2
+        push    r1
+        mov     fp,sp
+
+        ; Fill source and retain the pending message in the sender descriptor.
+        la      r2,_current_proc
+        lw      r2,0(r2)
+        lbu     r0,18(r2)       ; sender endpoint
+        lw      r1,12(fp)       ; message pointer
+        sw      r0,0(r1)
+        sw      r1,33(r2)       ; PD_MSGPTR
+        lw      r0,9(fp)        ; destination endpoint
+        sw      r0,21(r2)       ; PD_SENDER used as waiting peer
+        lc      r0,4
+        sw      r0,24(r2)       ; PROC_SEND_BLOCK
+
+        ; Wake the destination if it is blocked in RECEIVE.
+        lw      r0,9(fp)
+        lc      r1,1
+        ceq     r0,r1
+        brt     _send_dest_a
+        la      r2,_proc_b
+        bra     _send_wake
+_send_dest_a:
+        la      r2,_proc_a
+_send_wake:
+        lbu     r0,24(r2)
+        lc      r1,3
+        ceq     r0,r1
+        brf     _send_yield
+        lc      r0,1
+        sw      r0,24(r2)
+_send_yield:
+        la      r2,_yield
+        jal     r1,(r2)
+
+        lc      r0,0
+        mov     sp,fp
+        pop     r1
+        pop     r2
+        pop     fp
+        jmp     (r1)
+
+; RECEIVE(source, message): wait for a matching blocked sender and copy.
+_receive:
+        push    fp
+        push    r2
+        push    r1
+        mov     fp,sp
+
+_receive_wait:
+        lw      r0,9(fp)
+        lc      r1,1
+        ceq     r0,r1
+        brt     _receive_from_a
+        la      r2,_proc_b
+        bra     _receive_check
+_receive_from_a:
+        la      r2,_proc_a
+_receive_check:
+        lbu     r0,24(r2)
+        lc      r1,4
+        ceq     r0,r1
+        brt     _receive_copy
+
+        la      r2,_current_proc
+        lw      r2,0(r2)
+        lc      r0,3
+        sw      r0,24(r2)       ; PROC_RECV_BLOCK
+        la      r2,_yield
+        jal     r1,(r2)
+        bra     _receive_wait
+
+_receive_copy:
+        lw      r1,33(r2)       ; sender's pending message
+        lw      r2,12(fp)       ; receiver's private buffer
+        lw      r0,0(r1)
+        sw      r0,0(r2)
+        lw      r0,3(r1)
+        sw      r0,3(r2)
+        lw      r0,6(r1)
+        sw      r0,6(r2)
+        lw      r0,9(r1)
+        sw      r0,9(r2)
+        lw      r0,12(r1)
+        sw      r0,12(r2)
+        lw      r0,15(r1)
+        sw      r0,15(r2)
+        lw      r0,18(r1)
+        sw      r0,18(r2)
+
+        ; Wake both peers after the kernel copy completes.
+        lw      r0,9(fp)
+        lc      r1,1
+        ceq     r0,r1
+        brt     _receive_wake_a
+        la      r2,_proc_b
+        bra     _receive_wake_sender
+_receive_wake_a:
+        la      r2,_proc_a
+_receive_wake_sender:
+        lc      r0,1
+        sw      r0,24(r2)
+        la      r2,_current_proc
+        lw      r2,0(r2)
+        sw      r0,24(r2)
+
+        lc      r0,0
+        mov     sp,fp
+        pop     r1
+        pop     r2
+        pop     fp
+        jmp     (r1)
 
 _context_failure:
         lc      r0,88           ; X

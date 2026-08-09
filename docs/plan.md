@@ -752,7 +752,8 @@ tasks.
 
 ### Milestone 2 -- MINIX-Style IPC
 
-- [ ] `send()`, `receive()`, `sendrec()` in kernel
+- [x] Callable `send()` and `receive()` kernel entries
+- [ ] `sendrec()` combined kernel entry
 - [x] Fixed-size seven-word message struct and kernel copy
 - [x] Blocking send/receive semantics with peer wakeup
 - [x] TTY service task receiving `TTY_WRITE` messages
@@ -763,8 +764,8 @@ tasks.
 `PROC_RECV_BLOCK`, then runs a client that enters `PROC_SEND_BLOCK` with a
 seven-word `TTY_WRITE` message. The receiver copies all message words into a
 private buffer, wakes the sender, and emits the payload. Next: expose reusable
-`send`, `receive`, and `sendrec` kernel entry points rather than inline demo
-paths.
+`sendrec` and exercise reply delivery. `send` and `receive` now use the PL/SW
+stack calling convention and are called normally by the demo tasks.
 
 ### Milestone 3 -- UART Heartbeat Clock
 
