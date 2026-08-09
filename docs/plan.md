@@ -799,8 +799,18 @@ sleeping entries after the clock update and marks deadlines at or before the
 monotonic tick runnable. `just plsw-system-interactive` now provides the
 host-side clock source, and menu choice `3` runs a PL/SW Clock app that logs
 `mm:ss` once per second until Ctrl-]. `just clock-smoke` verifies timestamps
-from `00:00` through `00:02` and the return to the menu. Next: interrupt-driven
-rescheduling and explicit cooperative fallback behavior.
+from `00:00` through `00:02` and the return to the menu.
+
+**Preemption feasibility result:** The current COR24 ISA/toolchain can return
+from an interrupt with `jmp (ir)`, but cannot copy `ir` to or from a general
+register (`mov r2,ir` and `mov ir,r2`) or memory (`sw ir` and `lw ir`). An ISR
+can therefore preserve and resume its current interrupted PC, but cannot save
+one task's interrupted PC and load another task's PC. Safe arbitrary-PC context
+switching directly from interrupt return is blocked unless COR24 gains an
+instruction for reading and writing `ir`, or the interrupt ABI is extended to
+save the interrupted PC in software-visible memory. SWTOS remains
+cooperative-first on the current target. Next: make heartbeat absence and
+cooperative fallback explicit and testable.
 
 ### Milestone 4 -- Generated Catalog and Autostart
 
@@ -912,7 +922,7 @@ The name in `FILE:` must match the `%INCLUDE` name (without .msw).
 | No hardware multiply              | Compiler runtime helpers (`__mul24` etc.)      |
 | 1 MB RAM very limited             | Fixed regions; resident shared text; minimal kernel |
 | PL/SW systems constructs unknown | Milestone 0 validates PL/SW for OS use |
-| UART ISR must support context switch for preemption | Verify COR24 interrupt return semantics early |
+| UART ISR cannot save/load `ir` for preemption | Keep cooperative scheduling; consider an ISA or interrupt-ABI extension |
 | Host disconnect stops clock       | Cooperative fallback; clock status visible    |
 | 24-bit char breaks `CHAR_BIT==8` assumptions | Use `octet_t` for serialized data; avoid `char` tricks |
 | Terminal sends control bytes      | Escape framing protocol                      |
