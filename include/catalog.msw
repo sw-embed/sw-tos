@@ -1,0 +1,27 @@
+/* catalog.msw -- resident catalog runtime */
+
+CATALOG_CALL_ENTRY: PROC(ENTRY_PTR PTR);
+    ASM DO;
+        'lw      r2,9(fp)';
+        'jal     r1,(r2)';
+    END;
+END;
+
+CATALOG_AUTOSTART: PROC;
+    DCL I INT;
+    DCL OFFSET INT;
+    DCL FLAGS INT;
+    DCL ENTRY_PTR PTR;
+    DCL AUTOSTART_BIT INT;
+
+    DO I = 0 TO CATALOG_COUNT - 1;
+        OFFSET = I * CATALOG_DESC_WORDS;
+        FLAGS = CATALOG_TABLE(OFFSET + 7);
+        AUTOSTART_BIT = FLAGS / IMAGE_AUTOSTART;
+        AUTOSTART_BIT = AUTOSTART_BIT - (AUTOSTART_BIT / 2) * 2;
+        IF (AUTOSTART_BIT = 1) THEN DO;
+            ENTRY_PTR = CATALOG_TABLE(OFFSET + 2);
+            CALL CATALOG_CALL_ENTRY(ENTRY_PTR);
+        END;
+    END;
+END;

@@ -41,7 +41,11 @@ catalog-smoke: plsw-system
 
 # Compile and run PL/SW system image (menu + apps)
 plsw-system: catalog-generate
-    {{PIPELINE}} include/swtos.msw include/menu.msw include/hello_app.msw include/counter_app.msw include/clock_app.msw include/catalog_generated.msw system.plsw
+    {{PIPELINE}} include/swtos.msw include/menu.msw include/hello_app.msw include/counter_app.msw include/clock_app.msw include/catalog_generated.msw include/catalog.msw system.plsw
+
+# Verify IMAGE_AUTOSTART dispatch launches the shell from catalog metadata
+autostart-smoke: plsw-system
+    ./tests/test-autostart.sh
 
 # Run the menu interactively. cor24-emu 0.1.0 ignores --terminal for --lgo,
 # so use its raw-binary path, which correctly bridges stdin to the UART.

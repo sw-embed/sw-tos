@@ -70,6 +70,13 @@ compiles into the complete system image:
 just catalog-smoke
 ```
 
+Boot initializes that table and scans its flags rather than naming the shell
+entry directly. To verify metadata-driven `IMAGE_AUTOSTART` dispatch:
+
+```
+just autostart-smoke
+```
+
 Produces a flat binary image (.lgo) loadable via the COR24 serial boot
 protocol at 921,600 baud.
 

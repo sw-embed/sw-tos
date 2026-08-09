@@ -445,6 +445,9 @@ symbols, sizes, kinds, flags, and duplicates before emitting
 the generated initializer uses PL/SW for descriptor data and a small inline
 assembly block for linked entry addresses. `just catalog-smoke` checks that the
 generated file is current and compiles it into the complete system image.
+At boot, `CATALOG_AUTOSTART` scans the generated descriptor flags and invokes
+each selected entry through `CATALOG_CALL_ENTRY`; `system.plsw` contains no
+direct shell call.
 
 ### Program Spawning
 
@@ -838,7 +841,7 @@ the generated resident catalog and autostart metadata.
 
 - [x] TOML manifest for programs and services
 - [x] Build tool generates PL/SW descriptor table from manifest
-- [ ] `AUTOSTART` flag launches TTY service at boot
+- [x] `AUTOSTART` flag launches the shell service at boot
 - [ ] Shell `run <name>` spawns from catalog
 - [ ] `ls` lists catalog entries
 - [ ] Per-process state allocation for multiple instances
@@ -848,8 +851,12 @@ the generated resident catalog and autostart metadata.
 **Status:** The manifest currently catalogs the resident `hello`, `counter`,
 and `clock` programs plus the `shell` service. The deterministic generated
 table contains name, kind, linked entry, image metadata, stack size, state
-size, and flags for every object. Next: consume `IMAGE_AUTOSTART` metadata at
-boot instead of calling the shell service directly.
+size, and flags for every object. `just autostart-smoke` proves boot scans the
+flags and invokes the shell's catalog entry without a direct `CALL MENU`.
+The current interactive system has no independently scheduled PL/SW TTY
+service yet, so the shell is the first autostart service; TTY autostart will use
+the same path when that service is separated. Next: catalog name lookup and
+shell `run <name>` dispatch.
 
 ### Milestone 5 -- Process-Local State
 
@@ -935,6 +942,7 @@ The name in `FILE:` must match the `%INCLUDE` name (without .msw).
 | `just heartbeat-smoke` | Verify UART framing and 24-bit clock wraparound |
 | `just clock-smoke` | Verify the heartbeat-driven PL/SW Clock menu app |
 | `just catalog-smoke` | Validate, generate, and compile the resident catalog |
+| `just autostart-smoke` | Verify metadata-driven shell service startup |
 | `just plsw-compile <[.msw ...] file.plsw>` | Compile any .plsw  |
 | `just plsw-run <[.msw ...] file.plsw>` | Compile and run any .plsw |
 | `just plsw-dump <[.msw ...] file.plsw>` | Compile and dump memory |

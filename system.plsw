@@ -13,10 +13,11 @@
 %INCLUDE counter_app;
 %INCLUDE clock_app;
 %INCLUDE catalog_generated;
+%INCLUDE catalog;
 
 MAIN: PROC;
     CALL CATALOG_INIT;
     CALL UART_PUTS(ADDR(BANNER));
     CALL UART_PUTCHAR(10);
-    CALL MENU;
+    CALL CATALOG_AUTOSTART;
 END;
