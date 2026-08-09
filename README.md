@@ -78,12 +78,13 @@ just autostart-smoke
 ```
 
 The interactive shell retains choices `0` through `3` and also accepts
-`run <name>`, for example `run counter`. Lookup scans program descriptors by
-name and dispatches the linked resident entry. Verify successful and missing
-lookups with:
+`run <name>`, for example `run counter`, plus `ls` to enumerate every resident
+program and service. Lookup scans program descriptors by name and dispatches
+the linked resident entry. Verify lookup and listing with:
 
 ```
 just catalog-run-smoke
+just catalog-list-smoke
 ```
 
 Produces a flat binary image (.lgo) loadable via the COR24 serial boot
