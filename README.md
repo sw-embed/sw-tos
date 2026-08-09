@@ -119,7 +119,9 @@ Its `ls` command walks the generated scheduler descriptor table, and
 `run <name>` searches that same table for program descriptors. A scheduler
 join service keeps the shell suspended until the selected app exits, so adding
 a cataloged program does not require a shell name branch or guessed yield
-count.
+count. `TASK_EXIT` also restores the app slot's saved EBR arena pointer,
+reclaiming its private state and stack as one LIFO allocation. Verify repeated
+reuse with `just scheduled-reclaim-smoke`.
 
 The heartbeat-aware frontend accepts `--image`, so the same byte stuffing,
 Ctrl-] translation, and line-ending filtering serve both the compatibility and

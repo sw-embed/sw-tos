@@ -94,6 +94,10 @@ _TASK_SPAWN:
         brf     _spawn_second_done
         lc      r0,1
         sb      r0,0(r2)
+        la      r2,_ebr_next
+        lw      r0,0(r2)
+        la      r2,_spawn_arena_mark
+        sw      r0,0(r2)       ; app allocations are reclaimed at TASK_EXIT
         la      r2,_proc_b
         la      r1,_spawn_process
         sw      r2,0(r1)
@@ -428,6 +432,11 @@ _TASK_EXIT:
         brf     _TASK_HALT
         lc      r0,0
         sw      r0,24(r2)       ; PROC_FREE
+        la      r2,_spawn_arena_mark
+        lw      r0,0(r2)
+        la      r2,_ebr_next
+        sw      r0,0(r2)        ; release app state and stack as one LIFO region
+        lc      r0,0
         la      r2,_second_spawned
         sb      r0,0(r2)
         la      r2,_proc_a
@@ -522,6 +531,8 @@ _spawn_process:
 _zero_remaining:
         .zero   3
 _allocated_base:
+        .zero   3
+_spawn_arena_mark:
         .zero   3
 _ebr_next:
         .word   0xFEEB00

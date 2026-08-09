@@ -906,8 +906,14 @@ descriptor records and name storage are generated from
 `catalog/catalog.toml`; the kernel no longer contains hand-maintained Hello,
 Counter, Clock, or shell descriptors. The manifest's larger stack/state sizes
 also pass within the installed EBR window using a process-arena high address of
-`0xFEEB00`. Next: reclaim each exited process's stack/state allocation so
-repeated interactive launches cannot exhaust the downward EBR arena.
+`0xFEEB00`. `TASK_SPAWN` saves the arena pointer before allocating the reusable
+app slot, and `TASK_EXIT` restores that mark after the app stops. This releases
+the app's state and stack together while preserving the persistent shell below
+them. `just scheduled-reclaim-smoke` completes 20 sequential Counter launches,
+which exceeds the former bump-only arena capacity, and verifies all 20 private
+states restart at `B1`. Next: replace the fixed A/B scheduler choice with a
+process-table scan so multiple app instances can coexist before extending
+reclamation beyond the current single-child LIFO rule.
 
 ### Milestone 5 -- Process-Local State
 
@@ -1000,6 +1006,7 @@ The name in `FILE:` must match the `%INCLUDE` name (without .msw).
 | `just catalog-spawn-smoke` | Verify descriptor-sized stack/state process creation |
 | `just scheduled-shell-smoke` | Verify shell-to-spawn scheduled PL/SW dispatch |
 | `just scheduled-catalog-smoke` | Verify scheduled `ls` and `run <name>` commands |
+| `just scheduled-reclaim-smoke` | Stress repeated app stack/state reclamation |
 | `just scheduled-shell-interactive` | Run the scheduler-integrated shell proof |
 | `just plsw-compile <[.msw ...] file.plsw>` | Compile any .plsw  |
 | `just plsw-run <[.msw ...] file.plsw>` | Compile and run any .plsw |

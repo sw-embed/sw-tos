@@ -67,6 +67,10 @@ scheduled-shell-smoke:
 scheduled-catalog-smoke:
     ./tests/test-scheduled-catalog-commands.sh
 
+# Verify exited scheduled apps reclaim their stack/state arena allocations
+scheduled-reclaim-smoke:
+    ./tests/test-scheduled-reclaim.sh
+
 # Build the scheduler-integrated PL/SW shell image
 scheduled-shell-build:
     ./scripts/catalog-spawn-link.sh tests/catalog-shell.plsw scheduled-shell
