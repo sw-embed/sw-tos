@@ -966,13 +966,20 @@ for the first Milestone 6 image blob.
 
 - [x] COR24 executable format (magic, version, text/data/bss sizes, entry)
 - [x] Version 1 loader: allocate RAM, copy text/data, clear BSS, reject relocations
-- [ ] Same `run` command works for both resident and embedded programs
+- [x] Same `run` command works for both resident and embedded programs
 
 **Status:** The versioned header, deterministic builder, strict validator,
 corruption coverage, and target-side in-memory loader are complete. Version 1
-deliberately requires zero relocations. Next: make the fixture contain an
-executable loaded entry, transfer control to it, and route an embedded catalog
-descriptor through the same `run <name>` shell command as resident programs.
+deliberately requires zero relocations. The `embedded-hello` catalog entry is
+the first end-to-end image: its assembled position-independent payload matches
+the manifest bytes, `run embedded-hello` finds its generated kind-1 descriptor,
+the scheduler preserves that descriptor in the process slot, and an embedded
+trampoline copies and calls the entry before `TASK_EXIT` returns to the menu.
+Compatibility lookup deliberately ignores nonresident entries. The scheduled
+bridge currently uses one static 64-byte executable region and compact
+single-byte text/data counts; the general loader proof handles full 24-bit
+fields. Next: allocate executable memory per spawned image and reuse the full
+loader path in the scheduled bridge before beginning the SPI provider.
 
 ### Milestone 7 -- SPI Image Provider (Future)
 

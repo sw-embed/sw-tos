@@ -18,9 +18,10 @@ if echo "$counter_output" | grep -q 'Invalid choice'; then
 fi
 
 missing_output=$($EMU --lgo "$ROOT_DIR/build/system.lgo" \
-    -u 'run missing\n0' --speed 0 -n 1000000 --quiet 2>/dev/null)
-if ! echo "$missing_output" | grep -q 'Program not found'; then
-    echo "FAIL: missing catalog name was not rejected" >&2
+    -u 'run embedded-hello\nrun missing\n0' --speed 0 -n 1000000 --quiet 2>/dev/null)
+not_found_count=$(echo "$missing_output" | grep -o 'Program not found' | wc -l | tr -d ' ')
+if [ "$not_found_count" -ne 2 ]; then
+    echo "FAIL: compatibility shell did not reject embedded and missing names" >&2
     echo "$missing_output" >&2
     exit 1
 fi

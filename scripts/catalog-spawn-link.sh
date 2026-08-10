@@ -36,6 +36,10 @@ echo "$compiler_output" | sed -n \
     > "$OUT_DIR/app.raw.s"
 cp "$ROOT_DIR/hal/cor24/catalog-spawn.s" "$OUT_DIR/kernel.raw.s"
 sed -n 'p' "$ROOT_DIR/hal/cor24/catalog_generated.s" >> "$OUT_DIR/kernel.raw.s"
+python3 "$ROOT_DIR/scripts/cor24-image.py" emit-asm \
+    "$ROOT_DIR/catalog/images/embedded-hello.toml" "$OUT_DIR/embedded-hello.s" \
+    --label _embedded_embedded_hello_image
+sed -n 'p' "$OUT_DIR/embedded-hello.s" >> "$OUT_DIR/kernel.raw.s"
 
 sizes=()
 for module in "${MODULES[@]}"; do

@@ -84,6 +84,9 @@ _spawn_resident:
         lw      r1,0(r1)
         lw      r0,6(r1)
         sw      r0,12(r2)       ; descriptor PC
+        la      r1,_spawn_descriptor
+        lw      r1,0(r1)
+        sw      r1,33(r2)       ; selected PROGRAM_DESC
         lc      r0,1
         sw      r0,24(r2)       ; PROC_RUNNABLE
         pop     r1
@@ -264,6 +267,42 @@ _plsw_clock_trampoline:
         la      r2,_halt
         jmp     (r2)
 
+; Load and call a version 1 embedded entry, then terminate its child process.
+; Provider validation has already checked the header and checksum. This first
+; catalog bridge supports the fixture's compact (<256-word) text/data lengths.
+_embedded_loader_trampoline:
+        la      r2,_current_proc
+        lw      r2,0(r2)
+        lw      r2,33(r2)
+        lw      r2,9(r2)        ; descriptor image base
+        lbu     r0,11(r2)       ; text_words low byte
+        lbu     r1,14(r2)       ; data_words low byte
+        add     r0,r1
+        mov     r1,r0
+        add     r0,r1
+        add     r0,r1           ; packed payload bytes
+        push    r0
+        add     r2,27
+        la      r0,_embedded_load_region
+_embedded_copy_loop:
+        lbu     r1,0(r2)
+        sb      r1,0(r0)
+        add     r2,1
+        add     r0,1
+        pop     r1
+        add     r1,-1
+        push    r1
+        push    r0
+        mov     r0,r1
+        ceq     r0,z
+        pop     r0
+        brf     _embedded_copy_loop
+        pop     r1
+        la      r2,_embedded_load_region
+        jal     r1,(r2)
+        la      r2,_TASK_EXIT
+        jmp     (r2)
+
 ; PL/SW-callable cooperative yield.
         .globl  _TASK_YIELD
 _TASK_YIELD:
@@ -401,7 +440,12 @@ _task_catalog_find_next:
         brt     _task_catalog_find_done
         lw      r1,3(r0)       ; IMAGE_PROGRAM kind is zero
         ceq     r1,z
+        brt     _task_catalog_find_program
+        lc      r0,1           ; embedded executable kind
+        ceq     r0,r1
         brf     _task_catalog_find_advance
+        lw      r0,0(r2)
+_task_catalog_find_program:
         push    r2
         lw      r1,0(r0)       ; descriptor name
         lw      r2,9(fp)       ; requested name
@@ -634,6 +678,8 @@ _child_count:
         .byte   0
 _banner:
         .byte   83,80,65,87,78,10,0
+_embedded_load_region:
+        .zero   64
 _state_free:
         .byte   70,82,69,69,0
 _state_runnable:

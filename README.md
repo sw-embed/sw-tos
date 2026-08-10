@@ -87,7 +87,14 @@ loader independently with:
 just cor24-loader-smoke
 ```
 
-Loaded-entry execution and catalog dispatch remain the next Milestone 6 step.
+That loader proof supplies the copy/BSS/entry mechanics used by embedded
+catalog dispatch.
+
+The first end-to-end embedded program is now cataloged as `embedded-hello`.
+`run embedded-hello` uses the same scheduled-shell lookup as resident programs,
+copies its validated payload into executable RAM, calls the loaded entry (which
+prints `E`), then returns through `TASK_EXIT`. The image smoke also assembles
+the payload source and proves its bytes match the manifest.
 
 Boot initializes that table and scans its flags rather than naming the shell
 entry directly. To verify metadata-driven `IMAGE_AUTOSTART` dispatch:

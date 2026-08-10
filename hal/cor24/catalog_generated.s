@@ -5,6 +5,7 @@ _scheduled_catalog_table:
         .word   _scheduled_hello_descriptor
         .word   _scheduled_counter_descriptor
         .word   _scheduled_clock_descriptor
+        .word   _scheduled_embedded_hello_descriptor
         .word   _scheduled_shell_descriptor
         .word   0
 
@@ -43,6 +44,18 @@ _scheduled_clock_descriptor:
         .word   3
 _scheduled_clock_name:
         .byte   99,108,111,99,107,0
+
+_scheduled_embedded_hello_descriptor:
+        .word   _scheduled_embedded_hello_name
+        .word   1
+        .word   _embedded_loader_trampoline
+        .word   _embedded_embedded_hello_image
+        .word   0
+        .word   128
+        .word   0
+        .word   0
+_scheduled_embedded_hello_name:
+        .byte   101,109,98,101,100,100,101,100,45,104,101,108,108,111,0
 
 _scheduled_shell_descriptor:
         .word   _scheduled_shell_name

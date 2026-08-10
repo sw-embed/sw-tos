@@ -24,7 +24,7 @@ FLAGS = {
     "restartable": ("IMAGE_RESTARTABLE", 16),
     "read_only": ("IMAGE_READ_ONLY", 32),
 }
-ENTRY_KEYS = {"name", "entry", "scheduled_entry", "stack_words", "state_words", "flags"}
+ENTRY_KEYS = {"name", "entry", "scheduled_entry", "stack_words", "state_words", "flags", "image_manifest"}
 
 
 def fail(message: str) -> None:
@@ -51,7 +51,7 @@ def load_entries(path: Path) -> list[dict]:
             unknown_keys = set(value) - ENTRY_KEYS
             if unknown_keys:
                 fail(f"{label} has unknown key: {sorted(unknown_keys)[0]}")
-            missing_keys = ENTRY_KEYS - set(value)
+            missing_keys = (ENTRY_KEYS - {"image_manifest"}) - set(value)
             if missing_keys:
                 fail(f"{label} is missing: {sorted(missing_keys)[0]}")
 
@@ -61,6 +61,7 @@ def load_entries(path: Path) -> list[dict]:
             stack_words = value["stack_words"]
             state_words = value["state_words"]
             flags = value["flags"]
+            image_manifest = value.get("image_manifest")
             if not isinstance(name, str) or not NAME_PATTERN.fullmatch(name):
                 fail(f"{label} has invalid name")
             if name in names:
@@ -81,6 +82,14 @@ def load_entries(path: Path) -> list[dict]:
                 fail(f"{label} has unknown flag: {sorted(unknown_flags)[0]}")
             if len(flags) != len(set(flags)):
                 fail(f"{label} has duplicate flags")
+            if image_manifest is not None:
+                if section != "program" or not isinstance(image_manifest, str) or not image_manifest.endswith(".toml"):
+                    fail(f"{label} has invalid image_manifest")
+                if "resident" in flags:
+                    fail(f"{label} embedded image cannot be resident")
+                image_path = (ROOT / image_manifest).resolve()
+                if not image_path.is_relative_to(ROOT) or not image_path.is_file():
+                    fail(f"{label} image_manifest does not exist in repository")
 
             entries.append(
                 {
@@ -91,6 +100,7 @@ def load_entries(path: Path) -> list[dict]:
                     "stack_words": stack_words,
                     "state_words": state_words,
                     "flags": flags,
+                    "image_manifest": image_manifest,
                 }
             )
     if not entries:
@@ -155,7 +165,7 @@ def render_scheduled(entries: list[dict], manifest: Path) -> str:
     for entry in entries:
         label = entry["name"].replace("-", "_")
         flag_value = sum(FLAGS[flag][1] for flag in entry["flags"])
-        kind_value = 0 if entry["kind"] == "IMAGE_PROGRAM" else 2
+        kind_value = 1 if entry["image_manifest"] else (0 if entry["kind"] == "IMAGE_PROGRAM" else 2)
         name_bytes = ",".join(str(byte) for byte in entry["name"].encode("ascii"))
         lines.extend(
             [
@@ -163,7 +173,7 @@ def render_scheduled(entries: list[dict], manifest: Path) -> str:
                 f"        .word   _scheduled_{label}_name",
                 f"        .word   {kind_value}",
                 f"        .word   {entry['scheduled_entry']}",
-                "        .word   0",
+                f"        .word   _embedded_{label}_image" if entry["image_manifest"] else "        .word   0",
                 "        .word   0",
                 f"        .word   {entry['stack_words']}",
                 f"        .word   {entry['state_words']}",
