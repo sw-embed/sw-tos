@@ -64,6 +64,8 @@ def load_entries(path: Path) -> list[dict]:
             image_manifest = value.get("image_manifest")
             if not isinstance(name, str) or not NAME_PATTERN.fullmatch(name):
                 fail(f"{label} has invalid name")
+            if len(name.encode("ascii")) > 15:
+                fail(f"{label} name exceeds block catalog record")
             if name in names:
                 fail(f"duplicate catalog name: {name}")
             names.add(name)
@@ -201,6 +203,14 @@ def render_scheduled(entries: list[dict], manifest: Path) -> str:
                 "",
             ]
         )
+    lines.extend(["_block_catalog_index:", f"        .byte   {len(entries)},0,0,0,0,0,0,0"])
+    for index, entry in enumerate(entries):
+        name = entry["name"].encode("ascii") + b"\0"
+        name_field = name + bytes(16 - len(name))
+        record = name_field + bytes([index]) + bytes(7)
+        values = ",".join(str(value) for value in record)
+        lines.append(f"        .byte   {values}")
+    lines.extend(["_block_catalog_index_end:", ""])
     return "\n".join(lines)
 
 

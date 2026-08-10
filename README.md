@@ -126,6 +126,12 @@ descriptor length. `just scheduled-block-provider-smoke` switches providers,
 loads `embedded-hello` across block boundaries, requires `EBLOCK`, then restores
 the default memory provider.
 
+The block provider also implements `find` without walking the resident table.
+Catalog generation emits an eight-byte header followed by 24-byte records: a
+16-byte NUL-terminated name, descriptor ordinal, and padding. Block-backed
+lookup reads those records, resolves the ordinal into the generated descriptor
+table, and then loads the selected image through block reads.
+
 Boot initializes that table and scans its flags rather than naming the shell
 entry directly. To verify metadata-driven `IMAGE_AUTOSTART` dispatch:
 

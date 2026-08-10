@@ -474,6 +474,105 @@ _block_provider_done:
         pop     r1
         jmp     (r1)
 
+; Find a generated fixed-record catalog entry through block reads. Layout:
+; eight-byte header (count in byte zero), then 24-byte records containing a
+; 16-byte NUL-terminated name, one-byte descriptor ordinal, and seven padding.
+_block_provider_find:
+        push    r1
+        lw      r2,12(fp)
+        lc      r0,0
+        sw      r0,0(r2)
+        la      r0,_block_catalog_index
+        la      r2,_provider_image
+        sw      r0,0(r2)
+        la      r0,_block_catalog_index_end
+        la      r1,_block_catalog_index
+        sub     r0,r1
+        la      r2,_provider_limit
+        sw      r0,0(r2)
+        lc      r0,0
+        la      r2,_provider_offset
+        sw      r0,0(r2)
+        lc      r0,1
+        la      r2,_provider_count
+        sw      r0,0(r2)
+        la      r0,_block_name_buffer
+        la      r2,_provider_destination
+        sw      r0,0(r2)
+        la      r2,_block_provider_read
+        jal     r1,(r2)
+        la      r2,_block_name_buffer
+        lbu     r0,0(r2)
+        la      r2,_block_find_remaining
+        sw      r0,0(r2)
+        lc      r0,8
+        la      r2,_block_find_offset
+        sw      r0,0(r2)
+        la      r0,_scheduled_catalog_table
+        la      r2,_block_find_table
+        sw      r0,0(r2)
+_block_provider_find_next:
+        la      r2,_block_find_offset
+        lw      r0,0(r2)
+        la      r2,_provider_offset
+        sw      r0,0(r2)
+        lc      r0,16
+        la      r2,_provider_count
+        sw      r0,0(r2)
+        la      r0,_block_name_buffer
+        la      r2,_provider_destination
+        sw      r0,0(r2)
+        la      r2,_block_provider_read
+        jal     r1,(r2)
+        lw      r2,9(fp)
+        la      r1,_block_name_buffer
+_block_provider_find_compare:
+        push    r1
+        lbu     r0,0(r1)
+        push    r0
+        lbu     r0,0(r2)
+        pop     r1
+        ceq     r0,r1
+        pop     r1
+        brf     _block_provider_find_mismatch
+        ceq     r0,z
+        brt     _block_provider_find_match
+        add     r1,1
+        add     r2,1
+        bra     _block_provider_find_compare
+_block_provider_find_mismatch:
+        la      r2,_block_find_offset
+        lw      r0,0(r2)
+        add     r0,24
+        sw      r0,0(r2)
+        la      r2,_block_find_table
+        lw      r0,0(r2)
+        add     r0,3
+        sw      r0,0(r2)
+        la      r2,_block_find_remaining
+        lw      r0,0(r2)
+        add     r0,-1
+        sw      r0,0(r2)
+        ceq     r0,z
+        brf     _block_provider_find_next
+        bra     _block_provider_find_done
+_block_provider_find_match:
+        la      r2,_block_find_table
+        lw      r2,0(r2)
+        lw      r0,0(r2)
+        lw      r1,3(r0)
+        push    r0
+        mov     r0,r1
+        lc      r2,2
+        ceq     r0,r2
+        pop     r0
+        brt     _block_provider_find_done
+        lw      r2,12(fp)
+        sw      r0,0(r2)
+_block_provider_find_done:
+        pop     r1
+        jmp     (r1)
+
 ; Read the big-endian header word at byte offset r0 through the active provider.
 _read_embedded_field:
         push    r1
@@ -1174,7 +1273,7 @@ _memory_image_provider:
         .word   _memory_provider_find
         .word   _memory_provider_read
 _block_image_provider:
-        .word   _memory_provider_find
+        .word   _block_provider_find
         .word   _block_provider_read
 _provider_image:
         .zero   3
@@ -1200,6 +1299,14 @@ _block_fetch_count:
         .zero   3
 _block_buffer:
         .zero   8
+_block_name_buffer:
+        .zero   16
+_block_find_remaining:
+        .zero   3
+_block_find_offset:
+        .zero   3
+_block_find_table:
+        .zero   3
 _provider_word_buffer:
         .zero   3
 _embedded_descriptor:

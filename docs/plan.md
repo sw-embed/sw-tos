@@ -1004,10 +1004,19 @@ arbitrary offset/count reads into block fetches; the multislot proof switches
 providers, loads and executes `embedded-hello` across boundaries, requires
 `EBLOCK`, restores the memory provider, and continues scheduling. No SPI MMIO
 register/transaction contract is defined in the repository, so physical SPI HAL
-work is not yet implementable without that hardware specification. Next: put a
-catalog index into the host-backed block fixture and implement provider `find`
-from block reads, completing the storage-side behavior independently of the
-eventual SPI transport.
+work is not yet implementable without that hardware specification.
+
+The generated block fixture now begins with a catalog index: an eight-byte
+header containing the entry count followed by fixed 24-byte records with a
+16-byte NUL-terminated name, one-byte descriptor ordinal, and seven bytes of
+padding. The block provider's `find` callback reads and compares those records
+through its block adapter, rejects service descriptors, and resolves a matching
+ordinal into the generated runtime descriptor table. The provider-switch proof
+looks up `embedded-hello` through this index before reading and executing its
+image. Thus host-backed `find` and `read` now cover the complete storage-provider
+behavior independently of transport. Physical SPI remains blocked on the
+missing COR24 SPI register map, chip-select behavior, and transaction timing
+contract; the next actionable step requires that hardware specification.
 
 ### Milestone 7 -- SPI Image Provider (Future)
 
