@@ -50,7 +50,7 @@ _scheduled_embedded_hello_descriptor:
         .word   1
         .word   _embedded_loader_trampoline
         .word   _embedded_embedded_hello_image
-        .word   0
+        .word   12
         .word   128
         .word   0
         .word   0

@@ -90,6 +90,23 @@ def load_entries(path: Path) -> list[dict]:
                 image_path = (ROOT / image_manifest).resolve()
                 if not image_path.is_relative_to(ROOT) or not image_path.is_file():
                     fail(f"{label} image_manifest does not exist in repository")
+                with image_path.open("rb") as image_stream:
+                    image_document = tomllib.load(image_stream)
+                text_words = image_document.get("text_words")
+                data_words = image_document.get("data_words")
+                if (
+                    not isinstance(text_words, int)
+                    or isinstance(text_words, bool)
+                    or text_words <= 0
+                    or not isinstance(data_words, int)
+                    or isinstance(data_words, bool)
+                    or data_words < 0
+                    or 9 + text_words + data_words > 0xFFFFFF
+                ):
+                    fail(f"{label} image_manifest has invalid word counts")
+                image_words = 9 + text_words + data_words
+            else:
+                image_words = 0
 
             entries.append(
                 {
@@ -101,6 +118,7 @@ def load_entries(path: Path) -> list[dict]:
                     "state_words": state_words,
                     "flags": flags,
                     "image_manifest": image_manifest,
+                    "image_words": image_words,
                 }
             )
     if not entries:
@@ -130,7 +148,7 @@ def render(entries: list[dict], manifest: Path) -> str:
                 f"    CATALOG_TABLE({offset}) = ADDR(CATALOG_NAME_{index});",
                 f"    CATALOG_TABLE({offset + 1}) = {entry['kind']};",
                 f"    CATALOG_TABLE({offset + 2}) = 0;",
-                f"    CATALOG_TABLE({offset + 3}) = 0;",
+                f"    CATALOG_TABLE({offset + 3}) = {entry['image_words']};",
                 f"    CATALOG_TABLE({offset + 4}) = 0;",
                 f"    CATALOG_TABLE({offset + 5}) = {entry['stack_words']};",
                 f"    CATALOG_TABLE({offset + 6}) = {entry['state_words']};",
@@ -174,7 +192,7 @@ def render_scheduled(entries: list[dict], manifest: Path) -> str:
                 f"        .word   {kind_value}",
                 f"        .word   {entry['scheduled_entry']}",
                 f"        .word   _embedded_{label}_image" if entry["image_manifest"] else "        .word   0",
-                "        .word   0",
+                f"        .word   {entry['image_words']}",
                 f"        .word   {entry['stack_words']}",
                 f"        .word   {entry['state_words']}",
                 f"        .word   {flag_value}",

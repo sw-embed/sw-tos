@@ -231,6 +231,25 @@ _image_provider_read:
 _memory_provider_read:
         push    r1
         push    r2
+        lc      r0,0
+        la      r2,_provider_status
+        sw      r0,0(r2)
+        la      r2,_provider_offset
+        lw      r0,0(r2)
+        la      r2,_provider_count
+        lw      r1,0(r2)
+        add     r0,r1
+        la      r2,_provider_limit
+        lw      r1,0(r2)
+        ceq     r0,r1
+        brt     _memory_provider_read_in_bounds
+        cls     r0,r1
+        brt     _memory_provider_read_in_bounds
+        lc      r0,1
+        la      r2,_provider_status
+        sw      r0,0(r2)
+        bra     _memory_provider_read_done
+_memory_provider_read_in_bounds:
         la      r2,_provider_image
         lw      r0,0(r2)
         la      r2,_provider_offset
@@ -253,6 +272,7 @@ _memory_provider_read_loop:
         ceq     r0,z
         pop     r0
         brf     _memory_provider_read_loop
+_memory_provider_read_done:
         pop     r2
         pop     r1
         jmp     (r1)
@@ -275,6 +295,13 @@ _read_embedded_field:
         sw      r0,0(r2)
         la      r2,_image_provider_read
         jal     r1,(r2)
+        la      r2,_provider_status
+        lw      r0,0(r2)
+        ceq     r0,z
+        brt     _read_embedded_field_ok
+        la      r2,_halt
+        jmp     (r2)
+_read_embedded_field_ok:
         la      r0,_provider_word_buffer
         la      r2,_read_image_word
         jal     r1,(r2)
@@ -288,6 +315,12 @@ _load_embedded_process:
         push    r1
         la      r1,_embedded_descriptor
         sw      r0,0(r1)
+        lw      r1,12(r0)
+        mov     r2,r1
+        add     r1,r2
+        add     r1,r2
+        la      r2,_provider_limit
+        sw      r1,0(r2)
         lw      r0,9(r0)
         la      r1,_embedded_image_base
         sw      r0,0(r1)
@@ -370,6 +403,13 @@ _embedded_relocations_ok:
         sw      r0,0(r2)
         la      r2,_image_provider_read
         jal     r1,(r2)
+        la      r2,_provider_status
+        lw      r0,0(r2)
+        ceq     r0,z
+        brt     _embedded_payload_read_ok
+        la      r2,_halt
+        jmp     (r2)
+_embedded_payload_read_ok:
 
         ; Store allocation base + full 24-bit entry word offset.
         la      r2,_embedded_entry_words
@@ -705,6 +745,52 @@ _task_join_done:
         pop     fp
         jmp     (r1)
 
+; Negative provider proof: a two-byte read starting at the final image byte
+; must return status 1 without touching the destination.
+        .globl  _TASK_PROVIDER_BOUNDS_TEST
+_TASK_PROVIDER_BOUNDS_TEST:
+        push    fp
+        push    r2
+        push    r1
+        mov     fp,sp
+        la      r2,_scheduled_embedded_hello_descriptor
+        lw      r0,9(r2)
+        la      r1,_provider_image
+        sw      r0,0(r1)
+        lw      r0,12(r2)
+        mov     r1,r0
+        add     r0,r1
+        add     r0,r1
+        la      r2,_provider_limit
+        sw      r0,0(r2)
+        add     r0,-1
+        la      r2,_provider_offset
+        sw      r0,0(r2)
+        lc      r0,2
+        la      r2,_provider_count
+        sw      r0,0(r2)
+        la      r0,_provider_word_buffer
+        la      r2,_provider_destination
+        sw      r0,0(r2)
+        la      r2,_image_provider_read
+        jal     r1,(r2)
+        la      r2,_provider_status
+        lw      r0,0(r2)
+        lc      r1,1
+        ceq     r0,r1
+        brt     _provider_bounds_pass
+        la      r2,_halt
+        jmp     (r2)
+_provider_bounds_pass:
+        la      r0,_provider_bounds_message
+        la      r2,_puts
+        jal     r1,(r2)
+        mov     sp,fp
+        pop     r1
+        pop     r2
+        pop     fp
+        jmp     (r1)
+
 ; PL/SW runtime-compatible UART output entry.
         .globl  _UART_PUTCHAR
 _UART_PUTCHAR:
@@ -883,6 +969,10 @@ _provider_destination:
         .zero   3
 _provider_count:
         .zero   3
+_provider_limit:
+        .zero   3
+_provider_status:
+        .zero   3
 _provider_word_buffer:
         .zero   3
 _embedded_descriptor:
@@ -911,3 +1001,5 @@ _state_runnable:
         .byte   82,85,78,78,65,66,76,69,0
 _state_unknown:
         .byte   85,78,75,78,79,87,78,0
+_provider_bounds_message:
+        .byte   66,79,85,78,68,83,10,0

@@ -108,6 +108,11 @@ descriptor table and `read` over embedded image bytes; shell lookup and loader
 header/payload reads dispatch through those callbacks. This is the same seam a
 future block or SPI-backed provider will implement.
 
+Embedded descriptors carry their complete stored-image word length. Provider
+reads reject requests whose `offset + count` exceeds that byte limit and return
+an explicit status consumed by the loader. The multislot proof includes an
+intentional final-byte overrun and requires the provider to report `BOUNDS`.
+
 Boot initializes that table and scans its flags rather than naming the shell
 entry directly. To verify metadata-driven `IMAGE_AUTOSTART` dispatch:
 

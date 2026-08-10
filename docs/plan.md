@@ -986,9 +986,15 @@ two-word `find`/`read` image-provider callback record is now active. The
 scheduled `TASK_CATALOG_FIND` service delegates name lookup to the active
 memory provider, and the loader obtains every header word and the complete
 payload through the same provider's offset/count read operation. The loader no
-longer advances pointers through backing image storage directly. Next: add
-provider bounds/status returns and propagate read failure through spawn before
-introducing the block/SPI provider.
+longer advances pointers through backing image storage directly. Generated embedded descriptors now include
+their complete header-plus-payload word length. The memory provider converts
+that to a byte limit, rejects `offset + count` beyond it with status `1`, and
+the loader checks status after every header and payload read. The target-side
+negative proof attempts a two-byte read at the final byte and must print
+`BOUNDS`; normal embedded execution and repeated reclamation still pass. Next:
+return provider/load failures from `TASK_SPAWN` to the PL/SW shell as a
+recoverable command error instead of halting on a malformed backing image,
+then add the block/SPI provider.
 
 ### Milestone 7 -- SPI Image Provider (Future)
 
