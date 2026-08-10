@@ -64,7 +64,7 @@ _scheduled_shell_descriptor:
         .word   0
         .word   0
         .word   256
-        .word   4
+        .word   5
         .word   15
 _scheduled_shell_name:
         .byte   115,104,101,108,108,0

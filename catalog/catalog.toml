@@ -27,7 +27,7 @@ name = "shell"
 entry = "MENU"
 scheduled_entry = "_plsw_launcher_trampoline"
 stack_words = 256
-state_words = 4
+state_words = 5
 flags = ["resident", "single_instance", "privileged", "autostart"]
 
 [[program]]

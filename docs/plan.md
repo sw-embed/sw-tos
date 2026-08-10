@@ -991,10 +991,14 @@ their complete header-plus-payload word length. The memory provider converts
 that to a byte limit, rejects `offset + count` beyond it with status `1`, and
 the loader checks status after every header and payload read. The target-side
 negative proof attempts a two-byte read at the final byte and must print
-`BOUNDS`; normal embedded execution and repeated reclamation still pass. Next:
-return provider/load failures from `TASK_SPAWN` to the PL/SW shell as a
-recoverable command error instead of halting on a malformed backing image,
-then add the block/SPI provider.
+`BOUNDS`; normal embedded execution and repeated reclamation still pass. Spawn now publishes status `0` (success), `1`
+(provider/load failure), or `2` (no free slot). A failed load restores the
+generation arena mark before any child becomes runnable, and the PL/SW shell
+prints `ERROR` without entering `TASK_JOIN`. Fault injection forces the next
+provider read to fail; the multislot proof requires `RECOVERED` and then
+successfully runs both Counter children, demonstrating rollback and continued
+scheduler operation. Next: define the provider's block-read adapter and a
+host-backed SPI/block fixture before implementing physical SPI HAL transfers.
 
 ### Milestone 7 -- SPI Image Provider (Future)
 

@@ -113,6 +113,13 @@ reads reject requests whose `offset + count` exceeds that byte limit and return
 an explicit status consumed by the loader. The multislot proof includes an
 intentional final-byte overrun and requires the provider to report `BOUNDS`.
 
+`TASK_SPAWN_RESULT` exposes `0` for success, `1` for provider/load failure,
+and `2` when no process slot is free. Failed embedded loads roll the tentative
+state/image allocation back, keep the slot free, and return control to PL/SW;
+the shell reports `ERROR` rather than hanging or halting the kernel. The
+multislot proof injects one read failure, requires `RECOVERED`, then runs both
+Counter children to demonstrate continued scheduler health.
+
 Boot initializes that table and scans its flags rather than naming the shell
 entry directly. To verify metadata-driven `IMAGE_AUTOSTART` dispatch:
 

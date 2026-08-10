@@ -28,6 +28,8 @@ _start:
         sw      r0,6(r2)
         la      r0,_scheduled_clock_descriptor
         sw      r0,9(r2)
+        la      r0,_scheduled_embedded_hello_descriptor
+        sw      r0,12(r2)
 
         ; Endpoint identities belong to process-table slots, including FREE
         ; slots, so process inspection remains stable before first spawn.
@@ -73,6 +75,20 @@ _spawn_resident:
         lw      r0,0(r1)
         la      r2,_load_embedded_process
         jal     r1,(r2)
+        ceq     r0,z
+        brt     _spawn_stack
+        ; No runnable context exists yet, so a failed load can roll the whole
+        ; tentative child allocation back to its generation mark.
+        la      r2,_spawn_arena_mark
+        lw      r0,0(r2)
+        la      r2,_ebr_next
+        sw      r0,0(r2)
+        lc      r0,1
+        la      r2,_spawn_status
+        sw      r0,0(r2)
+        lc      r0,1
+        pop     r1
+        jmp     (r1)
 
         ; Allocate stack_words and fabricate r0/r1/r2/fp saved context.
 _spawn_stack:
@@ -103,6 +119,7 @@ _spawn_stack:
         sw      r1,33(r2)       ; selected PROGRAM_DESC
         lc      r0,1
         sw      r0,24(r2)       ; PROC_RUNNABLE
+        lc      r0,0            ; spawn resident success
         pop     r1
         jmp     (r1)
 
@@ -113,6 +130,9 @@ _TASK_SPAWN:
         push    r2
         push    r1
         mov     fp,sp
+        lc      r0,0
+        la      r2,_spawn_status
+        sw      r0,0(r2)
         la      r2,_child_count
         lbu     r0,0(r2)
         ceq     r0,z
@@ -131,14 +151,19 @@ _spawn_find_slot:
         la      r1,_proc_table_end
         mov     r0,r2
         ceq     r0,r1
-        brt     _spawn_child_done
-        bra     _spawn_find_slot
+        brf     _spawn_find_slot
+        lc      r0,2
+        la      r2,_spawn_status
+        sw      r0,0(r2)
+        bra     _spawn_child_done
 _spawn_slot_found:
         la      r1,_spawn_process
         sw      r2,0(r1)
         lw      r0,9(fp)        ; selected PROGRAM_DESC pointer
         la      r2,_spawn_resident
         jal     r1,(r2)
+        ceq     r0,z
+        brf     _spawn_child_done
         la      r2,_spawn_process
         lw      r2,0(r2)
         la      r1,_proc_b
@@ -160,6 +185,32 @@ _spawn_child_done:
         pop     r1
         pop     r2
         pop     fp
+        jmp     (r1)
+
+; TASK_SPAWN_RESULT(destination): copy the last spawn status (0 success,
+; 1 provider/load failure, 2 no free slot) to PL/SW storage.
+        .globl  _TASK_SPAWN_RESULT
+_TASK_SPAWN_RESULT:
+        push    fp
+        push    r2
+        push    r1
+        mov     fp,sp
+        la      r2,_spawn_status
+        lw      r0,0(r2)
+        lw      r2,9(fp)
+        sw      r0,0(r2)
+        mov     sp,fp
+        pop     r1
+        pop     r2
+        pop     fp
+        jmp     (r1)
+
+; Test-only fault injection consumed by the next memory-provider read.
+        .globl  _TASK_PROVIDER_FAIL_NEXT
+_TASK_PROVIDER_FAIL_NEXT:
+        la      r2,_provider_fail_next
+        lc      r0,1
+        sb      r0,0(r2)
         jmp     (r1)
 
 ; Allocate r0 words downward and return the exclusive stack high address.
@@ -234,6 +285,17 @@ _memory_provider_read:
         lc      r0,0
         la      r2,_provider_status
         sw      r0,0(r2)
+        la      r2,_provider_fail_next
+        lbu     r0,0(r2)
+        ceq     r0,z
+        brt     _memory_provider_check_bounds
+        lc      r0,0
+        sb      r0,0(r2)
+        lc      r0,1
+        la      r2,_provider_status
+        sw      r0,0(r2)
+        bra     _memory_provider_read_done
+_memory_provider_check_bounds:
         la      r2,_provider_offset
         lw      r0,0(r2)
         la      r2,_provider_count
@@ -299,12 +361,16 @@ _read_embedded_field:
         lw      r0,0(r2)
         ceq     r0,z
         brt     _read_embedded_field_ok
-        la      r2,_halt
-        jmp     (r2)
+        lc      r0,1
+        la      r2,_embedded_load_status
+        sw      r0,0(r2)
+        lc      r0,0
+        bra     _read_embedded_field_done
 _read_embedded_field_ok:
         la      r0,_provider_word_buffer
         la      r2,_read_image_word
         jal     r1,(r2)
+_read_embedded_field_done:
         pop     r2
         pop     r1
         jmp     (r1)
@@ -313,6 +379,9 @@ _read_embedded_field_ok:
 ; selected by _spawn_process. Provider generation has validated magic/checksum.
 _load_embedded_process:
         push    r1
+        lc      r1,0
+        la      r2,_embedded_load_status
+        sw      r1,0(r2)
         la      r1,_embedded_descriptor
         sw      r0,0(r1)
         lw      r1,12(r0)
@@ -332,7 +401,7 @@ _load_embedded_process:
         lc      r1,1
         ceq     r0,r1
         brt     _embedded_version_ok
-        la      r2,_halt
+        la      r2,_embedded_load_fail
         jmp     (r2)
 _embedded_version_ok:
         lc      r0,21
@@ -340,7 +409,7 @@ _embedded_version_ok:
         jal     r1,(r2)
         ceq     r0,z
         brt     _embedded_relocations_ok
-        la      r2,_halt
+        la      r2,_embedded_load_fail
         jmp     (r2)
 _embedded_relocations_ok:
 
@@ -364,6 +433,10 @@ _embedded_relocations_ok:
         jal     r1,(r2)
         la      r2,_embedded_entry_words
         sw      r0,0(r2)
+        la      r2,_embedded_load_status
+        lw      r0,0(r2)
+        ceq     r0,z
+        brf     _embedded_load_fail
 
         ; The zeroing allocator reserves text + data + BSS in this process's
         ; reclaimable child generation.
@@ -407,8 +480,7 @@ _embedded_relocations_ok:
         lw      r0,0(r2)
         ceq     r0,z
         brt     _embedded_payload_read_ok
-        la      r2,_halt
-        jmp     (r2)
+        bra     _embedded_load_fail
 _embedded_payload_read_ok:
 
         ; Store allocation base + full 24-bit entry word offset.
@@ -422,6 +494,11 @@ _embedded_payload_read_ok:
         lw      r1,27(r2)
         add     r0,r1
         sw      r0,30(r2)
+        lc      r0,0
+        pop     r1
+        jmp     (r1)
+_embedded_load_fail:
+        lc      r0,1
         pop     r1
         jmp     (r1)
 
@@ -973,6 +1050,8 @@ _provider_limit:
         .zero   3
 _provider_status:
         .zero   3
+_provider_fail_next:
+        .byte   0
 _provider_word_buffer:
         .zero   3
 _embedded_descriptor:
@@ -986,6 +1065,10 @@ _embedded_data_words:
 _embedded_bss_words:
         .zero   3
 _embedded_entry_words:
+        .zero   3
+_embedded_load_status:
+        .zero   3
+_spawn_status:
         .zero   3
 _spawn_arena_mark:
         .zero   3

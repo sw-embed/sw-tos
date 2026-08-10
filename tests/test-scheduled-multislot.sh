@@ -14,6 +14,7 @@ output=$($EMU --load-binary "$OUT_DIR/program.bin@0" --entry 0 \
     | sed '/^Entry point:/d')
 
 expected='SPAWN
+RECOVERED
 BOUNDS
 1 RUNNABLE
 2 RUNNABLE
