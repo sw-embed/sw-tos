@@ -12,6 +12,7 @@ LAUNCHES=20
 
 input=''
 for ((i = 0; i < LAUNCHES; i++)); do
+    input="${input}run embedded-hello\\n"
     input="${input}run counter\\n"
 done
 input="${input}0"
@@ -31,12 +32,15 @@ done
 ready_count=$(echo "$output" | grep -o 'READY' | wc -l | tr -d ' ')
 b1_count=$(echo "$output" | grep -o 'B1' | wc -l | tr -d ' ')
 b2_count=$(echo "$output" | grep -o 'B2' | wc -l | tr -d ' ')
-if [ "$ready_count" -ne "$LAUNCHES" ] || \
+embedded_count=$(echo "$output" | grep -o 'EREADY' | wc -l | tr -d ' ')
+expected_ready=$((LAUNCHES * 2))
+if [ "$ready_count" -ne "$expected_ready" ] || \
         [ "$b1_count" -ne "$LAUNCHES" ] || \
-        [ "$b2_count" -ne "$LAUNCHES" ]; then
-    echo "FAIL: expected $LAUNCHES completed launches; got READY=$ready_count B1=$b1_count B2=$b2_count" >&2
+        [ "$b2_count" -ne "$LAUNCHES" ] || \
+        [ "$embedded_count" -ne "$LAUNCHES" ]; then
+    echo "FAIL: expected $LAUNCHES resident/embedded cycles; got READY=$ready_count E=$embedded_count B1=$b1_count B2=$b2_count" >&2
     echo "$output" >&2
     exit 1
 fi
 
-echo "PASS: $LAUNCHES sequential app exits reclaimed and reused the EBR arena"
+echo "PASS: $LAUNCHES resident/embedded cycles reclaimed the EBR arena"

@@ -96,6 +96,12 @@ copies its validated payload into executable RAM, calls the loaded entry (which
 prints `E`), then returns through `TASK_EXIT`. The image smoke also assembles
 the payload source and proves its bytes match the manifest.
 
+Embedded text/data/BSS is allocated per child from the same reclaimable EBR
+generation as its state and stack. Scheduled dispatch decodes full 24-bit
+header sizes and entry offsets, stores the private allocation and relocated
+entry in that process descriptor, and releases them after the last child exits.
+The reclamation stress now runs 20 resident/embedded cycles.
+
 Boot initializes that table and scans its flags rather than naming the shell
 entry directly. To verify metadata-driven `IMAGE_AUTOSTART` dispatch:
 

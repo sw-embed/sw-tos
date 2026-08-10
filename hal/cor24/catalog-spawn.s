@@ -61,7 +61,21 @@ _spawn_resident:
         lw      r2,0(r2)
         sw      r0,36(r2)       ; PROC_DESC state pointer
 
+        ; Embedded descriptors allocate and load private executable memory
+        ; inside the same child allocation generation as state and stack.
+        la      r1,_spawn_descriptor
+        lw      r0,0(r1)
+        lw      r1,3(r0)
+        lc      r0,1
+        ceq     r0,r1
+        brf     _spawn_stack
+        la      r1,_spawn_descriptor
+        lw      r0,0(r1)
+        la      r2,_load_embedded_process
+        jal     r1,(r2)
+
         ; Allocate stack_words and fabricate r0/r1/r2/fp saved context.
+_spawn_stack:
         la      r2,_spawn_descriptor
         lw      r2,0(r2)
         lw      r0,15(r2)       ; PROGRAM_DESC stack_words
@@ -201,6 +215,157 @@ _state_done:
         pop     r1
         jmp     (r1)
 
+; Load the embedded descriptor in r0 into private arena memory for the process
+; selected by _spawn_process. Provider generation has validated magic/checksum.
+_load_embedded_process:
+        push    r1
+        la      r1,_embedded_descriptor
+        sw      r0,0(r1)
+        lw      r0,9(r0)
+        la      r1,_embedded_image_base
+        sw      r0,0(r1)
+
+        ; Enforce version 1 and its zero-relocation policy on target.
+        add     r0,6
+        la      r2,_read_image_word
+        jal     r1,(r2)
+        lc      r1,1
+        ceq     r0,r1
+        brt     _embedded_version_ok
+        la      r2,_halt
+        jmp     (r2)
+_embedded_version_ok:
+        la      r2,_embedded_image_base
+        lw      r0,0(r2)
+        add     r0,21
+        la      r2,_read_image_word
+        jal     r1,(r2)
+        ceq     r0,z
+        brt     _embedded_relocations_ok
+        la      r2,_halt
+        jmp     (r2)
+_embedded_relocations_ok:
+
+        la      r2,_embedded_image_base
+        lw      r0,0(r2)
+        add     r0,9
+        la      r2,_read_image_word
+        jal     r1,(r2)
+        la      r2,_embedded_text_words
+        sw      r0,0(r2)
+        la      r2,_embedded_image_base
+        lw      r0,0(r2)
+        add     r0,12
+        la      r2,_read_image_word
+        jal     r1,(r2)
+        la      r2,_embedded_data_words
+        sw      r0,0(r2)
+        la      r2,_embedded_image_base
+        lw      r0,0(r2)
+        add     r0,15
+        la      r2,_read_image_word
+        jal     r1,(r2)
+        la      r2,_embedded_bss_words
+        sw      r0,0(r2)
+        la      r2,_embedded_image_base
+        lw      r0,0(r2)
+        add     r0,18
+        la      r2,_read_image_word
+        jal     r1,(r2)
+        la      r2,_embedded_entry_words
+        sw      r0,0(r2)
+
+        ; The zeroing allocator reserves text + data + BSS in this process's
+        ; reclaimable child generation.
+        la      r2,_embedded_text_words
+        lw      r0,0(r2)
+        la      r2,_embedded_data_words
+        lw      r1,0(r2)
+        add     r0,r1
+        la      r2,_embedded_bss_words
+        lw      r1,0(r2)
+        add     r0,r1
+        la      r2,_alloc_state_words
+        jal     r1,(r2)
+        la      r2,_spawn_process
+        lw      r2,0(r2)
+        sw      r0,27(r2)       ; private executable allocation base
+
+        ; Copy text + initialized data; the remaining allocation stays zero.
+        la      r2,_embedded_text_words
+        lw      r1,0(r2)
+        la      r2,_embedded_data_words
+        lw      r2,0(r2)
+        add     r1,r2
+        mov     r2,r1
+        add     r1,r2
+        add     r1,r2
+        push    r1
+        la      r2,_embedded_image_base
+        lw      r2,0(r2)
+        add     r2,27
+_load_embedded_copy:
+        lbu     r1,0(r2)
+        sb      r1,0(r0)
+        add     r2,1
+        add     r0,1
+        pop     r1
+        add     r1,-1
+        push    r1
+        push    r0
+        mov     r0,r1
+        ceq     r0,z
+        pop     r0
+        brf     _load_embedded_copy
+        pop     r1
+
+        ; Store allocation base + full 24-bit entry word offset.
+        la      r2,_embedded_entry_words
+        lw      r0,0(r2)
+        mov     r1,r0
+        add     r0,r1
+        add     r0,r1
+        la      r2,_spawn_process
+        lw      r2,0(r2)
+        lw      r1,27(r2)
+        add     r0,r1
+        sw      r0,30(r2)
+        pop     r1
+        jmp     (r1)
+
+; Decode one most-significant-byte-first 24-bit header word from r0.
+_read_image_word:
+        push    r1
+        push    r2
+        mov     r2,r0
+        lbu     r0,0(r2)
+        lc      r1,2
+        push    r1
+_read_image_word_byte:
+        add     r0,r0
+        add     r0,r0
+        add     r0,r0
+        add     r0,r0
+        add     r0,r0
+        add     r0,r0
+        add     r0,r0
+        add     r0,r0
+        add     r2,1
+        lbu     r1,0(r2)
+        add     r0,r1
+        pop     r1
+        add     r1,-1
+        push    r1
+        push    r0
+        mov     r0,r1
+        ceq     r0,z
+        pop     r0
+        brf     _read_image_word_byte
+        pop     r1
+        pop     r2
+        pop     r1
+        jmp     (r1)
+
 _yield:
         push    r0
         push    r1
@@ -267,38 +432,11 @@ _plsw_clock_trampoline:
         la      r2,_halt
         jmp     (r2)
 
-; Load and call a version 1 embedded entry, then terminate its child process.
-; Provider validation has already checked the header and checksum. This first
-; catalog bridge supports the fixture's compact (<256-word) text/data lengths.
+; Call the per-process loaded entry and terminate its child process.
 _embedded_loader_trampoline:
         la      r2,_current_proc
         lw      r2,0(r2)
-        lw      r2,33(r2)
-        lw      r2,9(r2)        ; descriptor image base
-        lbu     r0,11(r2)       ; text_words low byte
-        lbu     r1,14(r2)       ; data_words low byte
-        add     r0,r1
-        mov     r1,r0
-        add     r0,r1
-        add     r0,r1           ; packed payload bytes
-        push    r0
-        add     r2,27
-        la      r0,_embedded_load_region
-_embedded_copy_loop:
-        lbu     r1,0(r2)
-        sb      r1,0(r0)
-        add     r2,1
-        add     r0,1
-        pop     r1
-        add     r1,-1
-        push    r1
-        push    r0
-        mov     r0,r1
-        ceq     r0,z
-        pop     r0
-        brf     _embedded_copy_loop
-        pop     r1
-        la      r2,_embedded_load_region
+        lw      r2,30(r2)       ; private relocated entry
         jal     r1,(r2)
         la      r2,_TASK_EXIT
         jmp     (r2)
@@ -670,6 +808,18 @@ _zero_remaining:
         .zero   3
 _allocated_base:
         .zero   3
+_embedded_descriptor:
+        .zero   3
+_embedded_image_base:
+        .zero   3
+_embedded_text_words:
+        .zero   3
+_embedded_data_words:
+        .zero   3
+_embedded_bss_words:
+        .zero   3
+_embedded_entry_words:
+        .zero   3
 _spawn_arena_mark:
         .zero   3
 _ebr_next:
@@ -678,8 +828,6 @@ _child_count:
         .byte   0
 _banner:
         .byte   83,80,65,87,78,10,0
-_embedded_load_region:
-        .zero   64
 _state_free:
         .byte   70,82,69,69,0
 _state_runnable:

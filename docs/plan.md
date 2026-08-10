@@ -975,11 +975,15 @@ the first end-to-end image: its assembled position-independent payload matches
 the manifest bytes, `run embedded-hello` finds its generated kind-1 descriptor,
 the scheduler preserves that descriptor in the process slot, and an embedded
 trampoline copies and calls the entry before `TASK_EXIT` returns to the menu.
-Compatibility lookup deliberately ignores nonresident entries. The scheduled
-bridge currently uses one static 64-byte executable region and compact
-single-byte text/data counts; the general loader proof handles full 24-bit
-fields. Next: allocate executable memory per spawned image and reuse the full
-loader path in the scheduled bridge before beginning the SPI provider.
+Compatibility lookup deliberately ignores nonresident entries. Scheduled spawn
+now decodes full 24-bit text/data/BSS sizes and entry offsets, allocates private
+executable memory inside the child's reclaimable EBR generation, copies the
+payload, preserves zeroed BSS, and records both allocation base and relocated
+entry in the process descriptor. The reclaim stress executes 20 embedded and
+20 resident children to prove all three allocation types are reusable. Provider
+generation still validates the payload checksum before embedding it. Next:
+replace the build-time embedded-byte append with an image-provider interface,
+then implement the first memory-backed provider used by both lookup and load.
 
 ### Milestone 7 -- SPI Image Provider (Future)
 
