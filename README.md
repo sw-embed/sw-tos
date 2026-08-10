@@ -120,6 +120,12 @@ the shell reports `ERROR` rather than hanging or halting the kernel. The
 multislot proof injects one read failure, requires `RECOVERED`, then runs both
 Counter children to demonstrate continued scheduler health.
 
+A second provider adapts the same interface to eight-byte block reads. Image
+assembly is padded to a complete host-backed block without changing its logical
+descriptor length. `just scheduled-block-provider-smoke` switches providers,
+loads `embedded-hello` across block boundaries, requires `EBLOCK`, then restores
+the default memory provider.
+
 Boot initializes that table and scans its flags rather than naming the shell
 entry directly. To verify metadata-driven `IMAGE_AUTOSTART` dispatch:
 

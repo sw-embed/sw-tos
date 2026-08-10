@@ -16,6 +16,7 @@ output=$($EMU --load-binary "$OUT_DIR/program.bin@0" --entry 0 \
 expected='SPAWN
 RECOVERED
 BOUNDS
+EBLOCK
 1 RUNNABLE
 2 RUNNABLE
 3 RUNNABLE

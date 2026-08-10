@@ -213,6 +213,43 @@ _TASK_PROVIDER_FAIL_NEXT:
         sb      r0,0(r2)
         jmp     (r1)
 
+        .globl  _TASK_USE_BLOCK_PROVIDER
+_TASK_USE_BLOCK_PROVIDER:
+        la      r2,_active_image_provider
+        la      r0,_block_image_provider
+        sw      r0,0(r2)
+        la      r2,_block_fetch_count
+        lc      r0,0
+        sw      r0,0(r2)
+        jmp     (r1)
+
+; Require at least one host-backed block fetch, report it, and restore the
+; default memory provider for subsequent tests and interactive commands.
+        .globl  _TASK_BLOCK_PROVIDER_VERIFY
+_TASK_BLOCK_PROVIDER_VERIFY:
+        push    fp
+        push    r2
+        push    r1
+        mov     fp,sp
+        la      r2,_block_fetch_count
+        lw      r0,0(r2)
+        ceq     r0,z
+        brf     _block_provider_verified
+        la      r2,_halt
+        jmp     (r2)
+_block_provider_verified:
+        la      r2,_active_image_provider
+        la      r0,_memory_image_provider
+        sw      r0,0(r2)
+        la      r0,_block_provider_message
+        la      r2,_puts
+        jal     r1,(r2)
+        mov     sp,fp
+        pop     r1
+        pop     r2
+        pop     fp
+        jmp     (r1)
+
 ; Allocate r0 words downward and return the exclusive stack high address.
 _alloc_stack_words:
         push    r1
@@ -335,6 +372,104 @@ _memory_provider_read_loop:
         pop     r0
         brf     _memory_provider_read_loop
 _memory_provider_read_done:
+        pop     r2
+        pop     r1
+        jmp     (r1)
+
+; Eight-byte block adapter backed by the generated, block-padded image bytes.
+; It deliberately refills a block for each requested byte in this first proof;
+; a physical SPI provider can retain the same contract and add caching later.
+_block_provider_read:
+        push    r1
+        push    r2
+        lc      r0,0
+        la      r2,_provider_status
+        sw      r0,0(r2)
+        la      r2,_provider_offset
+        lw      r0,0(r2)
+        la      r2,_provider_count
+        lw      r1,0(r2)
+        add     r0,r1
+        la      r2,_provider_limit
+        lw      r1,0(r2)
+        ceq     r0,r1
+        brt     _block_provider_in_bounds
+        cls     r0,r1
+        brt     _block_provider_in_bounds
+        lc      r0,1
+        la      r2,_provider_status
+        sw      r0,0(r2)
+        la      r2,_block_provider_done
+        jmp     (r2)
+_block_provider_in_bounds:
+        la      r2,_provider_offset
+        lw      r0,0(r2)
+        la      r2,_block_cursor
+        sw      r0,0(r2)
+        la      r2,_provider_count
+        lw      r0,0(r2)
+        la      r2,_block_remaining
+        sw      r0,0(r2)
+_block_provider_next_byte:
+        ; Divide cursor into an eight-byte block base and within-block offset.
+        la      r2,_block_cursor
+        lw      r0,0(r2)
+        lc      r1,0
+_block_provider_divide:
+        lc      r2,8
+        cls     r0,r2
+        brt     _block_provider_fetch
+        sub     r0,r2
+        add     r1,8
+        bra     _block_provider_divide
+_block_provider_fetch:
+        la      r2,_block_within
+        sw      r0,0(r2)
+        la      r2,_provider_image
+        lw      r0,0(r2)
+        add     r0,r1
+        la      r2,_block_buffer
+        lc      r1,8
+_block_provider_fill:
+        push    r0
+        lbu     r0,0(r0)
+        sb      r0,0(r2)
+        pop     r0
+        add     r0,1
+        add     r2,1
+        add     r1,-1
+        push    r0
+        mov     r0,r1
+        ceq     r0,z
+        pop     r0
+        brf     _block_provider_fill
+        la      r2,_block_fetch_count
+        lw      r0,0(r2)
+        add     r0,1
+        sw      r0,0(r2)
+
+        la      r2,_block_within
+        lw      r1,0(r2)
+        la      r0,_block_buffer
+        add     r0,r1
+        lbu     r0,0(r0)
+        la      r2,_provider_destination
+        lw      r2,0(r2)
+        sb      r0,0(r2)
+        add     r2,1
+        la      r1,_provider_destination
+        sw      r2,0(r1)
+        la      r2,_block_cursor
+        lw      r0,0(r2)
+        add     r0,1
+        sw      r0,0(r2)
+        la      r2,_block_remaining
+        lw      r0,0(r2)
+        add     r0,-1
+        sw      r0,0(r2)
+        ceq     r0,z
+        brf     _block_provider_next_byte
+_block_provider_done:
         pop     r2
         pop     r1
         jmp     (r1)
@@ -1038,6 +1173,9 @@ _active_image_provider:
 _memory_image_provider:
         .word   _memory_provider_find
         .word   _memory_provider_read
+_block_image_provider:
+        .word   _memory_provider_find
+        .word   _block_provider_read
 _provider_image:
         .zero   3
 _provider_offset:
@@ -1052,6 +1190,16 @@ _provider_status:
         .zero   3
 _provider_fail_next:
         .byte   0
+_block_cursor:
+        .zero   3
+_block_remaining:
+        .zero   3
+_block_within:
+        .zero   3
+_block_fetch_count:
+        .zero   3
+_block_buffer:
+        .zero   8
 _provider_word_buffer:
         .zero   3
 _embedded_descriptor:
@@ -1086,3 +1234,5 @@ _state_unknown:
         .byte   85,78,75,78,79,87,78,0
 _provider_bounds_message:
         .byte   66,79,85,78,68,83,10,0
+_block_provider_message:
+        .byte   66,76,79,67,75,10,0

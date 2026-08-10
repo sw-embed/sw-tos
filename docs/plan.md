@@ -997,8 +997,17 @@ generation arena mark before any child becomes runnable, and the PL/SW shell
 prints `ERROR` without entering `TASK_JOIN`. Fault injection forces the next
 provider read to fail; the multislot proof requires `RECOVERED` and then
 successfully runs both Counter children, demonstrating rollback and continued
-scheduler operation. Next: define the provider's block-read adapter and a
-host-backed SPI/block fixture before implementing physical SPI HAL transfers.
+scheduler operation. A host-backed eight-byte block adapter now implements the same provider record.
+Generated assembly pads backing storage to a block boundary while descriptors
+retain the logical image length used for bounds checks. The adapter decomposes
+arbitrary offset/count reads into block fetches; the multislot proof switches
+providers, loads and executes `embedded-hello` across boundaries, requires
+`EBLOCK`, restores the memory provider, and continues scheduling. No SPI MMIO
+register/transaction contract is defined in the repository, so physical SPI HAL
+work is not yet implementable without that hardware specification. Next: put a
+catalog index into the host-backed block fixture and implement provider `find`
+from block reads, completing the storage-side behavior independently of the
+eventual SPI transport.
 
 ### Milestone 7 -- SPI Image Provider (Future)
 
@@ -1082,6 +1091,7 @@ The name in `FILE:` must match the `%INCLUDE` name (without .msw).
 | `just scheduled-catalog-smoke` | Verify scheduled `ls` and `run <name>` commands |
 | `just scheduled-reclaim-smoke` | Stress repeated app stack/state reclamation |
 | `just scheduled-multislot-smoke` | Schedule two concurrent private-state children |
+| `just scheduled-block-provider-smoke` | Load an image through host-backed block reads |
 | `just scheduled-shell-interactive` | Run the scheduler-integrated shell proof |
 | `just plsw-compile <[.msw ...] file.plsw>` | Compile any .plsw  |
 | `just plsw-run <[.msw ...] file.plsw>` | Compile and run any .plsw |

@@ -83,6 +83,9 @@ scheduled-reclaim-smoke:
 scheduled-multislot-smoke:
     ./tests/test-scheduled-multislot.sh
 
+# Verify host-backed eight-byte block reads through the image-provider ABI
+scheduled-block-provider-smoke: scheduled-multislot-smoke
+
 # Build the scheduler-integrated PL/SW shell image
 scheduled-shell-build:
     ./scripts/catalog-spawn-link.sh tests/catalog-shell.plsw scheduled-shell
