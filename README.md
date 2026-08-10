@@ -79,8 +79,15 @@ loader fixture and exercise corruption rejection with:
 just cor24-image-smoke
 ```
 
-This currently validates the provider artifact; runtime loading is the next
-Milestone 6 step.
+The COR24-side version 1 loader now parses that header, copies text/data into
+RAM, clears BSS, and computes the relocated entry address. Verify the target
+loader independently with:
+
+```
+just cor24-loader-smoke
+```
+
+Loaded-entry execution and catalog dispatch remain the next Milestone 6 step.
 
 Boot initializes that table and scans its flags rather than naming the shell
 entry directly. To verify metadata-driven `IMAGE_AUTOSTART` dispatch:

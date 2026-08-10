@@ -518,7 +518,17 @@ Text words followed by data words form the packed three-byte-word payload.
 bounds, format version, relocation policy, and checksum. The first deterministic
 manifest is `catalog/images/loader-smoke.toml`; `just cor24-image-smoke` builds
 it and proves rejection of corrupt magic, payload, and length. This establishes
-the provider-facing artifact but does not yet load or execute it.
+the provider-facing artifact consumed by the target loader below.
+
+`hal/cor24/image-loader.s` is the first target-side loader. The image builder
+emits the validated manifest as assembly bytes, then the COR24 loader checks
+magic, version, and the version 1 zero-relocation rule; decodes big-endian
+24-bit fields; copies packed text/data to a RAM allocation; clears BSS that was
+pre-filled with a nonzero pattern; and returns `load_base + entry_offset * 3`.
+`just cor24-loader-smoke` verifies the parsed `T2 D1 B2 E0` metadata, copied
+payload, cleared BSS, and relocated entry in the emulator. Payload checksum
+validation remains at the provider/build boundary for version 1; a future SPI
+provider must validate before handing bytes to this loader.
 
 Two image providers coexist:
 
@@ -955,13 +965,14 @@ for the first Milestone 6 image blob.
 ### Milestone 6 -- Embedded Executable Blobs
 
 - [x] COR24 executable format (magic, version, text/data/bss sizes, entry)
-- [ ] Loader: allocate RAM, copy text/data, clear BSS, apply relocations
+- [x] Version 1 loader: allocate RAM, copy text/data, clear BSS, reject relocations
 - [ ] Same `run` command works for both resident and embedded programs
 
-**Status:** The versioned header, deterministic builder, strict validator, and
-corruption coverage are complete. Version 1 deliberately requires zero
-relocations. Next: add an in-memory loader proof that copies text/data to an
-allocated region, clears BSS, and returns the relocated entry address.
+**Status:** The versioned header, deterministic builder, strict validator,
+corruption coverage, and target-side in-memory loader are complete. Version 1
+deliberately requires zero relocations. Next: make the fixture contain an
+executable loaded entry, transfer control to it, and route an embedded catalog
+descriptor through the same `run <name>` shell command as resident programs.
 
 ### Milestone 7 -- SPI Image Provider (Future)
 
@@ -1036,6 +1047,7 @@ The name in `FILE:` must match the `%INCLUDE` name (without .msw).
 | `just clock-smoke` | Verify the heartbeat-driven PL/SW Clock menu app |
 | `just catalog-smoke` | Validate, generate, and compile the resident catalog |
 | `just cor24-image-smoke` | Build and corruption-test a versioned COR24 image |
+| `just cor24-loader-smoke` | Copy a C24IMG payload, clear BSS, and relocate entry |
 | `just autostart-smoke` | Verify metadata-driven shell service startup |
 | `just catalog-run-smoke` | Verify shell catalog lookup and program dispatch |
 | `just catalog-list-smoke` | Verify shell enumeration of catalog descriptors |

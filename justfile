@@ -43,6 +43,10 @@ catalog-smoke: plsw-system
 cor24-image-smoke:
     ./tests/test-cor24-image.sh
 
+# Load the versioned image into COR24 RAM and verify copy/BSS/entry behavior
+cor24-loader-smoke:
+    ./tests/test-cor24-loader.sh
+
 # Compile and run PL/SW system image (menu + apps)
 plsw-system: catalog-generate
     {{PIPELINE}} include/swtos.msw include/menu.msw include/hello_app.msw include/counter_app.msw include/clock_app.msw include/catalog_generated.msw include/catalog.msw system.plsw
