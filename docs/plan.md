@@ -1008,8 +1008,8 @@ work is not yet implementable without that hardware specification.
 
 The generated block fixture now begins with a catalog index: an eight-byte
 header containing the entry count followed by fixed 24-byte records with a
-16-byte NUL-terminated name, one-byte descriptor ordinal, and seven bytes of
-padding. The block provider's `find` callback reads and compares those records
+16-byte NUL-terminated name, one-byte descriptor ordinal, and seven reserved
+bytes. The block provider's `find` callback reads and compares those records
 through its block adapter, rejects service descriptors, and resolves a matching
 ordinal into the generated runtime descriptor table. The provider-switch proof
 looks up `embedded-hello` through this index before reading and executing its
@@ -1017,6 +1017,14 @@ image. Thus host-backed `find` and `read` now cover the complete storage-provide
 behavior independently of transport. Physical SPI remains blocked on the
 missing COR24 SPI register map, chip-select behavior, and transaction timing
 contract; the next actionable step requires that hardware specification.
+
+The host-side storage builder now packs a compatible index and all nonresident
+C24IMG payloads into a deterministic eight-byte-block media file. It assigns
+the seven reserved bytes to a 24-bit block-aligned offset, 24-bit logical
+length, and flags, validates every embedded checksum,
+and rejects corrupt extents and payloads. `just cor24-storage-smoke` produces
+`build/catalog-images/swtos-storage.bin`, which can be attached to the
+emulator's W25Q32 model once the guest SPI controller contract is available.
 
 ### Milestone 7 -- SPI Image Provider (Future)
 

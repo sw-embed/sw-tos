@@ -128,9 +128,17 @@ the default memory provider.
 
 The block provider also implements `find` without walking the resident table.
 Catalog generation emits an eight-byte header followed by 24-byte records: a
-16-byte NUL-terminated name, descriptor ordinal, and padding. Block-backed
+16-byte NUL-terminated name, descriptor ordinal, and seven reserved bytes.
+Block-backed
 lookup reads those records, resolves the ordinal into the generated descriptor
 table, and then loads the selected image through block reads.
+
+`just cor24-storage-smoke` builds and validates `build/catalog-images/swtos-storage.bin`,
+a deterministic eight-byte-block media image suitable for the emulator's
+host-file-backed flash device. Resident entries have zero extents; embedded
+entries use the seven reserved record bytes for a three-byte image offset,
+three-byte logical image length, and flags, and point to block-aligned,
+checksum-validated C24IMG payloads.
 
 Boot initializes that table and scans its flags rather than naming the shell
 entry directly. To verify metadata-driven `IMAGE_AUTOSTART` dispatch:

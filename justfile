@@ -43,6 +43,10 @@ catalog-smoke: plsw-system
 cor24-image-smoke:
     ./tests/test-cor24-image.sh
 
+# Pack the catalog and executable blobs into a flash-ready block image
+cor24-storage-smoke:
+    ./tests/test-cor24-storage.sh
+
 # Load the versioned image into COR24 RAM and verify copy/BSS/entry behavior
 cor24-loader-smoke:
     ./tests/test-cor24-loader.sh
