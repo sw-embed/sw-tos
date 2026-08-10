@@ -102,6 +102,12 @@ header sizes and entry offsets, stores the private allocation and relocated
 entry in that process descriptor, and releases them after the last child exits.
 The reclamation stress now runs 20 resident/embedded cycles.
 
+Catalog lookup and embedded loading now share an explicit two-operation image
+provider record. The in-memory provider implements `find` over the generated
+descriptor table and `read` over embedded image bytes; shell lookup and loader
+header/payload reads dispatch through those callbacks. This is the same seam a
+future block or SPI-backed provider will implement.
+
 Boot initializes that table and scans its flags rather than naming the shell
 entry directly. To verify metadata-driven `IMAGE_AUTOSTART` dispatch:
 

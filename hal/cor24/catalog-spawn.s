@@ -215,6 +215,73 @@ _state_done:
         pop     r1
         jmp     (r1)
 
+; Provider read request is staged in kernel scratch so the same two-word
+; provider record can later point at a block/SPI implementation.
+_image_provider_read:
+        push    r1
+        push    r2
+        la      r2,_active_image_provider
+        lw      r2,0(r2)
+        lw      r2,3(r2)       ; IMAGE_PROVIDER read
+        jal     r1,(r2)
+        pop     r2
+        pop     r1
+        jmp     (r1)
+
+_memory_provider_read:
+        push    r1
+        push    r2
+        la      r2,_provider_image
+        lw      r0,0(r2)
+        la      r2,_provider_offset
+        lw      r1,0(r2)
+        add     r0,r1
+        la      r2,_provider_destination
+        lw      r2,0(r2)
+        la      r1,_provider_count
+        lw      r1,0(r1)
+_memory_provider_read_loop:
+        push    r0
+        lbu     r0,0(r0)
+        sb      r0,0(r2)
+        pop     r0
+        add     r0,1
+        add     r2,1
+        add     r1,-1
+        push    r0
+        mov     r0,r1
+        ceq     r0,z
+        pop     r0
+        brf     _memory_provider_read_loop
+        pop     r2
+        pop     r1
+        jmp     (r1)
+
+; Read the big-endian header word at byte offset r0 through the active provider.
+_read_embedded_field:
+        push    r1
+        push    r2
+        la      r2,_provider_offset
+        sw      r0,0(r2)
+        la      r2,_embedded_image_base
+        lw      r0,0(r2)
+        la      r2,_provider_image
+        sw      r0,0(r2)
+        la      r0,_provider_word_buffer
+        la      r2,_provider_destination
+        sw      r0,0(r2)
+        lc      r0,3
+        la      r2,_provider_count
+        sw      r0,0(r2)
+        la      r2,_image_provider_read
+        jal     r1,(r2)
+        la      r0,_provider_word_buffer
+        la      r2,_read_image_word
+        jal     r1,(r2)
+        pop     r2
+        pop     r1
+        jmp     (r1)
+
 ; Load the embedded descriptor in r0 into private arena memory for the process
 ; selected by _spawn_process. Provider generation has validated magic/checksum.
 _load_embedded_process:
@@ -226,8 +293,8 @@ _load_embedded_process:
         sw      r0,0(r1)
 
         ; Enforce version 1 and its zero-relocation policy on target.
-        add     r0,6
-        la      r2,_read_image_word
+        lc      r0,6
+        la      r2,_read_embedded_field
         jal     r1,(r2)
         lc      r1,1
         ceq     r0,r1
@@ -235,10 +302,8 @@ _load_embedded_process:
         la      r2,_halt
         jmp     (r2)
 _embedded_version_ok:
-        la      r2,_embedded_image_base
-        lw      r0,0(r2)
-        add     r0,21
-        la      r2,_read_image_word
+        lc      r0,21
+        la      r2,_read_embedded_field
         jal     r1,(r2)
         ceq     r0,z
         brt     _embedded_relocations_ok
@@ -246,31 +311,23 @@ _embedded_version_ok:
         jmp     (r2)
 _embedded_relocations_ok:
 
-        la      r2,_embedded_image_base
-        lw      r0,0(r2)
-        add     r0,9
-        la      r2,_read_image_word
+        lc      r0,9
+        la      r2,_read_embedded_field
         jal     r1,(r2)
         la      r2,_embedded_text_words
         sw      r0,0(r2)
-        la      r2,_embedded_image_base
-        lw      r0,0(r2)
-        add     r0,12
-        la      r2,_read_image_word
+        lc      r0,12
+        la      r2,_read_embedded_field
         jal     r1,(r2)
         la      r2,_embedded_data_words
         sw      r0,0(r2)
-        la      r2,_embedded_image_base
-        lw      r0,0(r2)
-        add     r0,15
-        la      r2,_read_image_word
+        lc      r0,15
+        la      r2,_read_embedded_field
         jal     r1,(r2)
         la      r2,_embedded_bss_words
         sw      r0,0(r2)
-        la      r2,_embedded_image_base
-        lw      r0,0(r2)
-        add     r0,18
-        la      r2,_read_image_word
+        lc      r0,18
+        la      r2,_read_embedded_field
         jal     r1,(r2)
         la      r2,_embedded_entry_words
         sw      r0,0(r2)
@@ -300,24 +357,19 @@ _embedded_relocations_ok:
         mov     r2,r1
         add     r1,r2
         add     r1,r2
-        push    r1
+        la      r2,_provider_count
+        sw      r1,0(r2)
         la      r2,_embedded_image_base
-        lw      r2,0(r2)
-        add     r2,27
-_load_embedded_copy:
-        lbu     r1,0(r2)
-        sb      r1,0(r0)
-        add     r2,1
-        add     r0,1
-        pop     r1
-        add     r1,-1
-        push    r1
-        push    r0
-        mov     r0,r1
-        ceq     r0,z
-        pop     r0
-        brf     _load_embedded_copy
-        pop     r1
+        lw      r1,0(r2)
+        la      r2,_provider_image
+        sw      r1,0(r2)
+        lc      r1,27
+        la      r2,_provider_offset
+        sw      r1,0(r2)
+        la      r2,_provider_destination
+        sw      r0,0(r2)
+        la      r2,_image_provider_read
+        jal     r1,(r2)
 
         ; Store allocation base + full 24-bit entry word offset.
         la      r2,_embedded_entry_words
@@ -568,6 +620,19 @@ _TASK_CATALOG_FIND:
         push    r2
         push    r1
         mov     fp,sp
+        la      r2,_active_image_provider
+        lw      r2,0(r2)
+        lw      r2,0(r2)       ; IMAGE_PROVIDER find
+        jal     r1,(r2)
+        mov     sp,fp
+        pop     r1
+        pop     r2
+        pop     fp
+        jmp     (r1)
+
+; Memory provider find uses the caller's PL/SW frame arguments.
+_memory_provider_find:
+        push    r1
         lw      r2,12(fp)
         lc      r0,0
         sw      r0,0(r2)
@@ -614,10 +679,7 @@ _task_catalog_find_advance:
         add     r2,3
         bra     _task_catalog_find_next
 _task_catalog_find_done:
-        mov     sp,fp
         pop     r1
-        pop     r2
-        pop     fp
         jmp     (r1)
 
 ; TASK_JOIN(): cooperate until the spawned process exits. TASK_EXIT restores
@@ -807,6 +869,21 @@ _spawn_process:
 _zero_remaining:
         .zero   3
 _allocated_base:
+        .zero   3
+_active_image_provider:
+        .word   _memory_image_provider
+_memory_image_provider:
+        .word   _memory_provider_find
+        .word   _memory_provider_read
+_provider_image:
+        .zero   3
+_provider_offset:
+        .zero   3
+_provider_destination:
+        .zero   3
+_provider_count:
+        .zero   3
+_provider_word_buffer:
         .zero   3
 _embedded_descriptor:
         .zero   3

@@ -981,9 +981,14 @@ executable memory inside the child's reclaimable EBR generation, copies the
 payload, preserves zeroed BSS, and records both allocation base and relocated
 entry in the process descriptor. The reclaim stress executes 20 embedded and
 20 resident children to prove all three allocation types are reusable. Provider
-generation still validates the payload checksum before embedding it. Next:
-replace the build-time embedded-byte append with an image-provider interface,
-then implement the first memory-backed provider used by both lookup and load.
+generation still validates the payload checksum before embedding it. A
+two-word `find`/`read` image-provider callback record is now active. The
+scheduled `TASK_CATALOG_FIND` service delegates name lookup to the active
+memory provider, and the loader obtains every header word and the complete
+payload through the same provider's offset/count read operation. The loader no
+longer advances pointers through backing image storage directly. Next: add
+provider bounds/status returns and propagate read failure through spawn before
+introducing the block/SPI provider.
 
 ### Milestone 7 -- SPI Image Provider (Future)
 
