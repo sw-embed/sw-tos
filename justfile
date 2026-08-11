@@ -173,6 +173,9 @@ interrupt-context-capability-smoke:
 i2c-ds1307-smoke:
     ./tests/test-i2c-ds1307.sh
 
+# Render the DS1307 time as 5x8 glyphs on the emulated SSD1306
+i2c-oled-clock-smoke: i2c-ds1307-smoke
+
 # Verify menu Clock app heartbeat logging and return to menu
 clock-smoke: plsw-system
     python3 tests/test-terminal-input.py

@@ -1120,7 +1120,7 @@ process and keeps descriptor lifetime independent of arena reclamation.
 
 - [x] Reusable COR24 I2C bit-bang primitives
 - [x] PL/SW-callable DS1307 time read with ACK/NAK error reporting
-- [ ] SSD1306 display client
+- [x] SSD1306 display client rendering DS1307 time
 - [ ] SD-card block provider
 
 `just i2c-ds1307-smoke` configures the Rust emulator's DS1307 for 12:34:56,
@@ -1128,6 +1128,11 @@ runs a PL/SW client through the scheduled kernel, and requires the complete
 START/address-write/register/repeated-START/address-read/three-byte/STOP log.
 The last read is explicitly NAKed so the slave releases SDA. A second run with
 no attached device proves the address NAK reaches PL/SW as an error.
+The same PL/SW client passes those BCD bytes to the SSD1306 service, which
+initializes horizontal addressing and renders `HH:MM:SS` as forty column-major
+5x8 glyph bytes. Emulator acceptance counts all 56 OLED command/control/data
+writes, checks representative glyph columns, and proves an absent display
+returns an address NAK and `OLED ERROR`.
 
 ---
 
@@ -1195,6 +1200,7 @@ The name in `FILE:` must match the `%INCLUDE` name (without .msw).
 | `just heartbeat-smoke` | Verify UART framing and 24-bit clock wraparound |
 | `just interrupt-context-capability-smoke` | Verify the current ISA cannot save or restore `ir` |
 | `just i2c-ds1307-smoke` | Read an emulated DS1307 RTC from PL/SW and verify its bus log |
+| `just i2c-oled-clock-smoke` | Render emulated DS1307 time on an SSD1306 from PL/SW |
 | `just clock-smoke` | Verify the heartbeat-driven PL/SW Clock menu app |
 | `just catalog-smoke` | Validate, generate, and compile the resident catalog |
 | `just cor24-image-smoke` | Build and corruption-test a versioned COR24 image |

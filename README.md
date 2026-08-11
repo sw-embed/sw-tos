@@ -374,6 +374,10 @@ START, reads BCD seconds/minutes/hours, NAKs the final byte, and issues STOP.
 `just i2c-ds1307-smoke` runs a PL/SW client against the Rust emulator's
 `ds1307@0x68` device, requires `12:34:56`, checks every logged bus event, and
 also verifies that an absent device returns the NAK error path.
+The same proof attaches `ssd1306@0x3C`, initializes horizontal addressing, and
+renders that time as eight 5x8 glyphs. `just i2c-oled-clock-smoke` verifies the
+complete 56-write OLED command/data sequence, representative framebuffer
+columns, and the missing-display NAK path.
 
 ## License
 
