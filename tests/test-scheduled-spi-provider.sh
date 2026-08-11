@@ -71,3 +71,28 @@ for corruption in magic entry size; do
 done
 
 echo "PASS: target rejected corrupt C24IMG magic, entry, and size metadata"
+
+# Programs precede services in generated media, so embedded-hello is record 3:
+# record 80..103, with ordinal, offset, length, and flags at bytes 96..103.
+for corruption in ordinal alignment length flags bounds; do
+    bad_media="$OUT_DIR/corrupt-extent-$corruption.bin"
+    cp "$MEDIA" "$bad_media"
+    case "$corruption" in
+        ordinal) printf '\004' | dd of="$bad_media" bs=1 seek=96 conv=notrunc 2>/dev/null ;;
+        alignment) printf '\201' | dd of="$bad_media" bs=1 seek=99 conv=notrunc 2>/dev/null ;;
+        length) printf '\000\000\045' | dd of="$bad_media" bs=1 seek=100 conv=notrunc 2>/dev/null ;;
+        flags) printf '\000' | dd of="$bad_media" bs=1 seek=103 conv=notrunc 2>/dev/null ;;
+        bounds) printf '\077\377\370' | dd of="$bad_media" bs=1 seek=97 conv=notrunc 2>/dev/null ;;
+    esac
+    bad_output=$("$ROOT_DIR/tools/bin/cor24-emu" \
+        --lgo "$OUT_DIR/seed.lgo" --load-binary "$OUT_DIR/program.bin@0" --entry 0 \
+        --spi-device "w25q32@cs=3?file=$bad_media" \
+        --speed 0 -n 3000000 --quiet 2>/dev/null | sed '/^Entry point:/d')
+    if [ "$bad_output" != 'SPAWN' ]; then
+        echo "FAIL: corrupt SPI catalog $corruption extent was accepted" >&2
+        echo "$bad_output" >&2
+        exit 1
+    fi
+done
+
+echo "PASS: target rejected corrupt SPI catalog ordinal, flags, and extents"

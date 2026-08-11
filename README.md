@@ -165,6 +165,9 @@ Before allocation, the loader also reads and verifies the six-byte `C24IMG`
 magic, requires a nonzero text segment and an entry offset within it, rejects
 24-bit overflow while combining text/data/BSS sizes, and requires the computed
 stored payload length to equal the descriptor extent.
+SPI catalog lookup validates the complete eight-byte record tail before copying
+a runtime descriptor: ordinal, image-present flag, block alignment, logical
+length, non-wrapping end address, and the four-megabyte W25Q32 capacity bound.
 
 The SPI-enabled interactive shell uses a composite provider: resident programs
 are resolved without touching the bus, and nonresident names fall through to

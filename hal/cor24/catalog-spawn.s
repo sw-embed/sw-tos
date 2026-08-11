@@ -732,6 +732,9 @@ _block_find_catalog_limit:
         lc      r0,8
         la      r2,_block_find_offset
         sw      r0,0(r2)
+        lc      r0,0
+        la      r2,_block_find_ordinal
+        sb      r0,0(r2)
         la      r0,_scheduled_catalog_table
         la      r2,_block_find_table
         sw      r0,0(r2)
@@ -773,13 +776,18 @@ _block_provider_find_mismatch:
         lw      r0,0(r2)
         add     r0,3
         sw      r0,0(r2)
+        la      r2,_block_find_ordinal
+        lbu     r0,0(r2)
+        add     r0,1
+        sb      r0,0(r2)
         la      r2,_block_find_remaining
         lw      r0,0(r2)
         add     r0,-1
         sw      r0,0(r2)
         ceq     r0,z
         brf     _block_provider_find_next
-        bra     _block_provider_find_done
+        la      r2,_block_provider_find_done
+        jmp     (r2)
 _block_provider_find_match:
         la      r2,_block_find_table
         lw      r2,0(r2)
@@ -790,14 +798,119 @@ _block_provider_find_match:
         lc      r2,2
         ceq     r0,r2
         pop     r0
-        brt     _block_provider_find_done
+        brf     _block_find_not_service
+        la      r2,_block_provider_find_done
+        jmp     (r2)
+_block_find_not_service:
         la      r2,_spi_provider_active
         lbu     r1,0(r2)
         ceq     r1,z
-        brt     _block_provider_find_store
-        ; Copy the generated descriptor, then replace its in-memory image
-        ; pointer with the 24-bit media extent from this catalog record.
+        brf     _block_find_spi_extent
+        la      r2,_block_provider_find_store
+        jmp     (r2)
+_block_find_spi_extent:
+        la      r2,_spi_source_descriptor
+        sw      r0,0(r2)
+        ; Read ordinal, offset, length, and flags as one complete record tail.
+        la      r2,_block_find_offset
+        lw      r0,0(r2)
+        add     r0,16
+        la      r2,_provider_offset
+        sw      r0,0(r2)
+        lc      r0,8
+        la      r2,_provider_count
+        sw      r0,0(r2)
+        la      r0,_spi_extent_buffer
+        la      r2,_provider_destination
+        sw      r0,0(r2)
+        la      r2,_image_provider_read
+        jal     r1,(r2)
+        la      r2,_provider_status
+        lw      r0,0(r2)
+        ceq     r0,z
+        brt     _spi_extent_status_ok
+        la      r2,_block_provider_find_done
+        jmp     (r2)
+_spi_extent_status_ok:
+        ; Ordinal must agree with the runtime descriptor-table position.
+        la      r2,_spi_extent_buffer
+        lbu     r0,0(r2)
+        la      r2,_block_find_ordinal
+        lbu     r1,0(r2)
+        ceq     r0,r1
+        brt     _spi_extent_ordinal_ok
+        la      r2,_block_provider_find_done
+        jmp     (r2)
+_spi_extent_ordinal_ok:
+        ; Only records explicitly marked as carrying an image are loadable.
+        la      r2,_spi_extent_buffer
+        lbu     r0,7(r2)
+        lc      r1,1
+        ceq     r0,r1
+        brt     _spi_extent_flags_ok
+        la      r2,_block_provider_find_done
+        jmp     (r2)
+_spi_extent_flags_ok:
+        la      r0,_spi_extent_buffer
+        add     r0,1
+        la      r2,_read_image_word
+        jal     r1,(r2)
+        la      r2,_spi_extent_offset
+        sw      r0,0(r2)
+        ; Image offset is block aligned and follows the 128-byte catalog.
         mov     r1,r0
+        lc      r2,7
+        and     r0,r2
+        ceq     r0,z
+        brt     _spi_extent_alignment_ok
+        la      r2,_block_provider_find_done
+        jmp     (r2)
+_spi_extent_alignment_ok:
+        lcu     r2,128
+        clu     r1,r2
+        brf     _spi_extent_minimum_ok
+        la      r2,_block_provider_find_done
+        jmp     (r2)
+_spi_extent_minimum_ok:
+        la      r0,_spi_extent_buffer
+        add     r0,4
+        la      r2,_read_image_word
+        jal     r1,(r2)
+        la      r2,_spi_extent_length
+        sw      r0,0(r2)
+        ; Logical byte length must equal descriptor image_words * 3.
+        la      r2,_spi_source_descriptor
+        lw      r2,0(r2)
+        lw      r1,12(r2)
+        mov     r2,r1
+        add     r1,r2
+        add     r1,r2
+        ceq     r0,r1
+        brt     _spi_extent_length_ok
+        la      r2,_block_provider_find_done
+        jmp     (r2)
+_spi_extent_length_ok:
+        ; Extent end must not wrap and must fit the 4 MiB W25Q32 address space.
+        la      r2,_spi_extent_offset
+        lw      r1,0(r2)
+        add     r0,r1
+        clu     r0,r1
+        brf     _spi_extent_no_wrap
+        la      r2,_block_provider_find_done
+        jmp     (r2)
+_spi_extent_no_wrap:
+        la      r2,0x400000
+        ceq     r0,r2
+        brt     _spi_extent_valid
+        clu     r0,r2
+        brt     _spi_extent_valid
+        la      r2,_block_provider_find_done
+        jmp     (r2)
+_spi_extent_valid:
+        ; Copy the generated descriptor, then replace its in-memory image
+        ; pointer with the validated media offset.
+        la      r2,_spi_source_descriptor
+        lw      r1,0(r2)
         la      r2,_spi_descriptor
         lc      r0,24
 _spi_descriptor_copy:
@@ -810,22 +923,8 @@ _spi_descriptor_copy:
         add     r0,-1
         ceq     r0,z
         brf     _spi_descriptor_copy
-        la      r2,_block_find_offset
+        la      r2,_spi_extent_offset
         lw      r0,0(r2)
-        add     r0,17
-        la      r2,_provider_offset
-        sw      r0,0(r2)
-        lc      r0,3
-        la      r2,_provider_count
-        sw      r0,0(r2)
-        la      r0,_provider_word_buffer
-        la      r2,_provider_destination
-        sw      r0,0(r2)
-        la      r2,_image_provider_read
-        jal     r1,(r2)
-        la      r0,_provider_word_buffer
-        la      r2,_read_image_word
-        jal     r1,(r2)
         la      r2,_spi_descriptor
         sw      r0,9(r2)
         mov     r0,r2
@@ -1847,7 +1946,17 @@ _block_find_offset:
         .zero   3
 _block_find_table:
         .zero   3
+_block_find_ordinal:
+        .byte   0
 _provider_word_buffer:
+        .zero   3
+_spi_extent_buffer:
+        .zero   8
+_spi_extent_offset:
+        .zero   3
+_spi_extent_length:
+        .zero   3
+_spi_source_descriptor:
         .zero   3
 _embedded_magic_buffer:
         .zero   6

@@ -1062,6 +1062,14 @@ must be strictly inside text; text/data/BSS and byte conversions must not wrap
 extent. Negative W25Q32 cases independently corrupt magic, entry, and text size
 metadata and must all return the recoverable load failure path.
 
+SPI catalog records are now treated as untrusted input too. Lookup reads the
+complete ordinal/offset/length/flags tail and accepts it only when the ordinal
+matches the generated descriptor position, the image-present flag is exactly
+set, the offset is eight-byte aligned and beyond the catalog, the logical byte
+length equals the descriptor's word extent, addition does not wrap, and the end
+fits within the four-megabyte W25Q32. Five independent media corruptions cover
+ordinal, alignment, length, flags, and capacity bounds before descriptor copy.
+
 The interactive integration is now explicit rather than test-only. A composite
 provider searches resident program descriptors first and consults SPI only for
 nonresident names; its read callback follows the source selected by the last
