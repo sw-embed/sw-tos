@@ -23,6 +23,19 @@ if ! cmp -s "$OUT_DIR/embedded-hello.bin" "$OUT_DIR/embedded-hello-payload.bin";
     exit 1
 fi
 
+"$ROOT_DIR/scripts/plsw-pipeline.sh" "$ROOT_DIR/catalog/images/embedded-ping.plsw"
+"$ASM" "$ROOT_DIR/build/embedded-ping.s" \
+    --bin "$OUT_DIR/embedded-ping.bin" -o "$OUT_DIR/embedded-ping.lgo"
+"$TOOL" build "$ROOT_DIR/catalog/images/embedded-ping.toml" \
+    "$OUT_DIR/embedded-ping.c24"
+tail -c +28 "$OUT_DIR/embedded-ping.c24" > "$OUT_DIR/embedded-ping-payload.bin"
+cp "$OUT_DIR/embedded-ping.bin" "$OUT_DIR/embedded-ping-padded.bin"
+printf '\000' >> "$OUT_DIR/embedded-ping-padded.bin"
+if ! cmp -s "$OUT_DIR/embedded-ping-padded.bin" "$OUT_DIR/embedded-ping-payload.bin"; then
+    echo "FAIL: embedded-ping manifest payload differs from compiled PL/SW source" >&2
+    exit 1
+fi
+
 cp "$IMAGE" "$OUT_DIR/bad-magic.c24"
 printf 'X' | dd of="$OUT_DIR/bad-magic.c24" bs=1 seek=0 conv=notrunc 2>/dev/null
 if "$TOOL" validate "$OUT_DIR/bad-magic.c24" 2>/dev/null; then

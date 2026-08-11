@@ -228,9 +228,15 @@ def main() -> int:
     parser.add_argument("--output", type=Path, default=DEFAULT_OUTPUT)
     parser.add_argument("--scheduled-output", type=Path, default=DEFAULT_SCHEDULED_OUTPUT)
     parser.add_argument("--check", action="store_true")
+    parser.add_argument("--list-images", action="store_true")
     args = parser.parse_args()
     try:
         entries = load_entries(args.manifest)
+        if args.list_images:
+            for entry in entries:
+                if entry["image_manifest"] is not None:
+                    print(f"{entry['name']}\t{entry['image_manifest']}")
+            return 0
         rendered = render(entries, args.manifest)
         scheduled_rendered = render_scheduled(entries, args.manifest)
     except (OSError, tomllib.TOMLDecodeError, ValueError) as error:

@@ -38,3 +38,12 @@ image_manifest = "catalog/images/embedded-hello.toml"
 stack_words = 128
 state_words = 0
 flags = []
+
+[[program]]
+name = "embedded-ping"
+entry = "HELLO"
+scheduled_entry = "_embedded_loader_trampoline"
+image_manifest = "catalog/images/embedded-ping.toml"
+stack_words = 128
+state_words = 0
+flags = []

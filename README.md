@@ -102,6 +102,13 @@ header sizes and entry offsets, stores the private allocation and relocated
 entry in that process descriptor, and releases them after the last child exits.
 The reclamation stress now runs 20 resident/embedded cycles.
 
+`embedded-ping` is a second nonresident application compiled from PL/SW. Its
+17-byte procedure is stored as six COR24 words with one unreachable padding
+byte and prints `P` when loaded. Catalog linking now discovers every declared
+image manifest rather than naming one fixture. The composite SPI proof runs
+`embedded-hello`, then `embedded-ping`, then resident Counter, demonstrating
+distinct flash extents and sequential descriptor reuse.
+
 Catalog lookup and embedded loading now share an explicit two-operation image
 provider record. The in-memory provider implements `find` over the generated
 descriptor table and `read` over embedded image bytes; shell lookup and loader
@@ -185,7 +192,8 @@ just plsw-system-spi-interactive
 ```
 
 In that session, `run embedded-hello` loads from the attached generated flash
-media, while menu choices and commands such as `run counter` remain resident.
+media; `run embedded-ping` loads the second PL/SW image; and menu choices and
+commands such as `run counter` remain resident.
 
 Boot initializes that table and scans its flags rather than naming the shell
 entry directly. To verify metadata-driven `IMAGE_AUTOSTART` dispatch:

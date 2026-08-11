@@ -38,10 +38,14 @@ echo "$compiler_output" | sed -n \
 cp "$ROOT_DIR/hal/cor24/catalog-spawn.s" "$OUT_DIR/kernel.raw.s"
 sed -n 'p' "$ROOT_DIR/hal/cor24/spi.s" >> "$OUT_DIR/kernel.raw.s"
 sed -n 'p' "$ROOT_DIR/hal/cor24/catalog_generated.s" >> "$OUT_DIR/kernel.raw.s"
-python3 "$ROOT_DIR/scripts/cor24-image.py" emit-asm \
-    "$ROOT_DIR/catalog/images/embedded-hello.toml" "$OUT_DIR/embedded-hello.s" \
-    --label _embedded_embedded_hello_image
-sed -n 'p' "$OUT_DIR/embedded-hello.s" >> "$OUT_DIR/kernel.raw.s"
+while IFS=$'\t' read -r image_name image_manifest; do
+    image_label="${image_name//-/_}"
+    image_asm="$OUT_DIR/$image_name.s"
+    python3 "$ROOT_DIR/scripts/cor24-image.py" emit-asm \
+        "$ROOT_DIR/$image_manifest" "$image_asm" \
+        --label "_embedded_${image_label}_image"
+    sed -n 'p' "$image_asm" >> "$OUT_DIR/kernel.raw.s"
+done < <(python3 "$ROOT_DIR/scripts/generate-catalog.py" --list-images)
 if [ "$PROVIDER_MODE" = "composite-spi" ]; then
     perl -pi -e 's/\.word   _memory_image_provider/\.word   _composite_image_provider/' \
         "$OUT_DIR/kernel.raw.s"

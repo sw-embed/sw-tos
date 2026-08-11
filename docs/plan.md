@@ -1093,6 +1093,14 @@ successful lookup. `just scheduled-composite-spi-smoke` proves flash-backed
 `plsw-system-spi-interactive` recipe builds the same composite shell, generates
 and attaches its W25Q32 media, and uses the LGO overlay launch workaround.
 
+A second nonresident image proves the storage path is not specialized for one
+fixture. `embedded-ping.plsw` compiles to a 17-byte position-independent PL/SW
+procedure, padded to six COR24 words in C24IMG, and occupies a distinct aligned
+flash extent after `embedded-hello`. The linker enumerates all image manifests
+reported by catalog generation. The composite proof loads and executes both
+images sequentially before running resident Counter, covering offset packing,
+catalog authentication, descriptor reuse, per-image CRC, and reclamation.
+
 ### Milestone 7 -- SPI Image Provider (Future)
 
 - [x] SPI mode-0 byte exchange HAL and W25Q32 media-read proof

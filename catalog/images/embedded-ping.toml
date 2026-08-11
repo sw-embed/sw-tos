@@ -1,0 +1,8 @@
+name = "embedded-ping"
+version = 1
+text_words = 6
+data_words = 0
+bss_words = 0
+entry_offset = 0
+relocation_count = 0
+payload_hex = "807f7e 654450 2b0001 ff8200 697a7b 7c2700"

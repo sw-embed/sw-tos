@@ -1,0 +1,11 @@
+/* Position-independent nonresident PL/SW application. */
+
+%DEFINE LIBRARY;
+
+EMBEDDED_PING: PROC;
+    ASM DO;
+        'lc      r0,80';
+        'la      r2,0xFF0100';
+        'sb      r0,0(r2)';
+    END;
+END;

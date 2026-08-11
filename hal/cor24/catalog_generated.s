@@ -6,6 +6,7 @@ _scheduled_catalog_table:
         .word   _scheduled_counter_descriptor
         .word   _scheduled_clock_descriptor
         .word   _scheduled_embedded_hello_descriptor
+        .word   _scheduled_embedded_ping_descriptor
         .word   _scheduled_shell_descriptor
         .word   0
 
@@ -57,6 +58,18 @@ _scheduled_embedded_hello_descriptor:
 _scheduled_embedded_hello_name:
         .byte   101,109,98,101,100,100,101,100,45,104,101,108,108,111,0
 
+_scheduled_embedded_ping_descriptor:
+        .word   _scheduled_embedded_ping_name
+        .word   1
+        .word   _embedded_loader_trampoline
+        .word   _embedded_embedded_ping_image
+        .word   15
+        .word   128
+        .word   0
+        .word   0
+_scheduled_embedded_ping_name:
+        .byte   101,109,98,101,100,100,101,100,45,112,105,110,103,0
+
 _scheduled_shell_descriptor:
         .word   _scheduled_shell_name
         .word   2
@@ -70,10 +83,11 @@ _scheduled_shell_name:
         .byte   115,104,101,108,108,0
 
 _block_catalog_index:
-        .byte   5,1,83,87,84,142,69,186
+        .byte   6,1,83,87,84,51,225,101
         .byte   104,101,108,108,111,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0
         .byte   99,111,117,110,116,101,114,0,0,0,0,0,0,0,0,0,1,0,0,0,0,0,0,0
         .byte   99,108,111,99,107,0,0,0,0,0,0,0,0,0,0,0,2,0,0,0,0,0,0,0
         .byte   101,109,98,101,100,100,101,100,45,104,101,108,108,111,0,0,3,0,0,0,0,0,0,0
-        .byte   115,104,101,108,108,0,0,0,0,0,0,0,0,0,0,0,4,0,0,0,0,0,0,0
+        .byte   101,109,98,101,100,100,101,100,45,112,105,110,103,0,0,0,4,0,0,0,0,0,0,0
+        .byte   115,104,101,108,108,0,0,0,0,0,0,0,0,0,0,0,5,0,0,0,0,0,0,0
 _block_catalog_index_end:

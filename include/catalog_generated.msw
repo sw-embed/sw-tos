@@ -2,14 +2,15 @@
 /* Source: catalog/catalog.toml */
 
 %DEFINE CATALOG_DESC_WORDS 8;
-%DEFINE CATALOG_COUNT 5;
-DCL CATALOG_TABLE(40) INT;
+%DEFINE CATALOG_COUNT 6;
+DCL CATALOG_TABLE(48) INT;
 
 DCL CATALOG_NAME_0(6) CHAR INIT('hello');
 DCL CATALOG_NAME_1(8) CHAR INIT('counter');
 DCL CATALOG_NAME_2(6) CHAR INIT('clock');
 DCL CATALOG_NAME_3(15) CHAR INIT('embedded-hello');
-DCL CATALOG_NAME_4(6) CHAR INIT('shell');
+DCL CATALOG_NAME_4(14) CHAR INIT('embedded-ping');
+DCL CATALOG_NAME_5(6) CHAR INIT('shell');
 
 CATALOG_INIT: PROC;
     CATALOG_TABLE(0) = ADDR(CATALOG_NAME_0);
@@ -45,13 +46,21 @@ CATALOG_INIT: PROC;
     CATALOG_TABLE(30) = 0;
     CATALOG_TABLE(31) = 0;
     CATALOG_TABLE(32) = ADDR(CATALOG_NAME_4);
-    CATALOG_TABLE(33) = IMAGE_SERVICE;
+    CATALOG_TABLE(33) = IMAGE_PROGRAM;
     CATALOG_TABLE(34) = 0;
-    CATALOG_TABLE(35) = 0;
+    CATALOG_TABLE(35) = 15;
     CATALOG_TABLE(36) = 0;
-    CATALOG_TABLE(37) = 256;
-    CATALOG_TABLE(38) = 5;
-    CATALOG_TABLE(39) = 15;
+    CATALOG_TABLE(37) = 128;
+    CATALOG_TABLE(38) = 0;
+    CATALOG_TABLE(39) = 0;
+    CATALOG_TABLE(40) = ADDR(CATALOG_NAME_5);
+    CATALOG_TABLE(41) = IMAGE_SERVICE;
+    CATALOG_TABLE(42) = 0;
+    CATALOG_TABLE(43) = 0;
+    CATALOG_TABLE(44) = 0;
+    CATALOG_TABLE(45) = 256;
+    CATALOG_TABLE(46) = 5;
+    CATALOG_TABLE(47) = 15;
     ASM DO;
         'la      r2,_CATALOG_TABLE';
         'la      r0,_HELLO';
@@ -62,7 +71,9 @@ CATALOG_INIT: PROC;
         'sw      r0,54(r2)';
         'la      r0,_HELLO';
         'sw      r0,78(r2)';
-        'la      r0,_MENU';
+        'la      r0,_HELLO';
         'sw      r0,102(r2)';
+        'la      r0,_MENU';
+        'sw      r0,126(r2)';
     END;
 END;

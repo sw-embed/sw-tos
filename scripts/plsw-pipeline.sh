@@ -70,7 +70,7 @@ UART_INPUT="$SCRATCH/input.bin"
 # Compile: feed source to PL/SW compiler running on emulator via --uart-file
 echo "=== Compiling $BASENAME ===" >&2
 COMPILER_OUT=$($COR24EMU --lgo "$PLSW_LGO" --uart-file "$UART_INPUT" \
-    --quiet --speed 0 -n 200000000 -t 120 2>&1)
+    --quiet --speed 0 -n 300000000 -t 120 2>&1)
 
 UART_OUT="$COMPILER_OUT"
 
@@ -86,6 +86,11 @@ fi
 # Extract assembly between markers
 START_MARKER="--- generated assembly ---"
 END_MARKER="--- end assembly ---"
+if ! echo "$UART_OUT" | grep -q -- "$END_MARKER"; then
+    echo "Compilation failed: compiler did not emit a complete assembly block" >&2
+    echo "$UART_OUT" | tail -5 >&2
+    exit 1
+fi
 ASM=$(echo "$UART_OUT" | sed -n "/$START_MARKER/,/$END_MARKER/{/$START_MARKER/d;/$END_MARKER/d;p;}")
 
 if [ -z "$ASM" ]; then

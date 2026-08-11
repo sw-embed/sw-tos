@@ -33,7 +33,7 @@ echo "PASS: scheduled catalog lookup and executable load used W25Q32 storage"
 
 CORRUPT_MEDIA="$OUT_DIR/corrupt-storage.bin"
 cp "$MEDIA" "$CORRUPT_MEDIA"
-printf 'X' | dd of="$CORRUPT_MEDIA" bs=1 seek=155 conv=notrunc 2>/dev/null
+printf 'X' | dd of="$CORRUPT_MEDIA" bs=1 seek=179 conv=notrunc 2>/dev/null
 corrupt_output=$("$ROOT_DIR/tools/bin/cor24-emu" \
     --lgo "$OUT_DIR/seed.lgo" --load-binary "$OUT_DIR/program.bin@0" --entry 0 \
     --spi-device "w25q32@cs=3?file=$CORRUPT_MEDIA" \
@@ -53,11 +53,11 @@ for corruption in magic entry size; do
     bad_media="$OUT_DIR/corrupt-$corruption.bin"
     cp "$MEDIA" "$bad_media"
     if [ "$corruption" = magic ]; then
-        printf 'X' | dd of="$bad_media" bs=1 seek=128 conv=notrunc 2>/dev/null
+        printf 'X' | dd of="$bad_media" bs=1 seek=152 conv=notrunc 2>/dev/null
     elif [ "$corruption" = entry ]; then
-        printf '\377\377\377' | dd of="$bad_media" bs=1 seek=146 conv=notrunc 2>/dev/null
+        printf '\377\377\377' | dd of="$bad_media" bs=1 seek=170 conv=notrunc 2>/dev/null
     else
-        printf '\377\377\377' | dd of="$bad_media" bs=1 seek=137 conv=notrunc 2>/dev/null
+        printf '\377\377\377' | dd of="$bad_media" bs=1 seek=161 conv=notrunc 2>/dev/null
     fi
     bad_output=$("$ROOT_DIR/tools/bin/cor24-emu" \
         --lgo "$OUT_DIR/seed.lgo" --load-binary "$OUT_DIR/program.bin@0" --entry 0 \
@@ -101,7 +101,7 @@ for corruption in count name; do
     bad_media="$OUT_DIR/corrupt-catalog-$corruption.bin"
     cp "$MEDIA" "$bad_media"
     if [ "$corruption" = count ]; then
-        printf '\006' | dd of="$bad_media" bs=1 seek=0 conv=notrunc 2>/dev/null
+        printf '\007' | dd of="$bad_media" bs=1 seek=0 conv=notrunc 2>/dev/null
     else
         printf 'xxxxxxxxxxxxxxxx' | dd of="$bad_media" bs=1 seek=80 conv=notrunc 2>/dev/null
     fi

@@ -702,7 +702,9 @@ _block_provider_find:
         lc      r0,0
         la      r2,_provider_image
         sw      r0,0(r2)
-        lcu     r0,128
+        la      r0,_block_catalog_index_end
+        la      r1,_block_catalog_index
+        sub     r0,r1
         bra     _block_find_catalog_limit
 _block_find_memory_catalog:
         la      r0,_block_catalog_index
@@ -983,7 +985,8 @@ _spi_extent_flags_ok:
         la      r2,_block_provider_find_done
         jmp     (r2)
 _spi_extent_alignment_ok:
-        lcu     r2,128
+        la      r2,_provider_limit
+        lw      r2,0(r2)
         clu     r1,r2
         brf     _spi_extent_minimum_ok
         la      r2,_block_provider_find_done
