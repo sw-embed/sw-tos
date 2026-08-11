@@ -157,6 +157,10 @@ private allocation and returns through the normal scheduler path.
 The provider caches its most recently fetched eight-byte block, so sequential
 header, catalog, and payload bytes do not repeat the same W25Q32 transaction.
 The scheduled SPI proof requires at least one real fetch and one cache hit.
+After copying text and data, the target loader computes standard CRC-32 with a
+split 24-bit/8-bit accumulator and compares the header's stored low 24 bits
+before making the entry runnable. The SPI proof corrupts a payload byte and
+requires `CRCFAIL`, demonstrating rejection before execution.
 
 The SPI-enabled interactive shell uses a composite provider: resident programs
 are resolved without touching the bus, and nonresident names fall through to

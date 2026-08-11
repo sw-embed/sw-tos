@@ -873,7 +873,7 @@ _read_embedded_field_done:
         jmp     (r1)
 
 ; Load the embedded descriptor in r0 into private arena memory for the process
-; selected by _spawn_process. Provider generation has validated magic/checksum.
+; selected by _spawn_process. Validate metadata and payload CRC before execute.
 _load_embedded_process:
         push    r1
         lc      r1,0
@@ -930,10 +930,18 @@ _embedded_relocations_ok:
         jal     r1,(r2)
         la      r2,_embedded_entry_words
         sw      r0,0(r2)
+        lc      r0,24
+        la      r2,_read_embedded_field
+        jal     r1,(r2)
+        la      r2,_embedded_checksum
+        sw      r0,0(r2)
         la      r2,_embedded_load_status
         lw      r0,0(r2)
         ceq     r0,z
-        brf     _embedded_load_fail
+        brt     _embedded_metadata_ok
+        la      r2,_embedded_load_fail
+        jmp     (r2)
+_embedded_metadata_ok:
 
         ; The zeroing allocator reserves text + data + BSS in this process's
         ; reclaimable child generation.
@@ -977,8 +985,30 @@ _embedded_relocations_ok:
         lw      r0,0(r2)
         ceq     r0,z
         brt     _embedded_payload_read_ok
-        bra     _embedded_load_fail
+        la      r2,_embedded_load_fail
+        jmp     (r2)
 _embedded_payload_read_ok:
+
+        ; Validate the stored CRC-32 low 24 bits over copied text/data before
+        ; any untrusted instruction can become runnable.
+        la      r2,_spawn_process
+        lw      r2,0(r2)
+        lw      r0,27(r2)
+        la      r2,_crc_cursor
+        sw      r0,0(r2)
+        la      r2,_provider_count
+        lw      r0,0(r2)
+        la      r2,_crc_remaining
+        sw      r0,0(r2)
+        la      r2,_crc32_low24
+        jal     r1,(r2)
+        la      r2,_embedded_checksum
+        lw      r1,0(r2)
+        ceq     r0,r1
+        brt     _embedded_checksum_ok
+        la      r2,_embedded_load_fail
+        jmp     (r2)
+_embedded_checksum_ok:
 
         ; Store allocation base + full 24-bit entry word offset.
         la      r2,_embedded_entry_words
@@ -992,6 +1022,97 @@ _embedded_payload_read_ok:
         add     r0,r1
         sw      r0,30(r2)
         lc      r0,0
+        pop     r1
+        jmp     (r1)
+
+; Return the low 24 bits of standard CRC-32 for the range recorded in
+; _crc_cursor/_crc_remaining. The 32-bit
+; accumulator is split into a 24-bit low word and an eight-bit high part.
+_crc32_low24:
+        push    r1
+        push    r2
+        la      r0,0xFFFFFF
+        la      r2,_crc_low
+        sw      r0,0(r2)
+        lcu     r0,255
+        la      r2,_crc_high
+        sb      r0,0(r2)
+_crc_next_byte:
+        la      r2,_crc_cursor
+        lw      r2,0(r2)
+        lbu     r0,0(r2)
+        la      r2,_crc_low
+        lw      r1,0(r2)
+        xor     r1,r0
+        sw      r1,0(r2)
+        lc      r0,8
+        la      r2,_crc_bits
+        sb      r0,0(r2)
+_crc_next_bit:
+        la      r2,_crc_low
+        lw      r0,0(r2)
+        lc      r1,1
+        and     r1,r0
+        la      r2,_crc_lsb
+        sb      r1,0(r2)
+        lc      r1,1
+        srl     r0,r1
+        la      r2,_crc_high
+        lbu     r1,0(r2)
+        push    r1
+        lc      r2,1
+        and     r1,r2
+        ceq     r1,z
+        brt     _crc_no_high_carry
+        la      r2,0x800000
+        or      r0,r2
+_crc_no_high_carry:
+        la      r2,_crc_low
+        sw      r0,0(r2)
+        pop     r0
+        lc      r1,1
+        srl     r0,r1
+        la      r2,_crc_high
+        sb      r0,0(r2)
+        la      r2,_crc_lsb
+        lbu     r0,0(r2)
+        ceq     r0,z
+        brt     _crc_polynomial_done
+        la      r2,_crc_low
+        lw      r0,0(r2)
+        la      r1,0xB88320
+        xor     r0,r1
+        sw      r0,0(r2)
+        la      r2,_crc_high
+        lbu     r0,0(r2)
+        lcu     r1,237
+        xor     r0,r1
+        sb      r0,0(r2)
+_crc_polynomial_done:
+        la      r2,_crc_bits
+        lbu     r0,0(r2)
+        add     r0,-1
+        sb      r0,0(r2)
+        ceq     r0,z
+        brf     _crc_next_bit
+        la      r2,_crc_cursor
+        lw      r0,0(r2)
+        add     r0,1
+        sw      r0,0(r2)
+        la      r2,_crc_remaining
+        lw      r0,0(r2)
+        add     r0,-1
+        sw      r0,0(r2)
+        ceq     r0,z
+        brt     _crc_done
+        la      r2,_crc_next_byte
+        jmp     (r2)
+_crc_done:
+        la      r2,_crc_low
+        lw      r0,0(r2)
+        la      r1,0xFFFFFF
+        xor     r0,r1
+        pop     r2
         pop     r1
         jmp     (r1)
 _embedded_load_fail:
@@ -1620,12 +1741,26 @@ _embedded_bss_words:
         .zero   3
 _embedded_entry_words:
         .zero   3
+_embedded_checksum:
+        .zero   3
 _embedded_load_status:
         .zero   3
 _spawn_status:
         .zero   3
 _spawn_arena_mark:
         .zero   3
+_crc_cursor:
+        .zero   3
+_crc_remaining:
+        .zero   3
+_crc_low:
+        .zero   3
+_crc_high:
+        .byte   0
+_crc_bits:
+        .byte   0
+_crc_lsb:
+        .byte   0
 _ebr_next:
         .word   0xFEEB00
 _child_count:

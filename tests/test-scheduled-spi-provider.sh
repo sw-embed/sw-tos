@@ -30,3 +30,21 @@ if [ "$output" != "$expected" ]; then
 fi
 
 echo "PASS: scheduled catalog lookup and executable load used W25Q32 storage"
+
+CORRUPT_MEDIA="$OUT_DIR/corrupt-storage.bin"
+cp "$MEDIA" "$CORRUPT_MEDIA"
+printf 'X' | dd of="$CORRUPT_MEDIA" bs=1 seek=155 conv=notrunc 2>/dev/null
+corrupt_output=$("$ROOT_DIR/tools/bin/cor24-emu" \
+    --lgo "$OUT_DIR/seed.lgo" --load-binary "$OUT_DIR/program.bin@0" --entry 0 \
+    --spi-device "w25q32@cs=3?file=$CORRUPT_MEDIA" \
+    --speed 0 -n 3000000 --quiet 2>/dev/null | sed '/^Entry point:/d')
+corrupt_expected='SPAWN
+CRCFAIL'
+if [ "$corrupt_output" != "$corrupt_expected" ]; then
+    echo "FAIL: corrupt SPI payload was not rejected" >&2
+    echo "actual:" >&2
+    echo "$corrupt_output" >&2
+    exit 1
+fi
+
+echo "PASS: target CRC rejected corrupt W25Q32 payload before execution"

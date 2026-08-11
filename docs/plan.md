@@ -1048,6 +1048,13 @@ number changes. The scheduled SPI proof now requires both a physical fetch and
 a cache hit before reporting `SPI CACHE`, preventing a successful execution
 from silently bypassing the cache path.
 
+Payload integrity is now enforced on target rather than only by the media
+builder. The loader reads the stored checksum word, computes standard CRC-32
+over the copied text/data using a 24-bit low word plus an eight-bit high part,
+and compares the specified low 24 bits before publishing the child as runnable.
+The scheduled SPI proof mutates one flash payload byte after media generation
+and requires a recoverable `CRCFAIL`; the corrupt instruction is never called.
+
 The interactive integration is now explicit rather than test-only. A composite
 provider searches resident program descriptors first and consults SPI only for
 nonresident names; its read callback follows the source selected by the last
