@@ -55,7 +55,46 @@ _spawn_resident:
         la      r1,_spawn_descriptor
         sw      r0,0(r1)
 
+        ; SPI lookup uses one transient descriptor. Snapshot an embedded
+        ; descriptor into storage owned by the selected child before any
+        ; subsequent lookup can overwrite that transient result.
+        lw      r1,3(r0)
+        lc      r2,1
+        ceq     r1,r2
+        brf     _spawn_descriptor_ready
+        mov     r1,r0
+        la      r2,_spawn_process
+        lw      r2,0(r2)
+        push    r1
+        mov     r0,r2
+        la      r1,_proc_b
+        ceq     r0,r1
+        pop     r1
+        brf     _spawn_snapshot_c
+        la      r2,_proc_b_image_descriptor
+        bra     _spawn_snapshot_copy_start
+_spawn_snapshot_c:
+        la      r2,_proc_c_image_descriptor
+_spawn_snapshot_copy_start:
+        lc      r0,24
+_spawn_snapshot_copy:
+        push    r0
+        lbu     r0,0(r1)
+        sb      r0,0(r2)
+        pop     r0
+        add     r1,1
+        add     r2,1
+        add     r0,-1
+        ceq     r0,z
+        brf     _spawn_snapshot_copy
+        add     r2,-24
+        la      r1,_spawn_descriptor
+        sw      r2,0(r1)
+_spawn_descriptor_ready:
+
         ; Allocate and zero descriptor-sized process-local state.
+        la      r1,_spawn_descriptor
+        lw      r0,0(r1)
         lw      r0,18(r0)       ; PROGRAM_DESC state_words
         la      r2,_alloc_state_words
         jal     r1,(r2)
@@ -204,6 +243,36 @@ _TASK_SPAWN_RESULT:
         pop     r2
         pop     fp
         jmp     (r1)
+
+; Test assertion for the two-child SPI proof: each live process must retain its
+; own descriptor snapshot, and those snapshots must describe distinct extents.
+        .globl  _TASK_DESCRIPTOR_SNAPSHOT_VERIFY
+_TASK_DESCRIPTOR_SNAPSHOT_VERIFY:
+        push    r1
+        la      r2,_proc_b
+        lw      r0,33(r2)
+        la      r1,_proc_b_image_descriptor
+        ceq     r0,r1
+        brf     _descriptor_snapshot_fail
+        la      r2,_proc_c
+        lw      r0,33(r2)
+        la      r1,_proc_c_image_descriptor
+        ceq     r0,r1
+        brf     _descriptor_snapshot_fail
+        la      r2,_proc_b_image_descriptor
+        lw      r0,9(r2)
+        la      r2,_proc_c_image_descriptor
+        lw      r1,9(r2)
+        ceq     r0,r1
+        brt     _descriptor_snapshot_fail
+        la      r0,_descriptor_snapshot_message
+        la      r2,_puts
+        jal     r1,(r2)
+        pop     r1
+        jmp     (r1)
+_descriptor_snapshot_fail:
+        la      r2,_TASK_HALT
+        jmp     (r2)
 
 ; Test-only fault injection consumed by the next memory-provider read.
         .globl  _TASK_PROVIDER_FAIL_NEXT
@@ -2020,6 +2089,10 @@ _proc_b:
 _proc_c:
         .zero   39
 _proc_table_end:
+_proc_b_image_descriptor:
+        .zero   24
+_proc_c_image_descriptor:
+        .zero   24
 _current_proc:
         .zero   3
 _spawn_descriptor:
@@ -2166,3 +2239,5 @@ _block_provider_message:
         .byte   66,76,79,67,75,10,0
 _spi_provider_message:
         .byte   83,80,73,32,67,65,67,72,69,10,0
+_descriptor_snapshot_message:
+        .byte   83,78,65,80,83,72,79,84,10,0

@@ -1100,6 +1100,12 @@ flash extent after `embedded-hello`. The linker enumerates all image manifests
 reported by catalog generation. The composite proof loads and executes both
 images sequentially before running resident Counter, covering offset packing,
 catalog authentication, descriptor reuse, per-image CRC, and reclamation.
+The transient SPI lookup descriptor is now copied into fixed storage owned by
+the selected child slot before image loading. A two-child proof fills both
+slots without yielding, validates their selected descriptor pointers and media
+offsets are distinct, and only then joins while both flash applications run.
+This prevents later catalog lookups from mutating metadata retained by a live
+process and keeps descriptor lifetime independent of arena reclamation.
 
 ### Milestone 7 -- SPI Image Provider (Future)
 
@@ -1185,6 +1191,7 @@ The name in `FILE:` must match the `%INCLUDE` name (without .msw).
 | `just scheduled-reclaim-smoke` | Stress repeated app stack/state reclamation |
 | `just scheduled-multislot-smoke` | Schedule two concurrent private-state children |
 | `just scheduled-block-provider-smoke` | Load an image through host-backed block reads |
+| `just scheduled-concurrent-spi-smoke` | Keep distinct descriptors for two live SPI-loaded children |
 | `just scheduled-shell-interactive` | Run the scheduler-integrated shell proof |
 | `just plsw-compile <[.msw ...] file.plsw>` | Compile any .plsw  |
 | `just plsw-run <[.msw ...] file.plsw>` | Compile and run any .plsw |

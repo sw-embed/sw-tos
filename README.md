@@ -109,6 +109,13 @@ image manifest rather than naming one fixture. The composite SPI proof runs
 `embedded-hello`, then `embedded-ping`, then resident Counter, demonstrating
 distinct flash extents and sequential descriptor reuse.
 
+Each child process snapshots a nonresident descriptor into slot-owned storage
+before loading it. A later SPI catalog lookup can therefore reuse the transient
+provider result without changing a live process's name, metadata, or flash
+extent. `just scheduled-concurrent-spi-smoke` fills both child slots with the
+two flash applications, verifies their descriptor addresses and extents differ,
+then schedules both to completion.
+
 Catalog lookup and embedded loading now share an explicit two-operation image
 provider record. The in-memory provider implements `find` over the generated
 descriptor table and `read` over embedded image bytes; shell lookup and loader
