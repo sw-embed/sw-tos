@@ -98,9 +98,18 @@ scheduled-block-provider-smoke: scheduled-multislot-smoke
 scheduled-spi-provider-smoke: cor24-storage-smoke
     ./tests/test-scheduled-spi-provider.sh
 
+# Verify resident-first interactive lookup with SPI fallback
+scheduled-composite-spi-smoke: cor24-storage-smoke
+    ./tests/test-scheduled-composite-spi.sh
+
 # Build the scheduler-integrated PL/SW shell image
 scheduled-shell-build:
     ./scripts/catalog-spawn-link.sh tests/catalog-shell.plsw scheduled-shell
+
+# Build the interactive shell with resident-first/SPI-fallback catalog lookup
+scheduled-shell-spi-build: cor24-storage-smoke
+    ./scripts/catalog-spawn-link.sh tests/catalog-shell.plsw scheduled-shell-spi composite-spi
+    {{COR24ASM}} tests/spi-launch-seed.s -o build/scheduled-shell-spi/seed.lgo
 
 # Interactively exercise scheduled Hello and Counter choices
 scheduled-shell-interactive: plsw-system-interactive
@@ -108,6 +117,10 @@ scheduled-shell-interactive: plsw-system-interactive
 # Run the scheduler-integrated menu with heartbeat-aware UART input.
 plsw-system-interactive: scheduled-shell-build
     ./scripts/swtos-terminal.py --image build/scheduled-shell/program.bin
+
+# Run the scheduled shell with the generated W25Q32 media attached
+plsw-system-spi-interactive: scheduled-shell-spi-build
+    ./scripts/swtos-terminal.py --image build/scheduled-shell-spi/program.bin --lgo-seed build/scheduled-shell-spi/seed.lgo --spi-media build/catalog-images/swtos-storage.bin
 
 # Run the former direct-call image for compatibility and catalog command work.
 plsw-system-compat-interactive: plsw-system

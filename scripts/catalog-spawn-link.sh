@@ -6,6 +6,7 @@ ROOT_DIR="$(cd "$(dirname "$0")/.." && pwd)"
 TOOL_DIR="$ROOT_DIR/tools/bin"
 PLSW_SOURCE="${1:-$ROOT_DIR/tests/catalog-counter.plsw}"
 BUILD_NAME="${2:-catalog-spawn}"
+PROVIDER_MODE="${3:-memory}"
 OUT_DIR="$ROOT_DIR/build/$BUILD_NAME"
 ASM="$TOOL_DIR/cor24-asm"
 EMU="$TOOL_DIR/cor24-emu"
@@ -41,6 +42,13 @@ python3 "$ROOT_DIR/scripts/cor24-image.py" emit-asm \
     "$ROOT_DIR/catalog/images/embedded-hello.toml" "$OUT_DIR/embedded-hello.s" \
     --label _embedded_embedded_hello_image
 sed -n 'p' "$OUT_DIR/embedded-hello.s" >> "$OUT_DIR/kernel.raw.s"
+if [ "$PROVIDER_MODE" = "composite-spi" ]; then
+    perl -pi -e 's/\.word   _memory_image_provider/\.word   _composite_image_provider/' \
+        "$OUT_DIR/kernel.raw.s"
+elif [ "$PROVIDER_MODE" != "memory" ]; then
+    echo "unknown provider mode: $PROVIDER_MODE" >&2
+    exit 1
+fi
 
 sizes=()
 for module in "${MODULES[@]}"; do

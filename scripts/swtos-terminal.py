@@ -33,12 +33,15 @@ def filter_menu_input(byte: int, menu_prompt: bool, discard_newline: bool):
 def main() -> int:
     parser = argparse.ArgumentParser()
     parser.add_argument("--image", default=DEFAULT_IMAGE)
+    parser.add_argument("--lgo-seed")
+    parser.add_argument("--spi-media")
     args = parser.parse_args()
     image = os.path.abspath(args.image)
-    command = [
-        EMU,
-        "--load-binary",
-        f"{image}@0",
+    command = [EMU]
+    if args.lgo_seed:
+        command.extend(["--lgo", os.path.abspath(args.lgo_seed)])
+    command.extend([
+        "--load-binary", f"{image}@0",
         "--entry",
         "0",
         "--terminal",
@@ -46,7 +49,12 @@ def main() -> int:
         "0",
         "-t",
         "3600",
-    ]
+    ])
+    if args.spi_media:
+        command.extend([
+            "--spi-device",
+            f"w25q32@cs=3?file={os.path.abspath(args.spi_media)}",
+        ])
     child_master, child_slave = pty.openpty()
     child = subprocess.Popen(
         command,

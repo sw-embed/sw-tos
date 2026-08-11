@@ -155,6 +155,17 @@ the resident image address, and routes arbitrary header and payload reads
 through the W25Q32 block HAL. The loaded PL/SW application executes from its
 private allocation and returns through the normal scheduler path.
 
+The SPI-enabled interactive shell uses a composite provider: resident programs
+are resolved without touching the bus, and nonresident names fall through to
+the flash catalog. Run it with:
+
+```
+just plsw-system-spi-interactive
+```
+
+In that session, `run embedded-hello` loads from the attached generated flash
+media, while menu choices and commands such as `run counter` remain resident.
+
 Boot initializes that table and scans its flags rather than naming the shell
 entry directly. To verify metadata-driven `IMAGE_AUTOSTART` dispatch:
 

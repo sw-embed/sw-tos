@@ -243,6 +243,53 @@ _TASK_USE_SPI_PROVIDER:
         pop     r1
         jmp     (r1)
 
+; Composite provider used by SPI-enabled interactive images: resident program
+; lookup first, then the external flash catalog for nonresident names.
+_composite_provider_find:
+        push    r1
+        la      r2,_composite_resident_only
+        lc      r0,1
+        sb      r0,0(r2)
+        la      r2,_memory_provider_find
+        jal     r1,(r2)
+        la      r2,_composite_resident_only
+        lc      r0,0
+        sb      r0,0(r2)
+        lw      r2,12(fp)
+        lw      r0,0(r2)
+        ceq     r0,z
+        brf     _composite_found_resident
+        la      r2,_SPI_INIT
+        jal     r1,(r2)
+        la      r2,_spi_provider_active
+        lc      r0,1
+        sb      r0,0(r2)
+        la      r2,_composite_read_spi
+        sb      r0,0(r2)
+        la      r2,_block_provider_find
+        jal     r1,(r2)
+        bra     _composite_find_done
+_composite_found_resident:
+        la      r2,_spi_provider_active
+        lc      r0,0
+        sb      r0,0(r2)
+        la      r2,_composite_read_spi
+        sb      r0,0(r2)
+_composite_find_done:
+        pop     r1
+        jmp     (r1)
+
+_composite_provider_read:
+        la      r2,_composite_read_spi
+        lbu     r0,0(r2)
+        ceq     r0,z
+        brt     _composite_read_memory
+        la      r2,_spi_provider_read
+        jmp     (r2)
+_composite_read_memory:
+        la      r2,_memory_provider_read
+        jmp     (r2)
+
         .globl  _TASK_SPI_PROVIDER_VERIFY
 _TASK_SPI_PROVIDER_VERIFY:
         push    r1
@@ -1173,6 +1220,18 @@ _task_catalog_find_next:
         lw      r0,0(r2)
 _task_catalog_find_program:
         push    r2
+        la      r2,_composite_resident_only
+        lbu     r2,0(r2)
+        ceq     r2,z
+        brt     _task_catalog_find_compare_program
+        lw      r1,3(r0)
+        ceq     r1,z
+        brt     _task_catalog_find_compare_program
+        pop     r2
+        bra     _task_catalog_find_advance
+_task_catalog_find_compare_program:
+        pop     r2
+        push    r2
         lw      r1,0(r0)       ; descriptor name
         lw      r2,9(fp)       ; requested name
 _task_catalog_find_compare:
@@ -1450,6 +1509,9 @@ _block_image_provider:
 _spi_image_provider:
         .word   _block_provider_find
         .word   _spi_provider_read
+_composite_image_provider:
+        .word   _composite_provider_find
+        .word   _composite_provider_read
 _provider_image:
         .zero   3
 _provider_offset:
@@ -1475,6 +1537,10 @@ _block_fetch_count:
 _spi_fetch_count:
         .zero   3
 _spi_provider_active:
+        .byte   0
+_composite_resident_only:
+        .byte   0
+_composite_read_spi:
         .byte   0
 _block_buffer:
         .zero   8

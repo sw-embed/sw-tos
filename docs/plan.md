@@ -1042,6 +1042,14 @@ through the scheduler. cor24-emu 0.1.0 omits peripheral attachment in its
 binary-only launch arm, so this proof uses the documented LGO-plus-binary
 overlay mode until the emulator fixes that host-side discrepancy.
 
+The interactive integration is now explicit rather than test-only. A composite
+provider searches resident program descriptors first and consults SPI only for
+nonresident names; its read callback follows the source selected by the last
+successful lookup. `just scheduled-composite-spi-smoke` proves flash-backed
+`embedded-hello` followed by resident Counter execution. The
+`plsw-system-spi-interactive` recipe builds the same composite shell, generates
+and attaches its W25Q32 media, and uses the LGO overlay launch workaround.
+
 ### Milestone 7 -- SPI Image Provider (Future)
 
 - [x] SPI mode-0 byte exchange HAL and W25Q32 media-read proof
