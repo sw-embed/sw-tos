@@ -1033,15 +1033,21 @@ reads the generated catalog header from the emulator's file-backed W25Q32.
 The HAL now also converts an eight-byte block number to a 24-bit flash address,
 issues a W25Q32 `03h` READ transaction, and fills an eight-byte target buffer.
 The proof reads both catalog block 0 and the block-16 `C24IMG` magic. The next
-step is adapting arbitrary provider reads to this block primitive and switching
-scheduled lookup/loading to that provider.
+provider now adapts arbitrary bounded byte ranges to that block primitive.
+SPI-backed `find` reads the media catalog, copies the matching generated runtime
+descriptor, and substitutes its recorded 24-bit media offset. The unchanged
+loader then obtains every header and payload byte through W25Q32 transactions;
+`just scheduled-spi-provider-smoke` proves `embedded-hello` executes and exits
+through the scheduler. cor24-emu 0.1.0 omits peripheral attachment in its
+binary-only launch arm, so this proof uses the documented LGO-plus-binary
+overlay mode until the emulator fixes that host-side discrepancy.
 
 ### Milestone 7 -- SPI Image Provider (Future)
 
 - [x] SPI mode-0 byte exchange HAL and W25Q32 media-read proof
 - [x] SPI block device HAL read driver
-- [ ] SPI catalog provider (same interface as resident provider)
-- [ ] Programs loaded from SPI flash transparently
+- [x] SPI catalog provider (same interface as resident provider)
+- [x] Programs loaded from SPI flash transparently
 
 ---
 

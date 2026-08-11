@@ -148,6 +148,13 @@ its catalog header over the emulated wire protocol. The same HAL exposes an
 eight-byte block read that issues a W25Q32 `03h` transaction with a 24-bit
 address; the proof also reads the block-aligned `C24IMG` magic at block 16.
 
+`just scheduled-spi-provider-smoke` exercises the complete storage path. The
+scheduled catalog manager finds `embedded-hello` by reading flash catalog
+records, copies its runtime descriptor with the media offset substituted for
+the resident image address, and routes arbitrary header and payload reads
+through the W25Q32 block HAL. The loaded PL/SW application executes from its
+private allocation and returns through the normal scheduler path.
+
 Boot initializes that table and scans its flags rather than naming the shell
 entry directly. To verify metadata-driven `IMAGE_AUTOSTART` dispatch:
 

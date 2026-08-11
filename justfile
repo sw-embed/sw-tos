@@ -94,6 +94,10 @@ scheduled-multislot-smoke:
 # Verify host-backed eight-byte block reads through the image-provider ABI
 scheduled-block-provider-smoke: scheduled-multislot-smoke
 
+# Find and load an embedded program through the W25Q32 image provider
+scheduled-spi-provider-smoke: cor24-storage-smoke
+    ./tests/test-scheduled-spi-provider.sh
+
 # Build the scheduler-integrated PL/SW shell image
 scheduled-shell-build:
     ./scripts/catalog-spawn-link.sh tests/catalog-shell.plsw scheduled-shell

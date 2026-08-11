@@ -215,12 +215,54 @@ _TASK_PROVIDER_FAIL_NEXT:
 
         .globl  _TASK_USE_BLOCK_PROVIDER
 _TASK_USE_BLOCK_PROVIDER:
+        la      r2,_spi_provider_active
+        lc      r0,0
+        sb      r0,0(r2)
         la      r2,_active_image_provider
         la      r0,_block_image_provider
         sw      r0,0(r2)
         la      r2,_block_fetch_count
         lc      r0,0
         sw      r0,0(r2)
+        jmp     (r1)
+
+        .globl  _TASK_USE_SPI_PROVIDER
+_TASK_USE_SPI_PROVIDER:
+        push    r1
+        la      r2,_SPI_INIT
+        jal     r1,(r2)
+        la      r2,_spi_provider_active
+        lc      r0,1
+        sb      r0,0(r2)
+        la      r2,_active_image_provider
+        la      r0,_spi_image_provider
+        sw      r0,0(r2)
+        la      r2,_spi_fetch_count
+        lc      r0,0
+        sw      r0,0(r2)
+        pop     r1
+        jmp     (r1)
+
+        .globl  _TASK_SPI_PROVIDER_VERIFY
+_TASK_SPI_PROVIDER_VERIFY:
+        push    r1
+        la      r2,_spi_fetch_count
+        lw      r0,0(r2)
+        ceq     r0,z
+        brf     _spi_provider_verified
+        la      r2,_TASK_HALT
+        jmp     (r2)
+_spi_provider_verified:
+        la      r2,_active_image_provider
+        la      r0,_memory_image_provider
+        sw      r0,0(r2)
+        la      r2,_spi_provider_active
+        lc      r0,0
+        sb      r0,0(r2)
+        la      r0,_spi_provider_message
+        la      r2,_puts
+        jal     r1,(r2)
+        pop     r1
         jmp     (r1)
 
 ; Require at least one host-backed block fetch, report it, and restore the
@@ -474,6 +516,86 @@ _block_provider_done:
         pop     r1
         jmp     (r1)
 
+; Arbitrary byte reads adapted to the W25Q32 eight-byte block HAL.
+_spi_provider_read:
+        push    r1
+        push    r2
+        lc      r0,0
+        la      r2,_provider_status
+        sw      r0,0(r2)
+        la      r2,_provider_offset
+        lw      r0,0(r2)
+        la      r2,_provider_count
+        lw      r1,0(r2)
+        add     r0,r1
+        la      r2,_provider_limit
+        lw      r1,0(r2)
+        ceq     r0,r1
+        brt     _spi_provider_in_bounds
+        cls     r0,r1
+        brt     _spi_provider_in_bounds
+        lc      r0,1
+        la      r2,_provider_status
+        sw      r0,0(r2)
+        bra     _spi_provider_done
+_spi_provider_in_bounds:
+        la      r2,_provider_image
+        lw      r0,0(r2)
+        la      r2,_provider_offset
+        lw      r1,0(r2)
+        add     r0,r1
+        la      r2,_block_cursor
+        sw      r0,0(r2)
+        la      r2,_provider_count
+        lw      r0,0(r2)
+        la      r2,_block_remaining
+        sw      r0,0(r2)
+_spi_provider_next_byte:
+        la      r2,_block_cursor
+        lw      r0,0(r2)
+        lc      r1,0
+_spi_provider_divide:
+        lc      r2,8
+        cls     r0,r2
+        brt     _spi_provider_fetch
+        sub     r0,r2
+        add     r1,1
+        bra     _spi_provider_divide
+_spi_provider_fetch:
+        la      r2,_block_within
+        sw      r0,0(r2)
+        mov     r0,r1
+        la      r2,_SPI_FLASH_READ_BLOCK
+        jal     r1,(r2)
+        la      r2,_spi_fetch_count
+        lw      r1,0(r2)
+        add     r1,1
+        sw      r1,0(r2)
+        la      r2,_block_within
+        lw      r1,0(r2)
+        add     r0,r1
+        lbu     r0,0(r0)
+        la      r2,_provider_destination
+        lw      r2,0(r2)
+        sb      r0,0(r2)
+        add     r2,1
+        la      r1,_provider_destination
+        sw      r2,0(r1)
+        la      r2,_block_cursor
+        lw      r0,0(r2)
+        add     r0,1
+        sw      r0,0(r2)
+        la      r2,_block_remaining
+        lw      r0,0(r2)
+        add     r0,-1
+        sw      r0,0(r2)
+        ceq     r0,z
+        brf     _spi_provider_next_byte
+_spi_provider_done:
+        pop     r2
+        pop     r1
+        jmp     (r1)
+
 ; Find a generated fixed-record catalog entry through block reads. Layout:
 ; eight-byte header (count in byte zero), then 24-byte records containing a
 ; 16-byte NUL-terminated name, one-byte descriptor ordinal, and seven padding.
@@ -482,12 +604,23 @@ _block_provider_find:
         lw      r2,12(fp)
         lc      r0,0
         sw      r0,0(r2)
+        la      r2,_spi_provider_active
+        lbu     r0,0(r2)
+        ceq     r0,z
+        brt     _block_find_memory_catalog
+        lc      r0,0
+        la      r2,_provider_image
+        sw      r0,0(r2)
+        lcu     r0,128
+        bra     _block_find_catalog_limit
+_block_find_memory_catalog:
         la      r0,_block_catalog_index
         la      r2,_provider_image
         sw      r0,0(r2)
         la      r0,_block_catalog_index_end
         la      r1,_block_catalog_index
         sub     r0,r1
+_block_find_catalog_limit:
         la      r2,_provider_limit
         sw      r0,0(r2)
         lc      r0,0
@@ -499,7 +632,7 @@ _block_provider_find:
         la      r0,_block_name_buffer
         la      r2,_provider_destination
         sw      r0,0(r2)
-        la      r2,_block_provider_read
+        la      r2,_image_provider_read
         jal     r1,(r2)
         la      r2,_block_name_buffer
         lbu     r0,0(r2)
@@ -522,7 +655,7 @@ _block_provider_find_next:
         la      r0,_block_name_buffer
         la      r2,_provider_destination
         sw      r0,0(r2)
-        la      r2,_block_provider_read
+        la      r2,_image_provider_read
         jal     r1,(r2)
         lw      r2,9(fp)
         la      r1,_block_name_buffer
@@ -567,6 +700,45 @@ _block_provider_find_match:
         ceq     r0,r2
         pop     r0
         brt     _block_provider_find_done
+        la      r2,_spi_provider_active
+        lbu     r1,0(r2)
+        ceq     r1,z
+        brt     _block_provider_find_store
+        ; Copy the generated descriptor, then replace its in-memory image
+        ; pointer with the 24-bit media extent from this catalog record.
+        mov     r1,r0
+        la      r2,_spi_descriptor
+        lc      r0,24
+_spi_descriptor_copy:
+        push    r0
+        lbu     r0,0(r1)
+        sb      r0,0(r2)
+        pop     r0
+        add     r1,1
+        add     r2,1
+        add     r0,-1
+        ceq     r0,z
+        brf     _spi_descriptor_copy
+        la      r2,_block_find_offset
+        lw      r0,0(r2)
+        add     r0,17
+        la      r2,_provider_offset
+        sw      r0,0(r2)
+        lc      r0,3
+        la      r2,_provider_count
+        sw      r0,0(r2)
+        la      r0,_provider_word_buffer
+        la      r2,_provider_destination
+        sw      r0,0(r2)
+        la      r2,_image_provider_read
+        jal     r1,(r2)
+        la      r0,_provider_word_buffer
+        la      r2,_read_image_word
+        jal     r1,(r2)
+        la      r2,_spi_descriptor
+        sw      r0,9(r2)
+        mov     r0,r2
+_block_provider_find_store:
         lw      r2,12(fp)
         sw      r0,0(r2)
 _block_provider_find_done:
@@ -1275,6 +1447,9 @@ _memory_image_provider:
 _block_image_provider:
         .word   _block_provider_find
         .word   _block_provider_read
+_spi_image_provider:
+        .word   _block_provider_find
+        .word   _spi_provider_read
 _provider_image:
         .zero   3
 _provider_offset:
@@ -1297,6 +1472,10 @@ _block_within:
         .zero   3
 _block_fetch_count:
         .zero   3
+_spi_fetch_count:
+        .zero   3
+_spi_provider_active:
+        .byte   0
 _block_buffer:
         .zero   8
 _block_name_buffer:
@@ -1309,6 +1488,8 @@ _block_find_table:
         .zero   3
 _provider_word_buffer:
         .zero   3
+_spi_descriptor:
+        .zero   24
 _embedded_descriptor:
         .zero   3
 _embedded_image_base:
@@ -1343,3 +1524,5 @@ _provider_bounds_message:
         .byte   66,79,85,78,68,83,10,0
 _block_provider_message:
         .byte   66,76,79,67,75,10,0
+_spi_provider_message:
+        .byte   83,80,73,10,0

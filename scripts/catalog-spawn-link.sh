@@ -35,6 +35,7 @@ echo "$compiler_output" | sed -n \
     '/--- generated assembly ---/,/--- end assembly ---/{/--- generated assembly ---/d;/--- end assembly ---/d;p;}' \
     > "$OUT_DIR/app.raw.s"
 cp "$ROOT_DIR/hal/cor24/catalog-spawn.s" "$OUT_DIR/kernel.raw.s"
+sed -n 'p' "$ROOT_DIR/hal/cor24/spi.s" >> "$OUT_DIR/kernel.raw.s"
 sed -n 'p' "$ROOT_DIR/hal/cor24/catalog_generated.s" >> "$OUT_DIR/kernel.raw.s"
 python3 "$ROOT_DIR/scripts/cor24-image.py" emit-asm \
     "$ROOT_DIR/catalog/images/embedded-hello.toml" "$OUT_DIR/embedded-hello.s" \
