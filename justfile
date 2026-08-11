@@ -47,6 +47,10 @@ cor24-image-smoke:
 cor24-storage-smoke:
     ./tests/test-cor24-storage.sh
 
+# Read the generated media through the emulator's W25Q32 SPI device
+spi-flash-read-smoke: cor24-storage-smoke
+    ./tests/test-spi-flash-read.sh
+
 # Load the versioned image into COR24 RAM and verify copy/BSS/entry behavior
 cor24-loader-smoke:
     ./tests/test-cor24-loader.sh

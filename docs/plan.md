@@ -1002,9 +1002,9 @@ Generated assembly pads backing storage to a block boundary while descriptors
 retain the logical image length used for bounds checks. The adapter decomposes
 arbitrary offset/count reads into block fetches; the multislot proof switches
 providers, loads and executes `embedded-hello` across boundaries, requires
-`EBLOCK`, restores the memory provider, and continues scheduling. No SPI MMIO
-register/transaction contract is defined in the repository, so physical SPI HAL
-work is not yet implementable without that hardware specification.
+`EBLOCK`, restores the memory provider, and continues scheduling. The SPI MMIO
+contract was subsequently recovered from the matching emulator release and is
+implemented by the byte-exchange HAL described below.
 
 The generated block fixture now begins with a catalog index: an eight-byte
 header containing the entry count followed by fixed 24-byte records with a
@@ -1014,9 +1014,7 @@ through its block adapter, rejects service descriptors, and resolves a matching
 ordinal into the generated runtime descriptor table. The provider-switch proof
 looks up `embedded-hello` through this index before reading and executing its
 image. Thus host-backed `find` and `read` now cover the complete storage-provider
-behavior independently of transport. Physical SPI remains blocked on the
-missing COR24 SPI register map, chip-select behavior, and transaction timing
-contract; the next actionable step requires that hardware specification.
+behavior independently of transport.
 
 The host-side storage builder now packs a compatible index and all nonresident
 C24IMG payloads into a deterministic eight-byte-block media file. It assigns
@@ -1024,10 +1022,20 @@ the seven reserved bytes to a 24-bit block-aligned offset, 24-bit logical
 length, and flags, validates every embedded checksum,
 and rejects corrupt extents and payloads. `just cor24-storage-smoke` produces
 `build/catalog-images/swtos-storage.bin`, which can be attached to the
-emulator's W25Q32 model once the guest SPI controller contract is available.
+emulator's W25Q32 model for target-side reads.
+
+The COR24 emulator source at release commit `116e165` supplies that contract:
+`FF0030` is MOSI on write and MISO on read, `FF0031` is SCLK, and `FF0032` is
+active-low select. The bus is mode 0 and MSB-first. `hal/cor24/spi.s` now
+implements initialization, selection, deselection, and byte exchange against
+those registers. `just spi-flash-read-smoke` executes the HAL on COR24 and
+reads the generated catalog header from the emulator's file-backed W25Q32.
+The next step is adapting arbitrary provider block reads to W25Q32 READ
+transactions and switching scheduled lookup/loading to that provider.
 
 ### Milestone 7 -- SPI Image Provider (Future)
 
+- [x] SPI mode-0 byte exchange HAL and W25Q32 media-read proof
 - [ ] SPI block device HAL driver
 - [ ] SPI catalog provider (same interface as resident provider)
 - [ ] Programs loaded from SPI flash transparently

@@ -140,6 +140,12 @@ entries use the seven reserved record bytes for a three-byte image offset,
 three-byte logical image length, and flags, and point to block-aligned,
 checksum-validated C24IMG payloads.
 
+`hal/cor24/spi.s` implements the platform's bit-banged SPI master contract at
+`FF0030` (MOSI/MISO), `FF0031` (SCLK), and `FF0032` (active-low select), using
+mode 0 and MSB-first byte exchange. `just spi-flash-read-smoke` attaches the
+generated media to the emulator's W25Q32 model and proves the target HAL reads
+its catalog header over the emulated wire protocol.
+
 Boot initializes that table and scans its flags rather than naming the shell
 entry directly. To verify metadata-driven `IMAGE_AUTOSTART` dispatch:
 
