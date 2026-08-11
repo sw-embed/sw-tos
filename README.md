@@ -161,6 +161,10 @@ After copying text and data, the target loader computes standard CRC-32 with a
 split 24-bit/8-bit accumulator and compares the header's stored low 24 bits
 before making the entry runnable. The SPI proof corrupts a payload byte and
 requires `CRCFAIL`, demonstrating rejection before execution.
+Before allocation, the loader also reads and verifies the six-byte `C24IMG`
+magic, requires a nonzero text segment and an entry offset within it, rejects
+24-bit overflow while combining text/data/BSS sizes, and requires the computed
+stored payload length to equal the descriptor extent.
 
 The SPI-enabled interactive shell uses a composite provider: resident programs
 are resolved without touching the bus, and nonresident names fall through to

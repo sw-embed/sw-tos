@@ -1055,6 +1055,13 @@ and compares the specified low 24 bits before publishing the child as runnable.
 The scheduled SPI proof mutates one flash payload byte after media generation
 and requires a recoverable `CRCFAIL`; the corrupt instruction is never called.
 
+Strict target header validation now precedes allocation as well. Magic is
+checked byte-for-byte through the active provider; text must be nonempty; entry
+must be strictly inside text; text/data/BSS and byte conversions must not wrap
+24-bit arithmetic; and `27 + 3*(text+data)` must equal the descriptor's stored
+extent. Negative W25Q32 cases independently corrupt magic, entry, and text size
+metadata and must all return the recoverable load failure path.
+
 The interactive integration is now explicit rather than test-only. A composite
 provider searches resident program descriptors first and consults SPI only for
 nonresident names; its read callback follows the source selected by the last

@@ -48,3 +48,26 @@ if [ "$corrupt_output" != "$corrupt_expected" ]; then
 fi
 
 echo "PASS: target CRC rejected corrupt W25Q32 payload before execution"
+
+for corruption in magic entry size; do
+    bad_media="$OUT_DIR/corrupt-$corruption.bin"
+    cp "$MEDIA" "$bad_media"
+    if [ "$corruption" = magic ]; then
+        printf 'X' | dd of="$bad_media" bs=1 seek=128 conv=notrunc 2>/dev/null
+    elif [ "$corruption" = entry ]; then
+        printf '\377\377\377' | dd of="$bad_media" bs=1 seek=146 conv=notrunc 2>/dev/null
+    else
+        printf '\377\377\377' | dd of="$bad_media" bs=1 seek=137 conv=notrunc 2>/dev/null
+    fi
+    bad_output=$("$ROOT_DIR/tools/bin/cor24-emu" \
+        --lgo "$OUT_DIR/seed.lgo" --load-binary "$OUT_DIR/program.bin@0" --entry 0 \
+        --spi-device "w25q32@cs=3?file=$bad_media" \
+        --speed 0 -n 3000000 --quiet 2>/dev/null | sed '/^Entry point:/d')
+    if [ "$bad_output" != "$corrupt_expected" ]; then
+        echo "FAIL: corrupt SPI $corruption was not rejected" >&2
+        echo "$bad_output" >&2
+        exit 1
+    fi
+done
+
+echo "PASS: target rejected corrupt C24IMG magic, entry, and size metadata"

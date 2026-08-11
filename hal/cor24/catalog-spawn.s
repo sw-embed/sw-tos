@@ -891,6 +891,14 @@ _load_embedded_process:
         la      r1,_embedded_image_base
         sw      r0,0(r1)
 
+        la      r2,_validate_embedded_magic
+        jal     r1,(r2)
+        ceq     r0,z
+        brt     _embedded_magic_ok
+        la      r2,_embedded_load_fail
+        jmp     (r2)
+_embedded_magic_ok:
+
         ; Enforce version 1 and its zero-relocation policy on target.
         lc      r0,6
         la      r2,_read_embedded_field
@@ -942,6 +950,13 @@ _embedded_relocations_ok:
         la      r2,_embedded_load_fail
         jmp     (r2)
 _embedded_metadata_ok:
+        la      r2,_validate_embedded_layout
+        jal     r1,(r2)
+        ceq     r0,z
+        brt     _embedded_layout_ok
+        la      r2,_embedded_load_fail
+        jmp     (r2)
+_embedded_layout_ok:
 
         ; The zeroing allocator reserves text + data + BSS in this process's
         ; reclaimable child generation.
@@ -1022,6 +1037,113 @@ _embedded_checksum_ok:
         add     r0,r1
         sw      r0,30(r2)
         lc      r0,0
+        pop     r1
+        jmp     (r1)
+
+; Validate C24IMG magic through the active provider before parsing metadata.
+_validate_embedded_magic:
+        push    r1
+        push    r2
+        lc      r0,0
+        la      r2,_provider_offset
+        sw      r0,0(r2)
+        la      r2,_embedded_image_base
+        lw      r0,0(r2)
+        la      r2,_provider_image
+        sw      r0,0(r2)
+        la      r0,_embedded_magic_buffer
+        la      r2,_provider_destination
+        sw      r0,0(r2)
+        lc      r0,6
+        la      r2,_provider_count
+        sw      r0,0(r2)
+        la      r2,_image_provider_read
+        jal     r1,(r2)
+        la      r2,_provider_status
+        lw      r0,0(r2)
+        ceq     r0,z
+        brf     _embedded_magic_fail
+        la      r0,_embedded_magic_buffer
+        la      r2,_embedded_magic_expected
+        lc      r1,6
+_embedded_magic_compare:
+        push    r1
+        lbu     r1,0(r0)
+        push    r0
+        lbu     r0,0(r2)
+        ceq     r0,r1
+        pop     r0
+        pop     r1
+        brf     _embedded_magic_fail
+        add     r0,1
+        add     r2,1
+        add     r1,-1
+        push    r0
+        mov     r0,r1
+        ceq     r0,z
+        pop     r0
+        brf     _embedded_magic_compare
+        lc      r0,0
+        bra     _embedded_magic_done
+_embedded_magic_fail:
+        lc      r0,1
+_embedded_magic_done:
+        pop     r2
+        pop     r1
+        jmp     (r1)
+
+; Check entry bounds and all size arithmetic before allocating executable RAM.
+; The descriptor's stored byte extent must exactly equal 27 + 3*(text+data).
+_validate_embedded_layout:
+        push    r1
+        push    r2
+        la      r2,_embedded_text_words
+        lw      r1,0(r2)
+        mov     r0,r1
+        ceq     r0,z
+        brt     _embedded_layout_fail
+        la      r2,_embedded_entry_words
+        lw      r0,0(r2)
+        clu     r0,r1
+        brf     _embedded_layout_fail
+        la      r2,_embedded_data_words
+        lw      r0,0(r2)
+        add     r0,r1
+        clu     r0,r1
+        brt     _embedded_layout_fail
+        mov     r1,r0
+        add     r0,r1
+        clu     r0,r1
+        brt     _embedded_layout_fail
+        add     r0,r1
+        clu     r0,r1
+        brt     _embedded_layout_fail
+        mov     r1,r0
+        add     r0,27
+        clu     r0,r1
+        brt     _embedded_layout_fail
+        la      r2,_provider_limit
+        lw      r1,0(r2)
+        ceq     r0,r1
+        brf     _embedded_layout_fail
+        ; Allocation word total must not wrap when BSS is included.
+        la      r2,_embedded_text_words
+        lw      r0,0(r2)
+        la      r2,_embedded_data_words
+        lw      r1,0(r2)
+        add     r0,r1
+        la      r2,_embedded_bss_words
+        lw      r1,0(r2)
+        mov     r2,r0
+        add     r0,r1
+        clu     r0,r2
+        brt     _embedded_layout_fail
+        lc      r0,0
+        bra     _embedded_layout_done
+_embedded_layout_fail:
+        lc      r0,1
+_embedded_layout_done:
+        pop     r2
         pop     r1
         jmp     (r1)
 
@@ -1727,6 +1849,10 @@ _block_find_table:
         .zero   3
 _provider_word_buffer:
         .zero   3
+_embedded_magic_buffer:
+        .zero   6
+_embedded_magic_expected:
+        .byte   67,50,52,73,77,71
 _spi_descriptor:
         .zero   24
 _embedded_descriptor:
