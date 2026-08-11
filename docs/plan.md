@@ -1116,6 +1116,19 @@ process and keeps descriptor lifetime independent of arena reclamation.
 - [x] SPI catalog provider (same interface as resident provider)
 - [x] Programs loaded from SPI flash transparently
 
+### Peripheral clients
+
+- [x] Reusable COR24 I2C bit-bang primitives
+- [x] PL/SW-callable DS1307 time read with ACK/NAK error reporting
+- [ ] SSD1306 display client
+- [ ] SD-card block provider
+
+`just i2c-ds1307-smoke` configures the Rust emulator's DS1307 for 12:34:56,
+runs a PL/SW client through the scheduled kernel, and requires the complete
+START/address-write/register/repeated-START/address-read/three-byte/STOP log.
+The last read is explicitly NAKed so the slave releases SDA. A second run with
+no attached device proves the address NAK reaches PL/SW as an error.
+
 ---
 
 ## 16. Toolchain and Build
@@ -1181,6 +1194,7 @@ The name in `FILE:` must match the `%INCLUDE` name (without .msw).
 | `just ipc-smoke` | Verify blocking fixed-message client/TTY IPC |
 | `just heartbeat-smoke` | Verify UART framing and 24-bit clock wraparound |
 | `just interrupt-context-capability-smoke` | Verify the current ISA cannot save or restore `ir` |
+| `just i2c-ds1307-smoke` | Read an emulated DS1307 RTC from PL/SW and verify its bus log |
 | `just clock-smoke` | Verify the heartbeat-driven PL/SW Clock menu app |
 | `just catalog-smoke` | Validate, generate, and compile the resident catalog |
 | `just cor24-image-smoke` | Build and corruption-test a versioned COR24 image |

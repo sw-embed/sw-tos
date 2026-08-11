@@ -368,6 +368,13 @@ boundary: interrupt return through `ir` assembles, but the ISA/toolchain rejects
 all tested register and memory transfers needed to save or restore `ir` for a
 different process. SWTOS therefore remains cooperative on current COR24.
 
+The first I2C client reuses the proven COR24 DS1307 transaction: a reusable
+bit-banged HAL at `0xFF0020`/`0xFF0021` sets register zero, performs a repeated
+START, reads BCD seconds/minutes/hours, NAKs the final byte, and issues STOP.
+`just i2c-ds1307-smoke` runs a PL/SW client against the Rust emulator's
+`ds1307@0x68` device, requires `12:34:56`, checks every logged bus event, and
+also verifies that an absent device returns the NAK error path.
+
 ## License
 
 Copyright (c) 2026 Michael A Wright

@@ -169,6 +169,10 @@ heartbeat-smoke:
 interrupt-context-capability-smoke:
     ./tests/test-interrupt-context-capability.sh
 
+# Read a configured DS1307 RTC through the COR24 I2C HAL from PL/SW
+i2c-ds1307-smoke:
+    ./tests/test-i2c-ds1307.sh
+
 # Verify menu Clock app heartbeat logging and return to menu
 clock-smoke: plsw-system
     python3 tests/test-terminal-input.py

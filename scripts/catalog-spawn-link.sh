@@ -36,6 +36,7 @@ echo "$compiler_output" | sed -n \
     '/--- generated assembly ---/,/--- end assembly ---/{/--- generated assembly ---/d;/--- end assembly ---/d;p;}' \
     > "$OUT_DIR/app.raw.s"
 cp "$ROOT_DIR/hal/cor24/catalog-spawn.s" "$OUT_DIR/kernel.raw.s"
+sed -n 'p' "$ROOT_DIR/hal/cor24/i2c.s" >> "$OUT_DIR/kernel.raw.s"
 sed -n 'p' "$ROOT_DIR/hal/cor24/spi.s" >> "$OUT_DIR/kernel.raw.s"
 sed -n 'p' "$ROOT_DIR/hal/cor24/catalog_generated.s" >> "$OUT_DIR/kernel.raw.s"
 while IFS=$'\t' read -r image_name image_manifest; do
