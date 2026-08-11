@@ -305,4 +305,7 @@ that `jmp (ir)` resumes interrupted execution.
 
 ## License
 
+Copyright (c) 2026 Michael A Wright
+
 MIT -- see [LICENSE](LICENSE).
+The standalone notice is also recorded in [COPYRIGHT](COPYRIGHT).
