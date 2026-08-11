@@ -1070,6 +1070,13 @@ length equals the descriptor's word extent, addition does not wrap, and the end
 fits within the four-megabyte W25Q32. Five independent media corruptions cover
 ordinal, alignment, length, flags, and capacity bounds before descriptor copy.
 
+Catalog traversal is bounded at its other inputs as well. The one-byte count
+must be nonzero and `8 + count*24` must exactly equal the provider's index
+extent; header, name, and tail reads must return success; and every fixed
+16-byte name field must contain a NUL. Corrupt count and unterminated-name
+fixtures prove lookup returns no descriptor without scanning or comparing past
+the declared catalog storage.
+
 The interactive integration is now explicit rather than test-only. A composite
 provider searches resident program descriptors first and consults SPI only for
 nonresident names; its read callback follows the source selected by the last

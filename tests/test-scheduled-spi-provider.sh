@@ -96,3 +96,24 @@ for corruption in ordinal alignment length flags bounds; do
 done
 
 echo "PASS: target rejected corrupt SPI catalog ordinal, flags, and extents"
+
+for corruption in count name; do
+    bad_media="$OUT_DIR/corrupt-catalog-$corruption.bin"
+    cp "$MEDIA" "$bad_media"
+    if [ "$corruption" = count ]; then
+        printf '\006' | dd of="$bad_media" bs=1 seek=0 conv=notrunc 2>/dev/null
+    else
+        printf 'xxxxxxxxxxxxxxxx' | dd of="$bad_media" bs=1 seek=80 conv=notrunc 2>/dev/null
+    fi
+    bad_output=$("$ROOT_DIR/tools/bin/cor24-emu" \
+        --lgo "$OUT_DIR/seed.lgo" --load-binary "$OUT_DIR/program.bin@0" --entry 0 \
+        --spi-device "w25q32@cs=3?file=$bad_media" \
+        --speed 0 -n 3000000 --quiet 2>/dev/null | sed '/^Entry point:/d')
+    if [ "$bad_output" != 'SPAWN' ]; then
+        echo "FAIL: corrupt SPI catalog $corruption was accepted" >&2
+        echo "$bad_output" >&2
+        exit 1
+    fi
+done
+
+echo "PASS: target rejected invalid SPI catalog count and unterminated name"

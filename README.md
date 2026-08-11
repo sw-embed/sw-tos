@@ -168,6 +168,10 @@ stored payload length to equal the descriptor extent.
 SPI catalog lookup validates the complete eight-byte record tail before copying
 a runtime descriptor: ordinal, image-present flag, block alignment, logical
 length, non-wrapping end address, and the four-megabyte W25Q32 capacity bound.
+The index header must describe exactly the bounded fixed-record region, every
+catalog read must report success, and each 16-byte name field must contain a
+NUL before comparison, preventing malformed media from extending a lookup into
+adjacent target state.
 
 The SPI-enabled interactive shell uses a composite provider: resident programs
 are resolved without touching the bus, and nonresident names fall through to

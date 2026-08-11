@@ -725,6 +725,34 @@ _block_find_catalog_limit:
         sw      r0,0(r2)
         la      r2,_image_provider_read
         jal     r1,(r2)
+        la      r2,_provider_status
+        lw      r0,0(r2)
+        ceq     r0,z
+        brt     _block_find_header_read_ok
+        la      r2,_block_provider_find_done
+        jmp     (r2)
+_block_find_header_read_ok:
+        la      r2,_block_name_buffer
+        lbu     r0,0(r2)
+        ceq     r0,z
+        brf     _block_find_count_nonzero
+        la      r2,_block_provider_find_done
+        jmp     (r2)
+_block_find_count_nonzero:
+        ; Header plus count fixed records must exactly fill the bounded index.
+        mov     r1,r0
+        add     r0,r1
+        add     r0,r1
+        lc      r1,3
+        shl     r0,r1
+        add     r0,8
+        la      r2,_provider_limit
+        lw      r1,0(r2)
+        ceq     r0,r1
+        brt     _block_find_count_valid
+        la      r2,_block_provider_find_done
+        jmp     (r2)
+_block_find_count_valid:
         la      r2,_block_name_buffer
         lbu     r0,0(r2)
         la      r2,_block_find_remaining
@@ -751,6 +779,21 @@ _block_provider_find_next:
         sw      r0,0(r2)
         la      r2,_image_provider_read
         jal     r1,(r2)
+        la      r2,_provider_status
+        lw      r0,0(r2)
+        ceq     r0,z
+        brt     _block_find_name_read_ok
+        la      r2,_block_provider_find_done
+        jmp     (r2)
+_block_find_name_read_ok:
+        la      r0,_block_name_buffer
+        la      r2,_validate_block_name
+        jal     r1,(r2)
+        ceq     r0,z
+        brt     _block_find_name_valid
+        la      r2,_block_provider_find_done
+        jmp     (r2)
+_block_find_name_valid:
         lw      r2,9(fp)
         la      r1,_block_name_buffer
 _block_provider_find_compare:
@@ -785,7 +828,10 @@ _block_provider_find_mismatch:
         add     r0,-1
         sw      r0,0(r2)
         ceq     r0,z
-        brf     _block_provider_find_next
+        brt     _block_find_exhausted
+        la      r2,_block_provider_find_next
+        jmp     (r2)
+_block_find_exhausted:
         la      r2,_block_provider_find_done
         jmp     (r2)
 _block_provider_find_match:
@@ -932,6 +978,32 @@ _block_provider_find_store:
         lw      r2,12(fp)
         sw      r0,0(r2)
 _block_provider_find_done:
+        pop     r1
+        jmp     (r1)
+
+; Return zero only when r0 contains a NUL within its fixed 16-byte name field.
+_validate_block_name:
+        push    r1
+        push    r2
+        mov     r2,r0
+        lc      r1,16
+_validate_block_name_next:
+        lbu     r0,0(r2)
+        ceq     r0,z
+        brt     _validate_block_name_ok
+        add     r2,1
+        add     r1,-1
+        push    r0
+        mov     r0,r1
+        ceq     r0,z
+        pop     r0
+        brf     _validate_block_name_next
+        lc      r0,1
+        bra     _validate_block_name_done
+_validate_block_name_ok:
+        lc      r0,0
+_validate_block_name_done:
+        pop     r2
         pop     r1
         jmp     (r1)
 
