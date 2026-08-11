@@ -115,6 +115,10 @@ scheduled-shell-spi-build: cor24-storage-smoke
     ./scripts/catalog-spawn-link.sh tests/catalog-shell.plsw scheduled-shell-spi composite-spi
     {{COR24ASM}} tests/spi-launch-seed.s -o build/scheduled-shell-spi/seed.lgo
 
+# Package checksummed resident, SPI, and flash artifacts for COR24-TB testing
+hardware-validation-bundle:
+    ./scripts/prepare-hardware-validation.sh
+
 # Interactively exercise scheduled Hello and Counter choices
 scheduled-shell-interactive: plsw-system-interactive
 

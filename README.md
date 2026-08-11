@@ -267,8 +267,15 @@ The heartbeat-aware frontend accepts `--image`, so the same byte stuffing,
 Ctrl-] translation, and line-ending filtering serve both the compatibility and
 scheduler-integrated images. The latter is ready to become the primary demo.
 
-Produces a flat binary image (.lgo) loadable via the COR24 serial boot
-protocol at 921,600 baud.
+Produces linked flat `.bin` images at address zero, plus `.lgo` containers for
+single-module assembly artifacts. Use the format required by the COR24 serial
+boot loader at 921,600 baud.
+
+Physical-board acceptance is staged with `just hardware-validation-bundle`.
+It produces checksummed resident, SPI-shell, launch-seed, and W25Q32 artifacts;
+the required 921,600-baud RTS/CTS setup and acceptance transcript are specified
+in [docs/hardware-validation.md](docs/hardware-validation.md). The repository
+does not contain the COR24 `loadngo` board uploader.
 
 To compile and run the SWTOS menu interactively in the emulator:
 

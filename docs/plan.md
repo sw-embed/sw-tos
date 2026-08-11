@@ -1196,6 +1196,7 @@ The name in `FILE:` must match the `%INCLUDE` name (without .msw).
 | `just scheduled-block-provider-smoke` | Load an image through host-backed block reads |
 | `just scheduled-concurrent-spi-smoke` | Keep distinct descriptors for two live SPI-loaded children |
 | `just scheduled-shell-interactive` | Run the scheduler-integrated shell proof |
+| `just hardware-validation-bundle` | Package checksummed COR24-TB validation artifacts |
 | `just plsw-compile <[.msw ...] file.plsw>` | Compile any .plsw  |
 | `just plsw-run <[.msw ...] file.plsw>` | Compile and run any .plsw |
 | `just plsw-dump <[.msw ...] file.plsw>` | Compile and dump memory |
