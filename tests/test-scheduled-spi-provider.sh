@@ -117,3 +117,18 @@ for corruption in count name; do
 done
 
 echo "PASS: target rejected invalid SPI catalog count and unterminated name"
+
+CHECKSUM_MEDIA="$OUT_DIR/corrupt-catalog-checksum.bin"
+cp "$MEDIA" "$CHECKSUM_MEDIA"
+printf 'j' | dd of="$CHECKSUM_MEDIA" bs=1 seek=8 conv=notrunc 2>/dev/null
+checksum_output=$("$ROOT_DIR/tools/bin/cor24-emu" \
+    --lgo "$OUT_DIR/seed.lgo" --load-binary "$OUT_DIR/program.bin@0" --entry 0 \
+    --spi-device "w25q32@cs=3?file=$CHECKSUM_MEDIA" \
+    --speed 0 -n 3000000 --quiet 2>/dev/null | sed '/^Entry point:/d')
+if [ "$checksum_output" != 'SPAWN' ]; then
+    echo "FAIL: corrupt SPI catalog checksum was accepted" >&2
+    echo "$checksum_output" >&2
+    exit 1
+fi
+
+echo "PASS: target checksum authenticated the complete SPI catalog index"

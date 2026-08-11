@@ -2,6 +2,7 @@
 """Generate the SWTOS PL/SW resident catalog from TOML."""
 
 import argparse
+import binascii
 import re
 import sys
 import tomllib
@@ -203,11 +204,18 @@ def render_scheduled(entries: list[dict], manifest: Path) -> str:
                 "",
             ]
         )
-    lines.extend(["_block_catalog_index:", f"        .byte   {len(entries)},0,0,0,0,0,0,0"])
+    records = []
     for index, entry in enumerate(entries):
         name = entry["name"].encode("ascii") + b"\0"
         name_field = name + bytes(16 - len(name))
         record = name_field + bytes([index]) + bytes(7)
+        records.append(record)
+    record_bytes = b"".join(records)
+    catalog_crc = binascii.crc32(record_bytes) & 0xFFFFFF
+    header = bytes([len(entries), 1]) + b"SWT" + catalog_crc.to_bytes(3, "big")
+    header_values = ",".join(str(value) for value in header)
+    lines.extend(["_block_catalog_index:", f"        .byte   {header_values}"])
+    for record in records:
         values = ",".join(str(value) for value in record)
         lines.append(f"        .byte   {values}")
     lines.extend(["_block_catalog_index_end:", ""])

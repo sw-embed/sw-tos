@@ -717,10 +717,10 @@ _block_find_catalog_limit:
         lc      r0,0
         la      r2,_provider_offset
         sw      r0,0(r2)
-        lc      r0,1
+        lc      r0,8
         la      r2,_provider_count
         sw      r0,0(r2)
-        la      r0,_block_name_buffer
+        la      r0,_block_header_buffer
         la      r2,_provider_destination
         sw      r0,0(r2)
         la      r2,_image_provider_read
@@ -732,13 +732,40 @@ _block_find_catalog_limit:
         la      r2,_block_provider_find_done
         jmp     (r2)
 _block_find_header_read_ok:
-        la      r2,_block_name_buffer
+        ; Header: count, version 1, ASCII SWT, record CRC-32 low 24 bits.
+        la      r2,_block_header_buffer
         lbu     r0,0(r2)
         ceq     r0,z
         brf     _block_find_count_nonzero
         la      r2,_block_provider_find_done
         jmp     (r2)
 _block_find_count_nonzero:
+        lbu     r0,1(r2)
+        lc      r1,1
+        ceq     r0,r1
+        brt     _block_find_version_ok
+        la      r2,_block_provider_find_done
+        jmp     (r2)
+_block_find_version_ok:
+        la      r2,_block_header_buffer
+        lbu     r0,2(r2)
+        lc      r1,83
+        ceq     r0,r1
+        brf     _block_find_header_invalid
+        lbu     r0,3(r2)
+        lc      r1,87
+        ceq     r0,r1
+        brf     _block_find_header_invalid
+        lbu     r0,4(r2)
+        lc      r1,84
+        ceq     r0,r1
+        brt     _block_find_magic_ok
+_block_find_header_invalid:
+        la      r2,_block_provider_find_done
+        jmp     (r2)
+_block_find_magic_ok:
+        la      r2,_block_header_buffer
+        lbu     r0,0(r2)
         ; Header plus count fixed records must exactly fill the bounded index.
         mov     r1,r0
         add     r0,r1
@@ -753,7 +780,51 @@ _block_find_count_nonzero:
         la      r2,_block_provider_find_done
         jmp     (r2)
 _block_find_count_valid:
-        la      r2,_block_name_buffer
+        ; Read and authenticate the complete record region before traversal.
+        lc      r0,8
+        la      r2,_provider_offset
+        sw      r0,0(r2)
+        la      r2,_provider_limit
+        lw      r0,0(r2)
+        add     r0,-8
+        la      r2,_provider_count
+        sw      r0,0(r2)
+        la      r0,_block_catalog_buffer
+        la      r2,_provider_destination
+        sw      r0,0(r2)
+        la      r2,_image_provider_read
+        jal     r1,(r2)
+        la      r2,_provider_status
+        lw      r0,0(r2)
+        ceq     r0,z
+        brt     _block_find_records_read_ok
+        la      r2,_block_provider_find_done
+        jmp     (r2)
+_block_find_records_read_ok:
+        la      r0,_block_catalog_buffer
+        la      r2,_crc_cursor
+        sw      r0,0(r2)
+        la      r2,_provider_limit
+        lw      r0,0(r2)
+        add     r0,-8
+        la      r2,_crc_remaining
+        sw      r0,0(r2)
+        la      r2,_crc32_low24
+        jal     r1,(r2)
+        la      r2,_block_catalog_crc
+        sw      r0,0(r2)
+        la      r0,_block_header_buffer
+        add     r0,5
+        la      r2,_read_image_word
+        jal     r1,(r2)
+        la      r2,_block_catalog_crc
+        lw      r1,0(r2)
+        ceq     r0,r1
+        brt     _block_find_crc_ok
+        la      r2,_block_provider_find_done
+        jmp     (r2)
+_block_find_crc_ok:
+        la      r2,_block_header_buffer
         lbu     r0,0(r2)
         la      r2,_block_find_remaining
         sw      r0,0(r2)
@@ -2010,6 +2081,12 @@ _composite_read_spi:
         .byte   0
 _block_buffer:
         .zero   8
+_block_header_buffer:
+        .zero   8
+_block_catalog_buffer:
+        .zero   120
+_block_catalog_crc:
+        .zero   3
 _block_name_buffer:
         .zero   16
 _block_find_remaining:

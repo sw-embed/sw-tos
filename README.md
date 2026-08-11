@@ -172,6 +172,9 @@ The index header must describe exactly the bounded fixed-record region, every
 catalog read must report success, and each 16-byte name field must contain a
 NUL before comparison, preventing malformed media from extending a lookup into
 adjacent target state.
+Its eight-byte header is count, version `1`, ASCII `SWT`, and the big-endian low
+24 bits of standard CRC-32 over every 24-byte record. Host generation and target
+lookup compute the same checksum, authenticating names and extents together.
 
 The SPI-enabled interactive shell uses a composite provider: resident programs
 are resolved without touching the bus, and nonresident names fall through to

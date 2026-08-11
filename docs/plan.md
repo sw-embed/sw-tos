@@ -1007,7 +1007,7 @@ contract was subsequently recovered from the matching emulator release and is
 implemented by the byte-exchange HAL described below.
 
 The generated block fixture now begins with a catalog index: an eight-byte
-header containing the entry count followed by fixed 24-byte records with a
+versioned/checksummed header containing the entry count followed by fixed 24-byte records with a
 16-byte NUL-terminated name, one-byte descriptor ordinal, and seven reserved
 bytes. The block provider's `find` callback reads and compares those records
 through its block adapter, rejects service descriptors, and resolves a matching
@@ -1076,6 +1076,14 @@ extent; header, name, and tail reads must return success; and every fixed
 16-byte name field must contain a NUL. Corrupt count and unterminated-name
 fixtures prove lookup returns no descriptor without scanning or comparing past
 the declared catalog storage.
+
+The complete index is authenticated as one versioned structure. Its eight-byte
+header contains entry count, version `1`, ASCII `SWT`, and the big-endian low
+24 bits of standard CRC-32 over the fixed records. Both assembly-fixture and
+flash-media generation calculate this value. Target lookup reads the bounded
+record region, computes the same split-word CRC routine used for C24IMG, and
+compares it before traversal. A one-byte name mutation proves aggregate catalog
+corruption is rejected even when the altered record is not the requested one.
 
 The interactive integration is now explicit rather than test-only. A composite
 provider searches resident program descriptors first and consults SPI only for

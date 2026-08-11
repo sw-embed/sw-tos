@@ -2,6 +2,7 @@
 """Build and validate a block-aligned SWTOS program storage image."""
 
 import argparse
+import binascii
 import importlib.util
 import sys
 import tomllib
@@ -63,8 +64,11 @@ def build_storage(manifest_path: Path) -> bytes:
         )
         images.append((image_offset, image))
 
-    output = bytearray(bytes([len(entries)]) + bytes(HEADER_BYTES - 1))
-    output.extend(b"".join(records))
+    record_bytes = b"".join(records)
+    catalog_crc = binascii.crc32(record_bytes) & 0xFFFFFF
+    header = bytes([len(entries), 1]) + b"SWT" + catalog_crc.to_bytes(3, "big")
+    output = bytearray(header)
+    output.extend(record_bytes)
     output.extend(bytes(align(len(output)) - len(output)))
     for image_offset, image in images:
         if not image:
@@ -80,11 +84,14 @@ def validate_storage(data: bytes) -> dict:
     if len(data) < HEADER_BYTES or len(data) % BLOCK_BYTES:
         raise ValueError("storage image is not a complete set of eight-byte blocks")
     count = data[0]
-    if data[1:HEADER_BYTES] != bytes(HEADER_BYTES - 1):
-        raise ValueError("storage header reserved bytes are nonzero")
+    if data[1] != 1 or data[2:5] != b"SWT":
+        raise ValueError("storage catalog header version or magic is invalid")
     index_end = HEADER_BYTES + count * RECORD_BYTES
     if index_end > len(data):
         raise ValueError("storage catalog is truncated")
+    expected_crc = int.from_bytes(data[5:8], "big")
+    if binascii.crc32(data[HEADER_BYTES:index_end]) & 0xFFFFFF != expected_crc:
+        raise ValueError("storage catalog checksum mismatch")
     names = set()
     image_count = 0
     for ordinal in range(count):
