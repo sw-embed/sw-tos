@@ -1030,13 +1030,16 @@ active-low select. The bus is mode 0 and MSB-first. `hal/cor24/spi.s` now
 implements initialization, selection, deselection, and byte exchange against
 those registers. `just spi-flash-read-smoke` executes the HAL on COR24 and
 reads the generated catalog header from the emulator's file-backed W25Q32.
-The next step is adapting arbitrary provider block reads to W25Q32 READ
-transactions and switching scheduled lookup/loading to that provider.
+The HAL now also converts an eight-byte block number to a 24-bit flash address,
+issues a W25Q32 `03h` READ transaction, and fills an eight-byte target buffer.
+The proof reads both catalog block 0 and the block-16 `C24IMG` magic. The next
+step is adapting arbitrary provider reads to this block primitive and switching
+scheduled lookup/loading to that provider.
 
 ### Milestone 7 -- SPI Image Provider (Future)
 
 - [x] SPI mode-0 byte exchange HAL and W25Q32 media-read proof
-- [ ] SPI block device HAL driver
+- [x] SPI block device HAL read driver
 - [ ] SPI catalog provider (same interface as resident provider)
 - [ ] Programs loaded from SPI flash transparently
 

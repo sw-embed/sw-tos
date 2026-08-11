@@ -8,11 +8,15 @@
 ;
 ; _SPI_XCHG accepts the transmit byte in r0 and returns the received byte in
 ; r0. All entry points preserve r1 (the COR24 return-address register).
+; _SPI_FLASH_READ_BLOCK accepts an eight-byte block number in r0 and returns
+; a pointer to the reusable eight-byte _SPI_FLASH_BLOCK_BUFFER in r0.
 
         .globl  _SPI_INIT
         .globl  _SPI_SELECT
         .globl  _SPI_DESELECT
         .globl  _SPI_XCHG
+        .globl  _SPI_FLASH_READ_BLOCK
+        .globl  _SPI_FLASH_BLOCK_BUFFER
 
 _SPI_INIT:
         push    r1
@@ -87,9 +91,74 @@ _spi_xchg_bit:
         pop     r1
         jmp     (r1)
 
+_SPI_FLASH_READ_BLOCK:
+        push    r1
+        la      r2,_SPI_FLASH_BLOCK_BUFFER
+        la      r1,_spi_flash_destination
+        sw      r2,0(r1)
+        ; Convert block number to its 24-bit byte address.
+        add     r0,r0
+        add     r0,r0
+        add     r0,r0
+        la      r2,_spi_flash_address
+        sw      r0,0(r2)
+
+        la      r2,_SPI_SELECT
+        jal     r1,(r2)
+        lc      r0,3            ; W25Q32 READ DATA
+        la      r2,_SPI_XCHG
+        jal     r1,(r2)
+        ; COR24 word byte offsets run least-significant to most-significant;
+        ; W25Q32 addresses are transmitted most-significant byte first.
+        la      r2,_spi_flash_address
+        lbu     r0,2(r2)
+        la      r2,_SPI_XCHG
+        jal     r1,(r2)
+        la      r2,_spi_flash_address
+        lbu     r0,1(r2)
+        la      r2,_SPI_XCHG
+        jal     r1,(r2)
+        la      r2,_spi_flash_address
+        lbu     r0,0(r2)
+        la      r2,_SPI_XCHG
+        jal     r1,(r2)
+
+        lc      r0,8
+        la      r2,_spi_flash_remaining
+        sw      r0,0(r2)
+_spi_flash_read_byte:
+        lc      r0,0
+        la      r2,_SPI_XCHG
+        jal     r1,(r2)
+        la      r2,_spi_flash_destination
+        lw      r2,0(r2)
+        sb      r0,0(r2)
+        add     r2,1
+        la      r0,_spi_flash_destination
+        sw      r2,0(r0)
+        la      r2,_spi_flash_remaining
+        lw      r0,0(r2)
+        add     r0,-1
+        sw      r0,0(r2)
+        ceq     r0,z
+        brf     _spi_flash_read_byte
+        la      r2,_SPI_DESELECT
+        jal     r1,(r2)
+        la      r0,_SPI_FLASH_BLOCK_BUFFER
+        pop     r1
+        jmp     (r1)
+
 _spi_tx:
         .byte   0
 _spi_rx:
         .word   0
 _spi_bits:
         .word   0
+_spi_flash_address:
+        .word   0
+_spi_flash_destination:
+        .word   0
+_spi_flash_remaining:
+        .word   0
+_SPI_FLASH_BLOCK_BUFFER:
+        .byte   0,0,0,0,0,0,0,0
