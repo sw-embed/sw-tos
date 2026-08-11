@@ -20,7 +20,7 @@ output=$("$ROOT_DIR/tools/bin/cor24-emu" \
     --spi-device "w25q32@cs=3?file=$MEDIA" \
     --speed 0 -n 3000000 --quiet 2>/dev/null | sed '/^Entry point:/d')
 expected='SPAWN
-ESPI'
+ESPI CACHE'
 if [ "$output" != "$expected" ]; then
     echo "FAIL: expected SPI-backed spawn output:" >&2
     echo "$expected" >&2

@@ -240,6 +240,10 @@ _TASK_USE_SPI_PROVIDER:
         la      r2,_spi_fetch_count
         lc      r0,0
         sw      r0,0(r2)
+        la      r2,_spi_cache_hit_count
+        sw      r0,0(r2)
+        la      r2,_spi_cache_valid
+        sb      r0,0(r2)
         pop     r1
         jmp     (r1)
 
@@ -261,6 +265,9 @@ _composite_provider_find:
         brf     _composite_found_resident
         la      r2,_SPI_INIT
         jal     r1,(r2)
+        la      r2,_spi_cache_valid
+        lc      r0,0
+        sb      r0,0(r2)
         la      r2,_spi_provider_active
         lc      r0,1
         sb      r0,0(r2)
@@ -300,6 +307,13 @@ _TASK_SPI_PROVIDER_VERIFY:
         la      r2,_TASK_HALT
         jmp     (r2)
 _spi_provider_verified:
+        la      r2,_spi_cache_hit_count
+        lw      r0,0(r2)
+        ceq     r0,z
+        brf     _spi_cache_verified
+        la      r2,_TASK_HALT
+        jmp     (r2)
+_spi_cache_verified:
         la      r2,_active_image_provider
         la      r0,_memory_image_provider
         sw      r0,0(r2)
@@ -584,7 +598,8 @@ _spi_provider_read:
         lc      r0,1
         la      r2,_provider_status
         sw      r0,0(r2)
-        bra     _spi_provider_done
+        la      r2,_spi_provider_done
+        jmp     (r2)
 _spi_provider_in_bounds:
         la      r2,_provider_image
         lw      r0,0(r2)
@@ -612,12 +627,39 @@ _spi_provider_fetch:
         la      r2,_block_within
         sw      r0,0(r2)
         mov     r0,r1
+        la      r2,_spi_requested_block
+        sw      r0,0(r2)
+        la      r2,_spi_cache_valid
+        lbu     r1,0(r2)
+        ceq     r1,z
+        brt     _spi_provider_cache_miss
+        la      r2,_spi_cached_block
+        lw      r1,0(r2)
+        ceq     r0,r1
+        brf     _spi_provider_cache_miss
+        la      r2,_spi_cache_hit_count
+        lw      r1,0(r2)
+        add     r1,1
+        sw      r1,0(r2)
+        la      r0,_SPI_FLASH_BLOCK_BUFFER
+        bra     _spi_provider_have_block
+_spi_provider_cache_miss:
+        la      r2,_spi_requested_block
+        lw      r0,0(r2)
         la      r2,_SPI_FLASH_READ_BLOCK
         jal     r1,(r2)
+        la      r2,_spi_requested_block
+        lw      r1,0(r2)
+        la      r2,_spi_cached_block
+        sw      r1,0(r2)
+        la      r2,_spi_cache_valid
+        lc      r1,1
+        sb      r1,0(r2)
         la      r2,_spi_fetch_count
         lw      r1,0(r2)
         add     r1,1
         sw      r1,0(r2)
+_spi_provider_have_block:
         la      r2,_block_within
         lw      r1,0(r2)
         add     r0,r1
@@ -637,7 +679,9 @@ _spi_provider_fetch:
         add     r0,-1
         sw      r0,0(r2)
         ceq     r0,z
-        brf     _spi_provider_next_byte
+        brt     _spi_provider_done
+        la      r2,_spi_provider_next_byte
+        jmp     (r2)
 _spi_provider_done:
         pop     r2
         pop     r1
@@ -1536,6 +1580,14 @@ _block_fetch_count:
         .zero   3
 _spi_fetch_count:
         .zero   3
+_spi_cache_hit_count:
+        .zero   3
+_spi_requested_block:
+        .zero   3
+_spi_cached_block:
+        .zero   3
+_spi_cache_valid:
+        .byte   0
 _spi_provider_active:
         .byte   0
 _composite_resident_only:
@@ -1591,4 +1643,4 @@ _provider_bounds_message:
 _block_provider_message:
         .byte   66,76,79,67,75,10,0
 _spi_provider_message:
-        .byte   83,80,73,10,0
+        .byte   83,80,73,32,67,65,67,72,69,10,0

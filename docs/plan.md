@@ -1042,6 +1042,12 @@ through the scheduler. cor24-emu 0.1.0 omits peripheral attachment in its
 binary-only launch arm, so this proof uses the documented LGO-plus-binary
 overlay mode until the emulator fixes that host-side discrepancy.
 
+The SPI range adapter retains its most recently fetched eight-byte block.
+Adjacent catalog, header, and payload bytes reuse that buffer until the block
+number changes. The scheduled SPI proof now requires both a physical fetch and
+a cache hit before reporting `SPI CACHE`, preventing a successful execution
+from silently bypassing the cache path.
+
 The interactive integration is now explicit rather than test-only. A composite
 provider searches resident program descriptors first and consults SPI only for
 nonresident names; its read callback follows the source selected by the last

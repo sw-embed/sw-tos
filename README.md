@@ -154,6 +154,9 @@ records, copies its runtime descriptor with the media offset substituted for
 the resident image address, and routes arbitrary header and payload reads
 through the W25Q32 block HAL. The loaded PL/SW application executes from its
 private allocation and returns through the normal scheduler path.
+The provider caches its most recently fetched eight-byte block, so sequential
+header, catalog, and payload bytes do not repeat the same W25Q32 transaction.
+The scheduled SPI proof requires at least one real fetch and one cache hit.
 
 The SPI-enabled interactive shell uses a composite provider: resident programs
 are resolved without touching the bus, and nonresident names fall through to
