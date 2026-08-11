@@ -161,6 +161,10 @@ ipc-smoke: context-switch-smoke
 heartbeat-smoke:
     ./tests/test-heartbeat.sh
 
+# Record whether interrupt return state is software-visible for preemption
+interrupt-context-capability-smoke:
+    ./tests/test-interrupt-context-capability.sh
+
 # Verify menu Clock app heartbeat logging and return to menu
 clock-smoke: plsw-system
     python3 tests/test-terminal-input.py

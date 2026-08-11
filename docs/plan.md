@@ -831,8 +831,7 @@ called normally by the demo tasks.
 - [x] 24-bit heartbeat counter with wraparound
 - [x] Monotonic tick counter in kernel
 - [x] Sleep queue scan with absolute tick-based wakeup
-- [ ] Preemptive scheduling from ISR (if COR24 supports context
-  switch from interrupt return)
+- [x] ISR preemption feasibility decided: blocked by software-inaccessible `ir`
 - [x] Cooperative fallback before the first heartbeat
 
 **Demo:** CPU-bound process preempted; shell remains responsive.
@@ -857,7 +856,10 @@ one task's interrupted PC and load another task's PC. Safe arbitrary-PC context
 switching directly from interrupt return is blocked unless COR24 gains an
 instruction for reading and writing `ir`, or the interrupt ABI is extended to
 save the interrupted PC in software-visible memory. SWTOS remains
-cooperative-first on the current target.
+cooperative-first on the current target. `just
+interrupt-context-capability-smoke` locks this decision to executable evidence:
+the working heartbeat ISR containing `jmp (ir)` assembles, while attempted
+register and memory transfers to and from `ir` must be rejected.
 
 **Cooperative fallback:** `just cooperative-fallback-smoke` starts with no
 UART heartbeat input and reports `C0` (clock unsynchronized), then completes
@@ -1178,6 +1180,7 @@ The name in `FILE:` must match the `%INCLUDE` name (without .msw).
 | `just cooperative-fallback-smoke` | Verify scheduling and IPC without heartbeat synchronization |
 | `just ipc-smoke` | Verify blocking fixed-message client/TTY IPC |
 | `just heartbeat-smoke` | Verify UART framing and 24-bit clock wraparound |
+| `just interrupt-context-capability-smoke` | Verify the current ISA cannot save or restore `ir` |
 | `just clock-smoke` | Verify the heartbeat-driven PL/SW Clock menu app |
 | `just catalog-smoke` | Validate, generate, and compile the resident catalog |
 | `just cor24-image-smoke` | Build and corruption-test a versioned COR24 image |

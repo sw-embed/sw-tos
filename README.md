@@ -356,6 +356,10 @@ control frames, then verifies a three-tick delta across the 24-bit wrap from
 two and three and verifies that both become runnable at monotonic tick three.
 UART bytes are parsed one per interrupt, and a foreground-work sentinel proves
 that `jmp (ir)` resumes interrupted execution.
+`just interrupt-context-capability-smoke` also records the current preemption
+boundary: interrupt return through `ir` assembles, but the ISA/toolchain rejects
+all tested register and memory transfers needed to save or restore `ir` for a
+different process. SWTOS therefore remains cooperative on current COR24.
 
 ## License
 
