@@ -379,6 +379,13 @@ renders that time as eight 5x8 glyphs. `just i2c-oled-clock-smoke` verifies the
 complete 56-write OLED command/data sequence, representative framebuffer
 columns, and the missing-display NAK path.
 
+The SPI HAL also implements the standard SD-card initialization sequence and
+single-block CMD17 read used by the existing COR24 demo. `just
+spi-sdcard-smoke` creates two distinguishable sectors, reads sector one into a
+512-byte PL/SW array through the Rust emulator's host-file-backed `sdcard`
+device, checks its first sixteen and final bytes, and proves a missing card is
+reported as `SD ERROR`.
+
 ## License
 
 Copyright (c) 2026 Michael A Wright

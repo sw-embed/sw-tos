@@ -1121,7 +1121,8 @@ process and keeps descriptor lifetime independent of arena reclamation.
 - [x] Reusable COR24 I2C bit-bang primitives
 - [x] PL/SW-callable DS1307 time read with ACK/NAK error reporting
 - [x] SSD1306 display client rendering DS1307 time
-- [ ] SD-card block provider
+- [x] PL/SW-callable SD-card 512-byte sector reader
+- [ ] Adapt SD-card sector reads to the catalog image-provider interface
 
 `just i2c-ds1307-smoke` configures the Rust emulator's DS1307 for 12:34:56,
 runs a PL/SW client through the scheduled kernel, and requires the complete
@@ -1133,6 +1134,11 @@ initializes horizontal addressing and renders `HH:MM:SS` as forty column-major
 5x8 glyph bytes. Emulator acceptance counts all 56 OLED command/control/data
 writes, checks representative glyph columns, and proves an absent display
 returns an address NAK and `OLED ERROR`.
+`just spi-sdcard-smoke` ports the established SD-SPI initialization handshake
+(CMD0, CMD8, CMD55/ACMD41, and CMD16), then uses CMD17 with a 24-bit SDHC sector
+number. The PL/SW client reads sector one from deterministic host-backed media,
+checks distinct leading bytes and byte 511, and exercises the bounded
+no-device response path.
 
 ---
 
@@ -1201,6 +1207,7 @@ The name in `FILE:` must match the `%INCLUDE` name (without .msw).
 | `just interrupt-context-capability-smoke` | Verify the current ISA cannot save or restore `ir` |
 | `just i2c-ds1307-smoke` | Read an emulated DS1307 RTC from PL/SW and verify its bus log |
 | `just i2c-oled-clock-smoke` | Render emulated DS1307 time on an SSD1306 from PL/SW |
+| `just spi-sdcard-smoke` | Read a complete host-backed SD-card sector from PL/SW |
 | `just clock-smoke` | Verify the heartbeat-driven PL/SW Clock menu app |
 | `just catalog-smoke` | Validate, generate, and compile the resident catalog |
 | `just cor24-image-smoke` | Build and corruption-test a versioned COR24 image |

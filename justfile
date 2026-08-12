@@ -176,6 +176,10 @@ i2c-ds1307-smoke:
 # Render the DS1307 time as 5x8 glyphs on the emulated SSD1306
 i2c-oled-clock-smoke: i2c-ds1307-smoke
 
+# Initialize an emulated SPI SD card and read sector zero from PL/SW
+spi-sdcard-smoke:
+    ./tests/test-spi-sdcard.sh
+
 # Verify menu Clock app heartbeat logging and return to menu
 clock-smoke: plsw-system
     python3 tests/test-terminal-input.py
