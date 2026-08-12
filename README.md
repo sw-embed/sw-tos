@@ -386,6 +386,13 @@ spi-sdcard-smoke` creates two distinguishable sectors, reads sector one into a
 device, checks its first sixteen and final bytes, and proves a missing card is
 reported as `SD ERROR`.
 
+SD storage also implements the catalog image-provider contract. Its arbitrary
+byte reads are backed by a reusable 512-byte sector cache, so the existing
+catalog authentication, extent checks, C24IMG validation, CRC, and loader need
+no SD-specific path. `just scheduled-sd-provider-smoke` loads
+`embedded-hello` from the standard storage image with exactly one sector fetch
+and rejects a corrupted SD-backed payload before execution.
+
 ## License
 
 Copyright (c) 2026 Michael A Wright

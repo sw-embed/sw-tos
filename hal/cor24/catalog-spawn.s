@@ -316,6 +316,21 @@ _TASK_USE_SPI_PROVIDER:
         pop     r1
         jmp     (r1)
 
+        .globl  _TASK_USE_SD_PROVIDER
+_TASK_USE_SD_PROVIDER:
+        la      r2,_spi_provider_active
+        lc      r0,1
+        sb      r0,0(r2)
+        la      r2,_active_image_provider
+        la      r0,_sd_image_provider
+        sw      r0,0(r2)
+        la      r2,_sd_cache_valid
+        lc      r0,0
+        sb      r0,0(r2)
+        la      r2,_sd_fetch_count
+        sw      r0,0(r2)
+        jmp     (r1)
+
 ; Composite provider used by SPI-enabled interactive images: resident program
 ; lookup first, then the external flash catalog for nonresident names.
 _composite_provider_find:
@@ -753,6 +768,141 @@ _spi_provider_have_block:
         jmp     (r2)
 _spi_provider_done:
         pop     r2
+        pop     r1
+        jmp     (r1)
+
+; Arbitrary bounded byte reads adapted to cached 512-byte SD-card sectors.
+; The image base is a media byte offset, matching the W25Q32 provider ABI.
+_sd_provider_read:
+        push    r1
+        push    r2
+        lc      r0,0
+        la      r2,_provider_status
+        sw      r0,0(r2)
+        la      r2,_provider_offset
+        lw      r0,0(r2)
+        la      r2,_provider_count
+        lw      r1,0(r2)
+        add     r0,r1
+        la      r2,_provider_limit
+        lw      r1,0(r2)
+        ceq     r0,r1
+        brt     _sd_provider_in_bounds
+        cls     r0,r1
+        brt     _sd_provider_in_bounds
+        la      r2,_sd_provider_fail
+        jmp     (r2)
+_sd_provider_in_bounds:
+        la      r2,_provider_image
+        lw      r0,0(r2)
+        la      r2,_provider_offset
+        lw      r1,0(r2)
+        add     r0,r1
+        la      r2,_sd_cursor
+        sw      r0,0(r2)
+        la      r2,_provider_count
+        lw      r0,0(r2)
+        la      r2,_sd_remaining
+        sw      r0,0(r2)
+_sd_provider_next:
+        la      r2,_sd_cursor
+        lw      r0,0(r2)
+        lc      r1,0
+_sd_provider_divide:
+        la      r2,512
+        cls     r0,r2
+        brt     _sd_provider_sector_ready
+        sub     r0,r2
+        add     r1,1
+        bra     _sd_provider_divide
+_sd_provider_sector_ready:
+        la      r2,_sd_within
+        sw      r0,0(r2)
+        la      r2,_sd_requested_sector
+        sw      r1,0(r2)
+        la      r2,_sd_cache_valid
+        lbu     r0,0(r2)
+        ceq     r0,z
+        brt     _sd_provider_cache_miss
+        la      r2,_sd_cached_sector
+        lw      r0,0(r2)
+        ceq     r0,r1
+        brt     _sd_provider_have_sector
+_sd_provider_cache_miss:
+        la      r0,_sd_read_status
+        push    r0
+        la      r0,_sd_sector_buffer
+        push    r0
+        mov     r0,r1
+        push    r0
+        la      r2,_SPI_SD_READ_SECTOR
+        jal     r1,(r2)
+        add     sp,9
+        la      r2,_sd_read_status
+        lw      r0,0(r2)
+        ceq     r0,z
+        brt     _sd_provider_read_ok
+        la      r2,_sd_provider_fail
+        jmp     (r2)
+_sd_provider_read_ok:
+        la      r2,_sd_requested_sector
+        lw      r0,0(r2)
+        la      r2,_sd_cached_sector
+        sw      r0,0(r2)
+        la      r2,_sd_cache_valid
+        lc      r0,1
+        sb      r0,0(r2)
+        la      r2,_sd_fetch_count
+        lw      r0,0(r2)
+        add     r0,1
+        sw      r0,0(r2)
+_sd_provider_have_sector:
+        la      r2,_sd_within
+        lw      r1,0(r2)
+        la      r0,_sd_sector_buffer
+        add     r0,r1
+        lbu     r0,0(r0)
+        la      r2,_provider_destination
+        lw      r2,0(r2)
+        sb      r0,0(r2)
+        add     r2,1
+        la      r1,_provider_destination
+        sw      r2,0(r1)
+        la      r2,_sd_cursor
+        lw      r0,0(r2)
+        add     r0,1
+        sw      r0,0(r2)
+        la      r2,_sd_remaining
+        lw      r0,0(r2)
+        add     r0,-1
+        sw      r0,0(r2)
+        ceq     r0,z
+        brt     _sd_provider_done
+        la      r2,_sd_provider_next
+        jmp     (r2)
+_sd_provider_fail:
+        lc      r0,1
+        la      r2,_provider_status
+        sw      r0,0(r2)
+_sd_provider_done:
+        pop     r2
+        pop     r1
+        jmp     (r1)
+
+        .globl  _TASK_SD_PROVIDER_VERIFY
+_TASK_SD_PROVIDER_VERIFY:
+        push    r1
+        la      r2,_sd_fetch_count
+        lw      r0,0(r2)
+        lc      r1,1
+        ceq     r0,r1
+        brt     _sd_provider_verified
+        la      r2,_TASK_HALT
+        jmp     (r2)
+_sd_provider_verified:
+        la      r0,_sd_provider_message
+        la      r2,_puts
+        jal     r1,(r2)
         pop     r1
         jmp     (r1)
 
@@ -2114,6 +2264,9 @@ _block_image_provider:
 _spi_image_provider:
         .word   _block_provider_find
         .word   _spi_provider_read
+_sd_image_provider:
+        .word   _block_provider_find
+        .word   _sd_provider_read
 _composite_image_provider:
         .word   _composite_provider_find
         .word   _composite_provider_read
@@ -2151,6 +2304,24 @@ _spi_cache_valid:
         .byte   0
 _spi_provider_active:
         .byte   0
+_sd_cache_valid:
+        .byte   0
+_sd_cached_sector:
+        .zero   3
+_sd_requested_sector:
+        .zero   3
+_sd_fetch_count:
+        .zero   3
+_sd_cursor:
+        .zero   3
+_sd_remaining:
+        .zero   3
+_sd_within:
+        .zero   3
+_sd_read_status:
+        .zero   3
+_sd_sector_buffer:
+        .zero   512
 _composite_resident_only:
         .byte   0
 _composite_read_spi:
@@ -2239,5 +2410,7 @@ _block_provider_message:
         .byte   66,76,79,67,75,10,0
 _spi_provider_message:
         .byte   83,80,73,32,67,65,67,72,69,10,0
+_sd_provider_message:
+        .byte   83,68,32,67,65,67,72,69,10,0
 _descriptor_snapshot_message:
         .byte   83,78,65,80,83,72,79,84,10,0

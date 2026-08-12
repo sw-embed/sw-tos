@@ -180,6 +180,10 @@ i2c-oled-clock-smoke: i2c-ds1307-smoke
 spi-sdcard-smoke:
     ./tests/test-spi-sdcard.sh
 
+# Load a catalog application transparently through cached SD sectors
+scheduled-sd-provider-smoke: cor24-storage-smoke
+    ./tests/test-scheduled-sd-provider.sh
+
 # Verify menu Clock app heartbeat logging and return to menu
 clock-smoke: plsw-system
     python3 tests/test-terminal-input.py
