@@ -115,6 +115,9 @@ provider result without changing a live process's name, metadata, or flash
 extent. `just scheduled-concurrent-spi-smoke` fills both child slots with the
 two flash applications, verifies their descriptor addresses and extents differ,
 then schedules both to completion.
+`just scheduled-concurrent-sd-smoke` applies the same two-live-child proof to
+the cached SD provider and additionally requires both slots and their shared
+allocation generation to be reclaimed after the join.
 
 Catalog lookup and embedded loading now share an explicit two-operation image
 provider record. The in-memory provider implements `find` over the generated

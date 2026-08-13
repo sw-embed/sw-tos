@@ -110,6 +110,10 @@ scheduled-composite-spi-smoke: cor24-storage-smoke
 scheduled-concurrent-spi-smoke: cor24-storage-smoke
     ./tests/test-scheduled-concurrent-spi.sh
 
+# Keep independent descriptor snapshots for two simultaneously live SD apps
+scheduled-concurrent-sd-smoke: cor24-storage-smoke
+    ./tests/test-scheduled-concurrent-sd.sh
+
 # Build the scheduler-integrated PL/SW shell image
 scheduled-shell-build:
     ./scripts/catalog-spawn-link.sh tests/catalog-shell.plsw scheduled-shell

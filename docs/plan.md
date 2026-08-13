@@ -1120,6 +1120,9 @@ slots without yielding, validates their selected descriptor pointers and media
 offsets are distinct, and only then joins while both flash applications run.
 This prevents later catalog lookups from mutating metadata retained by a live
 process and keeps descriptor lifetime independent of arena reclamation.
+`just scheduled-concurrent-sd-smoke` repeats this two-live-child ownership
+proof through emulated SD storage, schedules both distinct images, and verifies
+the child slots plus allocation generation are reclaimed afterward.
 
 ### Milestone 7 -- SPI Image Provider (Future)
 
@@ -1261,6 +1264,7 @@ The name in `FILE:` must match the `%INCLUDE` name (without .msw).
 | `just scheduled-multislot-smoke` | Schedule two concurrent private-state children |
 | `just scheduled-block-provider-smoke` | Load an image through host-backed block reads |
 | `just scheduled-concurrent-spi-smoke` | Keep distinct descriptors for two live SPI-loaded children |
+| `just scheduled-concurrent-sd-smoke` | Keep distinct descriptors for two live SD-loaded children |
 | `just scheduled-composite-sd-smoke` | Verify resident-first shell lookup with SD fallback |
 | `just plsw-system-sd-interactive` | Run the interactive shell with emulated SD storage |
 | `just scheduled-shell-interactive` | Run the scheduler-integrated shell proof |
