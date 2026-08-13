@@ -118,15 +118,8 @@ _spawn_descriptor_ready:
         mov     r1,r2
         ceq     r0,r1
         brf     _spawn_provider_direct
-        la      r2,_composite_read_external
-        lbu     r0,0(r2)
-        ceq     r0,z
-        brt     _spawn_provider_memory
-        la      r2,_composite_external_read
+        la      r2,_composite_lookup_read
         lw      r0,0(r2)
-        bra     _spawn_provider_selected
-_spawn_provider_memory:
-        la      r0,_memory_provider_read
         bra     _spawn_provider_selected
 _spawn_provider_direct:
         lw      r0,3(r2)
@@ -459,8 +452,10 @@ _composite_provider_find:
         la      r2,_spi_provider_active
         lc      r0,1
         sb      r0,0(r2)
-        la      r2,_composite_read_external
-        sb      r0,0(r2)
+        la      r2,_composite_external_read
+        lw      r0,0(r2)
+        la      r2,_composite_lookup_read
+        sw      r0,0(r2)
         la      r2,_block_provider_find
         jal     r1,(r2)
         bra     _composite_find_done
@@ -468,22 +463,16 @@ _composite_found_resident:
         la      r2,_spi_provider_active
         lc      r0,0
         sb      r0,0(r2)
-        la      r2,_composite_read_external
-        sb      r0,0(r2)
+        la      r0,_memory_provider_read
+        la      r2,_composite_lookup_read
+        sw      r0,0(r2)
 _composite_find_done:
         pop     r1
         jmp     (r1)
 
 _composite_provider_read:
-        la      r2,_composite_read_external
-        lbu     r0,0(r2)
-        ceq     r0,z
-        brt     _composite_read_memory
-        la      r2,_composite_external_read
+        la      r2,_composite_lookup_read
         lw      r2,0(r2)
-        jmp     (r2)
-_composite_read_memory:
-        la      r2,_memory_provider_read
         jmp     (r2)
 
 _composite_prepare_spi:
@@ -2465,6 +2454,8 @@ _composite_external_prepare:
         .word   _composite_prepare_spi
 _composite_external_read:
         .word   _composite_external_spi_read
+_composite_lookup_read:
+        .word   _memory_provider_read
 _provider_image:
         .zero   3
 _provider_offset:
@@ -2518,8 +2509,6 @@ _sd_read_status:
 _sd_sector_buffer:
         .zero   512
 _composite_resident_only:
-        .byte   0
-_composite_read_external:
         .byte   0
 _block_buffer:
         .zero   8

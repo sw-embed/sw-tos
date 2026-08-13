@@ -1142,6 +1142,10 @@ active/composite reader once, stores it beside the selected child slot, and
 binds the synchronous C24IMG loader to that callback. Mixed-order target checks
 compare the sidecar to the link-configured external reader, making later lookup
 source changes irrelevant to an already-selected child.
+Composite lookup also publishes the concrete reader callback directly; there is
+no longer a global memory-versus-external flag for spawn or read dispatch to
+reinterpret. The transient lookup result has one representation from provider
+selection through its copy into durable child-owned state.
 
 ### Milestone 7 -- SPI Image Provider (Future)
 
