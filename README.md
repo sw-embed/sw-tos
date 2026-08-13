@@ -121,6 +121,10 @@ allocation generation to be reclaimed after the join.
 `just scheduled-composite-sd-mixed-smoke` keeps resident Counter and an
 SD-backed image live together, verifies the resident descriptor remains direct
 while the external child owns its snapshot, and schedules both to completion.
+`just scheduled-composite-sd-mixed-reverse-smoke` loads the SD child first and
+then performs the resident lookup. The already-live external child retains its
+snapshot and executable despite the composite provider switching back to its
+resident source for the second spawn.
 
 Catalog lookup and embedded loading now share an explicit two-operation image
 provider record. The in-memory provider implements `find` over the generated

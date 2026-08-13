@@ -118,6 +118,10 @@ scheduled-concurrent-sd-smoke: cor24-storage-smoke
 scheduled-composite-sd-mixed-smoke: cor24-storage-smoke
     ./tests/test-scheduled-composite-sd-mixed.sh
 
+# Load SD first, then keep a resident child live under the composite provider
+scheduled-composite-sd-mixed-reverse-smoke: cor24-storage-smoke
+    ./tests/test-scheduled-composite-sd-mixed-reverse.sh
+
 # Build the scheduler-integrated PL/SW shell image
 scheduled-shell-build:
     ./scripts/catalog-spawn-link.sh tests/catalog-shell.plsw scheduled-shell

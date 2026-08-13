@@ -303,6 +303,35 @@ _mixed_descriptor_fail:
         la      r2,_TASK_HALT
         jmp     (r2)
 
+; Reverse mixed proof: slot B owns the SD snapshot loaded before a later
+; resident lookup, and slot C must retain the direct Counter descriptor.
+        .globl  _TASK_MIXED_REVERSE_DESCRIPTOR_VERIFY
+_TASK_MIXED_REVERSE_DESCRIPTOR_VERIFY:
+        push    r1
+        la      r2,_proc_b
+        lw      r0,33(r2)
+        la      r1,_proc_b_image_descriptor
+        ceq     r0,r1
+        brf     _mixed_reverse_descriptor_fail
+        la      r2,_proc_b_image_descriptor
+        lw      r0,3(r2)
+        lc      r1,1
+        ceq     r0,r1
+        brf     _mixed_reverse_descriptor_fail
+        la      r2,_proc_c
+        lw      r0,33(r2)
+        la      r1,_scheduled_counter_descriptor
+        ceq     r0,r1
+        brf     _mixed_reverse_descriptor_fail
+        la      r0,_mixed_reverse_descriptor_message
+        la      r2,_puts
+        jal     r1,(r2)
+        pop     r1
+        jmp     (r1)
+_mixed_reverse_descriptor_fail:
+        la      r2,_TASK_HALT
+        jmp     (r2)
+
 ; Test-only fault injection consumed by the next memory-provider read.
         .globl  _TASK_PROVIDER_FAIL_NEXT
 _TASK_PROVIDER_FAIL_NEXT:
@@ -2514,3 +2543,5 @@ _descriptor_snapshot_message:
         .byte   83,78,65,80,83,72,79,84,10,0
 _mixed_descriptor_message:
         .byte   77,73,88,69,68,10,0
+_mixed_reverse_descriptor_message:
+        .byte   82,69,86,69,82,83,69,10,0

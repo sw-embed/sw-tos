@@ -1127,6 +1127,10 @@ the child slots plus allocation generation are reclaimed afterward.
 and the other with an SD-backed image. It checks their direct-versus-snapshot
 descriptor ownership before dispatch, then requires both execution paths and
 complete allocation-generation reclamation.
+The reverse-order recipe loads the SD child first, then resolves resident
+Counter through the same composite provider. It verifies the live external
+snapshot survives the global lookup-source transition before both children run
+and their shared generation is reclaimed.
 
 ### Milestone 7 -- SPI Image Provider (Future)
 
@@ -1270,6 +1274,7 @@ The name in `FILE:` must match the `%INCLUDE` name (without .msw).
 | `just scheduled-concurrent-spi-smoke` | Keep distinct descriptors for two live SPI-loaded children |
 | `just scheduled-concurrent-sd-smoke` | Keep distinct descriptors for two live SD-loaded children |
 | `just scheduled-composite-sd-mixed-smoke` | Keep resident and SD-backed children live together |
+| `just scheduled-composite-sd-mixed-reverse-smoke` | Preserve a live SD child across a later resident lookup |
 | `just scheduled-composite-sd-smoke` | Verify resident-first shell lookup with SD fallback |
 | `just plsw-system-sd-interactive` | Run the interactive shell with emulated SD storage |
 | `just scheduled-shell-interactive` | Run the scheduler-integrated shell proof |
