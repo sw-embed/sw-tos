@@ -331,8 +331,7 @@ _TASK_USE_SD_PROVIDER:
         sw      r0,0(r2)
         jmp     (r1)
 
-; Composite provider used by SPI-enabled interactive images: resident program
-; lookup first, then the external flash catalog for nonresident names.
+; Resident lookup first, then a link-configured external provider.
 _composite_provider_find:
         push    r1
         la      r2,_composite_resident_only
@@ -347,15 +346,13 @@ _composite_provider_find:
         lw      r0,0(r2)
         ceq     r0,z
         brf     _composite_found_resident
-        la      r2,_SPI_INIT
+        la      r2,_composite_external_prepare
+        lw      r2,0(r2)
         jal     r1,(r2)
-        la      r2,_spi_cache_valid
-        lc      r0,0
-        sb      r0,0(r2)
         la      r2,_spi_provider_active
         lc      r0,1
         sb      r0,0(r2)
-        la      r2,_composite_read_spi
+        la      r2,_composite_read_external
         sb      r0,0(r2)
         la      r2,_block_provider_find
         jal     r1,(r2)
@@ -364,70 +361,46 @@ _composite_found_resident:
         la      r2,_spi_provider_active
         lc      r0,0
         sb      r0,0(r2)
-        la      r2,_composite_read_spi
+        la      r2,_composite_read_external
         sb      r0,0(r2)
 _composite_find_done:
         pop     r1
         jmp     (r1)
 
 _composite_provider_read:
-        la      r2,_composite_read_spi
+        la      r2,_composite_read_external
         lbu     r0,0(r2)
         ceq     r0,z
         brt     _composite_read_memory
-        la      r2,_spi_provider_read
+        la      r2,_composite_external_read
+        lw      r2,0(r2)
         jmp     (r2)
 _composite_read_memory:
         la      r2,_memory_provider_read
         jmp     (r2)
 
-; Resident-first composite with SD-card fallback. The catalog traversal is
-; shared; only its active read callback changes from W25Q32 bytes to cached
-; SD sectors.
-_composite_sd_provider_find:
+_composite_prepare_spi:
         push    r1
-        la      r2,_composite_resident_only
-        lc      r0,1
-        sb      r0,0(r2)
-        la      r2,_memory_provider_find
+        la      r2,_SPI_INIT
         jal     r1,(r2)
-        la      r2,_composite_resident_only
+        la      r2,_spi_cache_valid
         lc      r0,0
         sb      r0,0(r2)
-        lw      r2,12(fp)
-        lw      r0,0(r2)
-        ceq     r0,z
-        brf     _composite_sd_found_resident
-        la      r2,_spi_provider_active
-        lc      r0,1
-        sb      r0,0(r2)
-        la      r2,_composite_read_sd
-        sb      r0,0(r2)
-        la      r2,_sd_cache_valid
-        lc      r0,0
-        sb      r0,0(r2)
-        la      r2,_block_provider_find
-        jal     r1,(r2)
-        bra     _composite_sd_find_done
-_composite_sd_found_resident:
-        la      r2,_spi_provider_active
-        lc      r0,0
-        sb      r0,0(r2)
-        la      r2,_composite_read_sd
-        sb      r0,0(r2)
-_composite_sd_find_done:
         pop     r1
         jmp     (r1)
 
-_composite_sd_provider_read:
-        la      r2,_composite_read_sd
-        lbu     r0,0(r2)
-        ceq     r0,z
-        brt     _composite_sd_read_memory
-        la      r2,_sd_provider_read
+_composite_prepare_sd:
+        la      r2,_sd_cache_valid
+        lc      r0,0
+        sb      r0,0(r2)
+        jmp     (r1)
+
+_composite_external_spi_read:
+        la      r2,_spi_provider_read
         jmp     (r2)
-_composite_sd_read_memory:
-        la      r2,_memory_provider_read
+
+_composite_external_sd_read:
+        la      r2,_sd_provider_read
         jmp     (r2)
 
         .globl  _TASK_SPI_PROVIDER_VERIFY
@@ -2319,9 +2292,10 @@ _sd_image_provider:
 _composite_image_provider:
         .word   _composite_provider_find
         .word   _composite_provider_read
-_composite_sd_image_provider:
-        .word   _composite_sd_provider_find
-        .word   _composite_sd_provider_read
+_composite_external_prepare:
+        .word   _composite_prepare_spi
+_composite_external_read:
+        .word   _composite_external_spi_read
 _provider_image:
         .zero   3
 _provider_offset:
@@ -2376,9 +2350,7 @@ _sd_sector_buffer:
         .zero   512
 _composite_resident_only:
         .byte   0
-_composite_read_spi:
-        .byte   0
-_composite_read_sd:
+_composite_read_external:
         .byte   0
 _block_buffer:
         .zero   8

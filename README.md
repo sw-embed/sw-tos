@@ -212,6 +212,9 @@ just plsw-system-sd-interactive
 `just scheduled-composite-sd-smoke` runs both nonresident applications and
 resident Counter in one scripted session, proving the shell behavior is
 independent of whether its external provider is W25Q32 or SD.
+Both targets use one composite implementation. Link configuration supplies an
+external preparation callback and read callback; resident lookup, fallback,
+catalog validation, and source tracking are shared.
 
 Boot initializes that table and scans its flags rather than naming the shell
 entry directly. To verify metadata-driven `IMAGE_AUTOSTART` dispatch:

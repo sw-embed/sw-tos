@@ -1099,6 +1099,9 @@ SD card. Its composite provider resolves resident programs without touching
 the card and sends nonresident catalog reads through the cached sector adapter.
 `just scheduled-composite-sd-smoke` executes both stored PL/SW applications
 followed by resident Counter in a single shell session.
+W25Q32 and SD no longer duplicate composite traversal. A single resident-first
+adapter invokes link-configured external preparation and read callbacks, while
+the provider-independent catalog manager continues to own lookup and loading.
 
 A second nonresident image proves the storage path is not specialized for one
 fixture. `embedded-ping.plsw` compiles to a 17-byte position-independent PL/SW

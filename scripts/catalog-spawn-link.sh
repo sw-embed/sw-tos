@@ -51,7 +51,7 @@ if [ "$PROVIDER_MODE" = "composite-spi" ]; then
     perl -pi -e 's/\.word   _memory_image_provider/\.word   _composite_image_provider/' \
         "$OUT_DIR/kernel.raw.s"
 elif [ "$PROVIDER_MODE" = "composite-sd" ]; then
-    perl -pi -e 's/\.word   _memory_image_provider/\.word   _composite_sd_image_provider/' \
+    perl -pi -e 's/\.word   _memory_image_provider/\.word   _composite_image_provider/; s/\.word   _composite_prepare_spi/\.word   _composite_prepare_sd/; s/\.word   _composite_external_spi_read/\.word   _composite_external_sd_read/' \
         "$OUT_DIR/kernel.raw.s"
 elif [ "$PROVIDER_MODE" != "memory" ]; then
     echo "unknown provider mode: $PROVIDER_MODE" >&2
