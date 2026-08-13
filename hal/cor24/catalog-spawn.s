@@ -945,6 +945,30 @@ _sd_provider_verified:
         pop     r1
         jmp     (r1)
 
+; After serial failure/success stress, no child may remain and the allocation
+; cursor must have returned to the generation mark established by the spawn.
+        .globl  _TASK_RECOVERY_RECLAIM_VERIFY
+_TASK_RECOVERY_RECLAIM_VERIFY:
+        push    r1
+        la      r2,_child_count
+        lbu     r0,0(r2)
+        ceq     r0,z
+        brf     _recovery_reclaim_fail
+        la      r2,_ebr_next
+        lw      r0,0(r2)
+        la      r2,_spawn_arena_mark
+        lw      r1,0(r2)
+        ceq     r0,r1
+        brf     _recovery_reclaim_fail
+        la      r0,_recovery_reclaim_message
+        la      r2,_puts
+        jal     r1,(r2)
+        pop     r1
+        jmp     (r1)
+_recovery_reclaim_fail:
+        la      r2,_TASK_HALT
+        jmp     (r2)
+
 ; Find a generated fixed-record catalog entry through block reads. Layout:
 ; eight-byte header (count in byte zero), then 24-byte records containing a
 ; 16-byte NUL-terminated name, one-byte descriptor ordinal, and seven padding.
@@ -2455,5 +2479,7 @@ _spi_provider_message:
         .byte   83,80,73,32,67,65,67,72,69,10,0
 _sd_provider_message:
         .byte   83,68,32,67,65,67,72,69,10,0
+_recovery_reclaim_message:
+        .byte   82,69,67,76,65,73,77,69,68,10,0
 _descriptor_snapshot_message:
         .byte   83,78,65,80,83,72,79,84,10,0

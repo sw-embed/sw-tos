@@ -112,13 +112,12 @@ recovery_output=$("$ROOT_DIR/tools/bin/cor24-emu" \
     --lgo "$OUT_DIR/seed.lgo" \
     --load-binary "$ROOT_DIR/build/scheduled-sd-recovery/program.bin@0" --entry 0 \
     --spi-device "sdcard@cs=2?file=$RECOVERY_MEDIA" \
-    --speed 0 -n 5000000 --quiet 2>/dev/null | sed '/^Entry point:/d')
-recovery_expected='SPAWN
-FPR'
-if [ "$recovery_output" != "$recovery_expected" ]; then
+    --speed 0 -n 30000000 --quiet 2>/dev/null | sed '/^Entry point:/d')
+if [ "$(printf '%s' "$recovery_output" | grep -o 'FP' | wc -l | tr -d ' ')" != 20 ] || \
+        ! printf '%s' "$recovery_output" | grep -q 'RECLAIMED'; then
     echo "FAIL: scheduler did not recover from a corrupt SD image" >&2
     echo "$recovery_output" >&2
     exit 1
 fi
 
-echo "PASS: failed SD load was reclaimed before the next catalog image executed"
+echo "PASS: 20 failed/valid SD pairs reclaimed child slots, arena, descriptors, and cache state"
