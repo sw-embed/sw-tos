@@ -10,8 +10,14 @@ with this repository.
 Run:
 
 ```sh
+just emulator-acceptance
 just hardware-validation-bundle
 ```
+
+The bundle command does not rerun acceptance. It requires the default JSON
+report from a passing gate run on the current commit and branch, with both the
+reported and current tracked worktrees clean and the complete current recipe
+manifest present. Stale, failed, dirty, or incomplete evidence is rejected.
 
 This creates `build/hardware-validation/` containing:
 
@@ -21,7 +27,9 @@ This creates `build/hardware-validation/` containing:
   the board loader specifically requires an LGO container.
 - `swtos-storage.bin`: 30-block W25Q32 image containing the authenticated
   catalog and both nonresident applications.
-- `SHA256SUMS`: exact identities for the four artifacts.
+- `emulator-acceptance.json`: exact emulator recipe results, timing,
+  repository provenance, and tool identities for this source revision.
+- `SHA256SUMS`: exact identities for all five artifacts.
 
 Verify the bundle before programming:
 
@@ -29,6 +37,10 @@ Verify the bundle before programming:
 cd build/hardware-validation
 shasum -a 256 -c SHA256SUMS
 ```
+
+Also confirm `emulator-acceptance.json` reports `status: "pass"`, the expected
+commit, `tracked_worktree_dirty: false`, and a 33/33 passing summary before
+transferring the bundle to the hardware operator.
 
 ## Connection gate
 

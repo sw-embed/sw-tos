@@ -203,6 +203,12 @@ partial report before the gate exits nonzero. Select another output path with:
 For release evidence, commit intended source changes first and run the gate
 from a clean tracked worktree so `tracked_worktree_dirty` is `false`.
 
+`just hardware-validation-bundle` consumes that default report rather than
+rerunning the gate. It rejects evidence from another commit or branch, dirty or
+failed runs, incomplete recipe manifests, and a currently dirty tracked
+worktree. The accepted JSON is copied into the bundle and covered by its
+`SHA256SUMS` file.
+
 Use focused tests while developing:
 
 ```sh

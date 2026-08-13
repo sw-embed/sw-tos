@@ -20,6 +20,10 @@ emulator-acceptance:
 acceptance-report-smoke:
     python3 tests/test-acceptance-report.py
 
+# Verify hardware bundles reject unsuitable emulator acceptance evidence
+hardware-acceptance-report-smoke:
+    python3 tests/test-hardware-acceptance-report.py
+
 # ---- Assembly smoke test (pure .s, no PL/SW compiler) ----
 
 # Assemble smoke test

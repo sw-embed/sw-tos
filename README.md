@@ -327,7 +327,9 @@ single-module assembly artifacts. Use the format required by the COR24 serial
 boot loader at 921,600 baud.
 
 Physical-board acceptance is staged with `just hardware-validation-bundle`.
-It produces checksummed resident, SPI-shell, launch-seed, and W25Q32 artifacts;
+After `just emulator-acceptance`, it validates that the report belongs to the
+current clean commit and produces checksummed resident, SPI-shell, launch-seed,
+W25Q32, and emulator-acceptance artifacts;
 the required 921,600-baud RTS/CTS setup and acceptance transcript are specified
 in [docs/hardware-validation.md](docs/hardware-validation.md). The repository
 does not contain the COR24 `loadngo` board uploader.

@@ -185,6 +185,12 @@ versioned JSON report containing repository provenance, hashed tool identities,
 UTC timing, and per-recipe outcomes; the failure path writes the completed
 prefix before returning the failing recipe's status.
 
+The hardware handoff builder treats that report as an input artifact. It
+accepts only a complete passing report for the current clean commit and branch,
+then copies and hashes the JSON beside the resident, SPI, seed, and storage
+images. This binds emulator evidence to the source revision used for the
+handoff without claiming physical validation.
+
 The emulator is the normal development and acceptance environment. Physical
 hardware validation is a separate final boundary because it requires a board,
 UART adapter, and external loader. See `docs/hardware-validation.md`.
