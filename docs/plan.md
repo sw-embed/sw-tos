@@ -1170,6 +1170,10 @@ run truncates the host-backed SD medium at 1024 bytes; the missing sector-two
 data cannot reproduce the authenticated nonzero suffix, so the loader rejects
 the partial image without executing its entry point even if the emulator
 zero-fills a read beyond the host file.
+A same-session recovery run corrupts only the first image's suffix. It requires
+spawn status `1`, then resolves and executes `embedded-ping` from a later SD
+extent. This proves failed-load arena rollback, child-slot reuse, catalog
+descriptor refresh, and SD cache turnover remain usable after a CRC failure.
 
 ---
 

@@ -419,6 +419,10 @@ nonzero suffix in sector two, and the target requires three total sector fetches
 before CRC validation and execution succeed. Truncating the emulated medium at
 the end of sector one proves a missing or zero-filled sector-two read rejects
 the partial image before its PL/SW entry can execute.
+Corrupting only that authenticated suffix also exercises recovery in one
+scheduler session: the first spawn reports a load failure, its tentative arena
+allocation is reclaimed, and `embedded-ping` is then found, loaded from later
+SD sectors, authenticated, and executed through the same provider.
 
 ## License
 

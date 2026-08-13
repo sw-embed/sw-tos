@@ -101,3 +101,24 @@ if [ "$truncated_cross_output" != 'SPAWN' ]; then
 fi
 
 echo "PASS: missing SD sector two rejected the partial image before execution"
+
+RECOVERY_MEDIA="$OUT_DIR/corrupt-first-image-storage.bin"
+cp "$CROSS_IMAGE_MEDIA" "$RECOVERY_MEDIA"
+printf '\000' | dd of="$RECOVERY_MEDIA" bs=1 seek=1057 conv=notrunc status=none
+"$ROOT_DIR/scripts/catalog-spawn-link.sh" \
+    "$ROOT_DIR/tests/catalog-sd-recovery.plsw" scheduled-sd-recovery memory \
+    "$ROOT_DIR/tests/catalog-sd-cross-image.toml"
+recovery_output=$("$ROOT_DIR/tools/bin/cor24-emu" \
+    --lgo "$OUT_DIR/seed.lgo" \
+    --load-binary "$ROOT_DIR/build/scheduled-sd-recovery/program.bin@0" --entry 0 \
+    --spi-device "sdcard@cs=2?file=$RECOVERY_MEDIA" \
+    --speed 0 -n 5000000 --quiet 2>/dev/null | sed '/^Entry point:/d')
+recovery_expected='SPAWN
+FPR'
+if [ "$recovery_output" != "$recovery_expected" ]; then
+    echo "FAIL: scheduler did not recover from a corrupt SD image" >&2
+    echo "$recovery_output" >&2
+    exit 1
+fi
+
+echo "PASS: failed SD load was reclaimed before the next catalog image executed"
