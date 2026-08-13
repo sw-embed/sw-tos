@@ -1,0 +1,16 @@
+size = 39
+
+[fields]
+regs0 = 0
+regs1 = 3
+regs2 = 6
+sp = 9
+pc = 12
+status = 15
+endpoint = 18
+sender = 21
+state = 24
+priority = 27
+quantum = 30
+msgptr = 33
+stateptr = 36

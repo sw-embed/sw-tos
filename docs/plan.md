@@ -1131,6 +1131,11 @@ The reverse-order recipe loads the SD child first, then resolves resident
 Counter through the same composite provider. It verifies the live external
 snapshot survives the global lookup-source transition before both children run
 and their shared generation is reclaimed.
+The process record has no unallocated word: its 13 three-byte fields densely
+cover all 39 bytes, including `PD_SENDER` at offset 21. The canonical COR24 map
+in `hal/cor24/proc-desc.toml` is checked against every PL/SW offset and the total
+size by `just proc-desc-abi-smoke`, preventing provider state from being added
+through an accidental ABI collision.
 
 ### Milestone 7 -- SPI Image Provider (Future)
 
@@ -1259,6 +1264,7 @@ The name in `FILE:` must match the `%INCLUDE` name (without .msw).
 | `just scheduled-sd-provider-smoke` | Load and authenticate a catalog app through cached SD sectors |
 | `just clock-smoke` | Verify the heartbeat-driven PL/SW Clock menu app |
 | `just catalog-smoke` | Validate, generate, and compile the resident catalog |
+| `just proc-desc-abi-smoke` | Verify all 13 PL/SW/COR24 process descriptor fields and size |
 | `just provider-config-smoke` | Validate declarative memory, W25Q32, and SD provider records |
 | `just cor24-image-smoke` | Build and corruption-test a versioned COR24 image |
 | `just cor24-loader-smoke` | Copy a C24IMG payload, clear BSS, and relocate entry |

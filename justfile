@@ -39,6 +39,10 @@ catalog-generate:
 provider-config-smoke:
     ./tests/test-provider-config.sh
 
+# Verify the shared 39-byte PL/SW and COR24 process descriptor ABI
+proc-desc-abi-smoke:
+    ./tests/test-proc-desc-abi.sh
+
 # Verify the checked-in catalog matches its manifest and compiles into SWTOS
 catalog-smoke: plsw-system
     python3 scripts/generate-catalog.py --check

@@ -125,6 +125,10 @@ while the external child owns its snapshot, and schedules both to completion.
 then performs the resident lookup. The already-live external child retains its
 snapshot and executable despite the composite provider switching back to its
 resident source for the second spawn.
+The 39-byte process record is fully allocated to the public `PROC_DESC` ABI;
+notably, byte offset 21 is `PD_SENDER`, not scratch storage. The canonical field
+map is `hal/cor24/proc-desc.toml`, and `just proc-desc-abi-smoke` checks all 13
+three-byte fields against the PL/SW declarations in `include/swtos.msw`.
 
 Catalog lookup and embedded loading now share an explicit two-operation image
 provider record. The in-memory provider implements `find` over the generated

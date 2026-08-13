@@ -2353,6 +2353,8 @@ _halt:
         bra     _halt
 
 _proc_table:
+; PROC_DESC ABI is declared in hal/cor24/proc-desc.toml and checked against
+; include/swtos.msw. Offset 21 is PD_SENDER; no field is spare provider state.
 _proc_a:
         .zero   39
 _proc_b:
