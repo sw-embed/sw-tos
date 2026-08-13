@@ -129,6 +129,10 @@ The 39-byte process record is fully allocated to the public `PROC_DESC` ABI;
 notably, byte offset 21 is `PD_SENDER`, not scratch storage. The canonical field
 map is `hal/cor24/proc-desc.toml`, and `just proc-desc-abi-smoke` checks all 13
 three-byte fields against the PL/SW declarations in `include/swtos.msw`.
+External image-source ownership therefore lives in explicit sidecar words next
+to the child slots. Spawn records the concrete read callback there, and the
+synchronous loader uses that bound callback for every C24IMG read instead of
+consulting the composite provider's most recent lookup source.
 
 Catalog lookup and embedded loading now share an explicit two-operation image
 provider record. The in-memory provider implements `find` over the generated

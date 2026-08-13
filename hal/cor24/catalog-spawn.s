@@ -110,6 +110,43 @@ _spawn_descriptor_ready:
         lc      r0,1
         ceq     r0,r1
         brf     _spawn_stack
+        ; Bind the concrete reader outside PROC_DESC. The load is synchronous,
+        ; but each child retains its source for inspection and future dispatch.
+        la      r2,_active_image_provider
+        lw      r2,0(r2)
+        la      r0,_composite_image_provider
+        mov     r1,r2
+        ceq     r0,r1
+        brf     _spawn_provider_direct
+        la      r2,_composite_read_external
+        lbu     r0,0(r2)
+        ceq     r0,z
+        brt     _spawn_provider_memory
+        la      r2,_composite_external_read
+        lw      r0,0(r2)
+        bra     _spawn_provider_selected
+_spawn_provider_memory:
+        la      r0,_memory_provider_read
+        bra     _spawn_provider_selected
+_spawn_provider_direct:
+        lw      r0,3(r2)
+_spawn_provider_selected:
+        push    r0
+        la      r2,_spawn_process
+        lw      r1,0(r2)
+        la      r2,_proc_b
+        mov     r0,r1
+        ceq     r0,r2
+        pop     r0
+        brf     _spawn_provider_slot_c
+        la      r2,_proc_b_image_provider
+        bra     _spawn_provider_store
+_spawn_provider_slot_c:
+        la      r2,_proc_c_image_provider
+_spawn_provider_store:
+        sw      r0,0(r2)
+        la      r2,_embedded_bound_read
+        sw      r0,0(r2)
         la      r1,_spawn_descriptor
         lw      r0,0(r1)
         la      r2,_load_embedded_process
@@ -294,6 +331,12 @@ _TASK_MIXED_DESCRIPTOR_VERIFY:
         lc      r1,1
         ceq     r0,r1
         brf     _mixed_descriptor_fail
+        la      r2,_proc_c_image_provider
+        lw      r0,0(r2)
+        la      r2,_composite_external_read
+        lw      r1,0(r2)
+        ceq     r0,r1
+        brf     _mixed_descriptor_fail
         la      r0,_mixed_descriptor_message
         la      r2,_puts
         jal     r1,(r2)
@@ -316,6 +359,12 @@ _TASK_MIXED_REVERSE_DESCRIPTOR_VERIFY:
         la      r2,_proc_b_image_descriptor
         lw      r0,3(r2)
         lc      r1,1
+        ceq     r0,r1
+        brf     _mixed_reverse_descriptor_fail
+        la      r2,_proc_b_image_provider
+        lw      r0,0(r2)
+        la      r2,_composite_external_read
+        lw      r1,0(r2)
         ceq     r0,r1
         brf     _mixed_reverse_descriptor_fail
         la      r2,_proc_c
@@ -575,10 +624,19 @@ _state_done:
 _image_provider_read:
         push    r1
         push    r2
+        la      r2,_embedded_bound_read
+        lw      r2,0(r2)
+        mov     r0,r2
+        ceq     r0,z
+        brt     _image_provider_read_active
+        jal     r1,(r2)
+        bra     _image_provider_read_done
+_image_provider_read_active:
         la      r2,_active_image_provider
         lw      r2,0(r2)
         lw      r2,3(r2)       ; IMAGE_PROVIDER read
         jal     r1,(r2)
+_image_provider_read_done:
         pop     r2
         pop     r1
         jmp     (r1)
@@ -1621,6 +1679,9 @@ _embedded_checksum_ok:
         lw      r1,27(r2)
         add     r0,r1
         sw      r0,30(r2)
+        la      r2,_embedded_bound_read
+        lc      r0,0
+        sw      r0,0(r2)
         lc      r0,0
         pop     r1
         jmp     (r1)
@@ -1823,6 +1884,9 @@ _crc_done:
         pop     r1
         jmp     (r1)
 _embedded_load_fail:
+        la      r2,_embedded_bound_read
+        lc      r0,0
+        sw      r0,0(r2)
         lc      r0,1
         pop     r1
         jmp     (r1)
@@ -2364,8 +2428,12 @@ _proc_c:
 _proc_table_end:
 _proc_b_image_descriptor:
         .zero   24
+_proc_b_image_provider:
+        .zero   3
 _proc_c_image_descriptor:
         .zero   24
+_proc_c_image_provider:
+        .zero   3
 _current_proc:
         .zero   3
 _spawn_descriptor:
@@ -2502,6 +2570,8 @@ _embedded_entry_words:
 _embedded_checksum:
         .zero   3
 _embedded_load_status:
+        .zero   3
+_embedded_bound_read:
         .zero   3
 _spawn_status:
         .zero   3

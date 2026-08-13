@@ -1136,6 +1136,12 @@ cover all 39 bytes, including `PD_SENDER` at offset 21. The canonical COR24 map
 in `hal/cor24/proc-desc.toml` is checked against every PL/SW offset and the total
 size by `just proc-desc-abi-smoke`, preventing provider state from being added
 through an accidental ABI collision.
+Per-child provider ownership now uses explicit sidecar words outside both the
+39-byte process ABI and 24-byte catalog descriptor ABI. Spawn resolves the
+active/composite reader once, stores it beside the selected child slot, and
+binds the synchronous C24IMG loader to that callback. Mixed-order target checks
+compare the sidecar to the link-configured external reader, making later lookup
+source changes irrelevant to an already-selected child.
 
 ### Milestone 7 -- SPI Image Provider (Future)
 
