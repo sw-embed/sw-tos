@@ -45,6 +45,10 @@ a PL/I-inspired systems programming language for the COR24 ISA.
 
 ## Documentation
 
+See [doc/architecture.md](doc/architecture.md) for the implemented system
+architecture and [doc/user-guide.md](doc/user-guide.md) for setup, interactive
+operation, application workflows, testing, and troubleshooting.
+
 See [docs/plan.md](docs/plan.md) for the full development plan including
 design philosophy, memory map, kernel subsystems, UART heartbeat protocol,
 resident catalog design, milestones, and risk assessment.
