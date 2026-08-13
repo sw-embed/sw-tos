@@ -75,6 +75,10 @@ just emulator-acceptance
 The gate runs its component recipes sequentially because storage-provider
 negative tests intentionally mutate shared generated media fixtures. Inspect
 the exact ordered recipe list with `./scripts/emulator-acceptance.sh --list`.
+Each run writes `build/emulator-acceptance/report.json` with revision and
+worktree identity, tool versions and hashes, UTC timestamps, durations, and
+per-recipe results. Use `./scripts/emulator-acceptance.sh --report PATH` to
+select a different report destination.
 
 The resident catalog is generated from `catalog/catalog.toml`. To regenerate
 it and verify that the checked-in PL/SW descriptor table is current and

@@ -189,6 +189,20 @@ The runner prints and executes each canonical recipe sequentially. To inspect
 its scope without building anything, run
 `./scripts/emulator-acceptance.sh --list`.
 
+The default machine-readable result is
+`build/emulator-acceptance/report.json`. It records the Git commit and branch,
+whether tracked files differed from that commit, host details, versions or
+SHA-256 identities for the toolchain, overall UTC timing, and every completed
+recipe's status, exit code, and duration. A failed recipe still produces the
+partial report before the gate exits nonzero. Select another output path with:
+
+```sh
+./scripts/emulator-acceptance.sh --report path/to/report.json
+```
+
+For release evidence, commit intended source changes first and run the gate
+from a clean tracked worktree so `tracked_worktree_dirty` is `false`.
+
 Use focused tests while developing:
 
 ```sh

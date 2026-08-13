@@ -180,7 +180,10 @@ The smoke recipes are executable architectural claims. Important groups are:
 
 `just emulator-acceptance` is the aggregate emulator gate. Its runner invokes
 the canonical noninteractive recipes one at a time, preventing shared storage
-corruption fixtures from racing under a parallel outer build.
+corruption fixtures from racing under a parallel outer build. It emits a
+versioned JSON report containing repository provenance, hashed tool identities,
+UTC timing, and per-recipe outcomes; the failure path writes the completed
+prefix before returning the failing recipe's status.
 
 The emulator is the normal development and acceptance environment. Physical
 hardware validation is a separate final boundary because it requires a board,

@@ -1328,6 +1328,7 @@ The name in `FILE:` must match the `%INCLUDE` name (without .msw).
 | `just scheduled-shell-interactive` | Run the scheduler-integrated shell proof |
 | `just hardware-validation-bundle` | Package checksummed COR24-TB validation artifacts |
 | `just emulator-acceptance` | Run every noninteractive emulator proof sequentially |
+| `just acceptance-report-smoke` | Verify JSON acceptance provenance and result serialization |
 | `just plsw-compile <[.msw ...] file.plsw>` | Compile any .plsw  |
 | `just plsw-run <[.msw ...] file.plsw>` | Compile and run any .plsw |
 | `just plsw-dump <[.msw ...] file.plsw>` | Compile and dump memory |
