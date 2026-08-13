@@ -1157,7 +1157,10 @@ sectors, caches the most recently read sector, and leaves catalog
 authentication plus C24IMG validation unchanged. `just
 scheduled-sd-provider-smoke` loads `embedded-hello` transparently from the
 standard storage image, requires exactly one physical sector fetch, and proves
-the target CRC rejects a corrupted SD-backed payload.
+the target CRC rejects a corrupted SD-backed payload. It also rebuilds the same
+catalog with the first executable aligned to byte 512 and requires exactly two
+fetches, proving catalog reads in sector zero and authenticated image loading in
+sector one exercise cache turnover through the Rust SD-card emulator.
 
 ---
 

@@ -47,3 +47,21 @@ if [ "$corrupt_output" != "$corrupt_expected" ]; then
 fi
 
 echo "PASS: target CRC rejected a corrupt SD-backed executable"
+
+CROSS_MEDIA="$OUT_DIR/two-sector-storage.bin"
+"$ROOT_DIR/scripts/cor24-storage.py" build "$CROSS_MEDIA" \
+    --image-alignment 512
+"$ROOT_DIR/scripts/catalog-spawn-link.sh" \
+    "$ROOT_DIR/tests/catalog-sd-cross-sector.plsw" scheduled-sd-cross-sector
+cross_output=$("$ROOT_DIR/tools/bin/cor24-emu" \
+    --lgo "$OUT_DIR/seed.lgo" \
+    --load-binary "$ROOT_DIR/build/scheduled-sd-cross-sector/program.bin@0" --entry 0 \
+    --spi-device "sdcard@cs=2?file=$CROSS_MEDIA" \
+    --speed 0 -n 5000000 --quiet 2>/dev/null | sed '/^Entry point:/d')
+if [ "$cross_output" != "$expected" ]; then
+    echo "FAIL: SD provider did not load an application from sector one" >&2
+    echo "$cross_output" >&2
+    exit 1
+fi
+
+echo "PASS: catalog traversal and executable loading turned the SD cache over to sector one"

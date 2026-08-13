@@ -36,13 +36,13 @@ def u24(value: int) -> bytes:
     return value.to_bytes(3, "big")
 
 
-def align(value: int) -> int:
-    return (value + BLOCK_BYTES - 1) // BLOCK_BYTES * BLOCK_BYTES
+def align(value: int, boundary: int = BLOCK_BYTES) -> int:
+    return (value + boundary - 1) // boundary * boundary
 
 
-def build_storage(manifest_path: Path) -> bytes:
+def build_storage(manifest_path: Path, image_alignment: int = BLOCK_BYTES) -> bytes:
     entries = catalog_tool.load_entries(manifest_path)
-    cursor = align(HEADER_BYTES + len(entries) * RECORD_BYTES)
+    cursor = align(HEADER_BYTES + len(entries) * RECORD_BYTES, image_alignment)
     records = []
     images = []
     for ordinal, entry in enumerate(entries):
@@ -59,6 +59,7 @@ def build_storage(manifest_path: Path) -> bytes:
             image_offset = cursor
             flags = FLAG_HAS_IMAGE
             cursor += align(len(image))
+            cursor = align(cursor, image_alignment)
         records.append(
             name_field + bytes([ordinal]) + u24(image_offset) + u24(len(image)) + bytes([flags])
         )
@@ -73,8 +74,9 @@ def build_storage(manifest_path: Path) -> bytes:
     for image_offset, image in images:
         if not image:
             continue
-        if len(output) != image_offset:
+        if len(output) > image_offset:
             raise ValueError("internal storage layout error")
+        output.extend(bytes(image_offset - len(output)))
         output.extend(image)
         output.extend(bytes(align(len(output)) - len(output)))
     return bytes(output)
@@ -129,13 +131,16 @@ def main() -> int:
     build_parser = subparsers.add_parser("build")
     build_parser.add_argument("output", type=Path)
     build_parser.add_argument("--manifest", type=Path, default=ROOT / "catalog" / "catalog.toml")
+    build_parser.add_argument("--image-alignment", type=int, default=BLOCK_BYTES)
     build_parser.add_argument("--check", action="store_true")
     validate_parser = subparsers.add_parser("validate")
     validate_parser.add_argument("image", type=Path)
     args = parser.parse_args()
     try:
         if args.command == "build":
-            expected = build_storage(args.manifest.resolve())
+            if args.image_alignment < BLOCK_BYTES or args.image_alignment % BLOCK_BYTES:
+                raise ValueError("image alignment must be a positive multiple of eight")
+            expected = build_storage(args.manifest.resolve(), args.image_alignment)
             validate_storage(expected)
             if args.check:
                 if args.output.read_bytes() != expected:

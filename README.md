@@ -409,7 +409,10 @@ byte reads are backed by a reusable 512-byte sector cache, so the existing
 catalog authentication, extent checks, C24IMG validation, CRC, and loader need
 no SD-specific path. `just scheduled-sd-provider-smoke` loads
 `embedded-hello` from the standard storage image with exactly one sector fetch
-and rejects a corrupted SD-backed payload before execution.
+and rejects a corrupted SD-backed payload before execution. The same smoke test
+builds a sector-aligned fixture with the executable beginning at byte 512; it
+requires two physical fetches and proves the cache turns over from the catalog
+in sector zero to authenticated executable data in sector one.
 
 ## License
 

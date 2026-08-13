@@ -917,6 +917,15 @@ _TASK_SD_PROVIDER_VERIFY:
         la      r2,_sd_fetch_count
         lw      r0,0(r2)
         lc      r1,1
+        bra     _sd_provider_verify_count
+
+        .globl  _TASK_SD_PROVIDER_VERIFY_TWO_SECTORS
+_TASK_SD_PROVIDER_VERIFY_TWO_SECTORS:
+        push    r1
+        la      r2,_sd_fetch_count
+        lw      r0,0(r2)
+        lc      r1,2
+_sd_provider_verify_count:
         ceq     r0,r1
         brt     _sd_provider_verified
         la      r2,_TASK_HALT
