@@ -1094,6 +1094,11 @@ successful lookup. `just scheduled-composite-spi-smoke` proves flash-backed
 `embedded-hello` followed by resident Counter execution. The
 `plsw-system-spi-interactive` recipe builds the same composite shell, generates
 and attaches its W25Q32 media, and uses the LGO overlay launch workaround.
+`plsw-system-sd-interactive` attaches that same generated image as an emulated
+SD card. Its composite provider resolves resident programs without touching
+the card and sends nonresident catalog reads through the cached sector adapter.
+`just scheduled-composite-sd-smoke` executes both stored PL/SW applications
+followed by resident Counter in a single shell session.
 
 A second nonresident image proves the storage path is not specialized for one
 fixture. `embedded-ping.plsw` compiles to a 17-byte position-independent PL/SW
@@ -1230,6 +1235,8 @@ The name in `FILE:` must match the `%INCLUDE` name (without .msw).
 | `just scheduled-multislot-smoke` | Schedule two concurrent private-state children |
 | `just scheduled-block-provider-smoke` | Load an image through host-backed block reads |
 | `just scheduled-concurrent-spi-smoke` | Keep distinct descriptors for two live SPI-loaded children |
+| `just scheduled-composite-sd-smoke` | Verify resident-first shell lookup with SD fallback |
+| `just plsw-system-sd-interactive` | Run the interactive shell with emulated SD storage |
 | `just scheduled-shell-interactive` | Run the scheduler-integrated shell proof |
 | `just hardware-validation-bundle` | Package checksummed COR24-TB validation artifacts |
 | `just plsw-compile <[.msw ...] file.plsw>` | Compile any .plsw  |

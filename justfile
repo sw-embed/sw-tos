@@ -115,6 +115,15 @@ scheduled-shell-spi-build: cor24-storage-smoke
     ./scripts/catalog-spawn-link.sh tests/catalog-shell.plsw scheduled-shell-spi composite-spi
     {{COR24ASM}} tests/spi-launch-seed.s -o build/scheduled-shell-spi/seed.lgo
 
+# Build the interactive shell with resident-first/SD-fallback catalog lookup
+scheduled-shell-sd-build: cor24-storage-smoke
+    ./scripts/catalog-spawn-link.sh tests/catalog-shell.plsw scheduled-shell-sd composite-sd
+    {{COR24ASM}} tests/spi-launch-seed.s -o build/scheduled-shell-sd/seed.lgo
+
+# Verify resident-first interactive lookup with SD fallback
+scheduled-composite-sd-smoke: cor24-storage-smoke
+    ./tests/test-scheduled-composite-sd.sh
+
 # Package checksummed resident, SPI, and flash artifacts for COR24-TB testing
 hardware-validation-bundle:
     ./scripts/prepare-hardware-validation.sh
@@ -129,6 +138,10 @@ plsw-system-interactive: scheduled-shell-build
 # Run the scheduled shell with the generated W25Q32 media attached
 plsw-system-spi-interactive: scheduled-shell-spi-build
     ./scripts/swtos-terminal.py --image build/scheduled-shell-spi/program.bin --lgo-seed build/scheduled-shell-spi/seed.lgo --spi-media build/catalog-images/swtos-storage.bin
+
+# Run the scheduled shell with the generated storage image on emulated SD
+plsw-system-sd-interactive: scheduled-shell-sd-build
+    ./scripts/swtos-terminal.py --image build/scheduled-shell-sd/program.bin --lgo-seed build/scheduled-shell-sd/seed.lgo --sd-media build/catalog-images/swtos-storage.bin
 
 # Run the former direct-call image for compatibility and catalog command work.
 plsw-system-compat-interactive: plsw-system

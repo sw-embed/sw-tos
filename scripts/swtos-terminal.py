@@ -35,6 +35,7 @@ def main() -> int:
     parser.add_argument("--image", default=DEFAULT_IMAGE)
     parser.add_argument("--lgo-seed")
     parser.add_argument("--spi-media")
+    parser.add_argument("--sd-media")
     args = parser.parse_args()
     image = os.path.abspath(args.image)
     command = [EMU]
@@ -54,6 +55,11 @@ def main() -> int:
         command.extend([
             "--spi-device",
             f"w25q32@cs=3?file={os.path.abspath(args.spi_media)}",
+        ])
+    if args.sd_media:
+        command.extend([
+            "--spi-device",
+            f"sdcard@cs=2?file={os.path.abspath(args.sd_media)}",
         ])
     child_master, child_slave = pty.openpty()
     child = subprocess.Popen(

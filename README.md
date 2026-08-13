@@ -202,6 +202,17 @@ In that session, `run embedded-hello` loads from the attached generated flash
 media; `run embedded-ping` loads the second PL/SW image; and menu choices and
 commands such as `run counter` remain resident.
 
+The same resident-first shell can use the identical storage image through the
+emulator's SD-card device:
+
+```
+just plsw-system-sd-interactive
+```
+
+`just scheduled-composite-sd-smoke` runs both nonresident applications and
+resident Counter in one scripted session, proving the shell behavior is
+independent of whether its external provider is W25Q32 or SD.
+
 Boot initializes that table and scans its flags rather than naming the shell
 entry directly. To verify metadata-driven `IMAGE_AUTOSTART` dispatch:
 

@@ -50,6 +50,9 @@ done < <(python3 "$ROOT_DIR/scripts/generate-catalog.py" --list-images)
 if [ "$PROVIDER_MODE" = "composite-spi" ]; then
     perl -pi -e 's/\.word   _memory_image_provider/\.word   _composite_image_provider/' \
         "$OUT_DIR/kernel.raw.s"
+elif [ "$PROVIDER_MODE" = "composite-sd" ]; then
+    perl -pi -e 's/\.word   _memory_image_provider/\.word   _composite_sd_image_provider/' \
+        "$OUT_DIR/kernel.raw.s"
 elif [ "$PROVIDER_MODE" != "memory" ]; then
     echo "unknown provider mode: $PROVIDER_MODE" >&2
     exit 1
