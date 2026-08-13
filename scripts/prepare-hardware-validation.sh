@@ -27,11 +27,14 @@ cp "$ROOT_DIR/build/scheduled-shell-spi/seed.lgo" \
 cp "$ROOT_DIR/build/catalog-images/swtos-storage.bin" \
     "$OUT_DIR/swtos-storage.bin"
 cp "$ACCEPTANCE_REPORT" "$OUT_DIR/emulator-acceptance.json"
+cp "$ROOT_DIR/docs/hw-validation-result-template.md" \
+    "$OUT_DIR/VALIDATION-RESULT.md"
 
 (
     cd "$OUT_DIR"
     shasum -a 256 swtos-resident.bin swtos-spi.bin \
         swtos-spi-seed.lgo swtos-storage.bin emulator-acceptance.json \
+        VALIDATION-RESULT.md \
         > SHA256SUMS
 )
 

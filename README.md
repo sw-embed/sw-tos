@@ -331,7 +331,7 @@ After `just emulator-acceptance`, it validates that the report belongs to the
 current clean commit and produces checksummed resident, SPI-shell, launch-seed,
 W25Q32, and emulator-acceptance artifacts;
 the required 921,600-baud RTS/CTS setup and acceptance transcript are specified
-in [docs/hardware-validation.md](docs/hardware-validation.md). The repository
+in [docs/hw-validation.md](docs/hw-validation.md). The repository
 does not contain the COR24 `loadngo` board uploader.
 
 To compile and run the SWTOS menu interactively in the emulator:

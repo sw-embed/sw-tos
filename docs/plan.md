@@ -746,7 +746,7 @@ swtos/
 ## 15. Development Milestones
 
 All planned emulator milestones are complete. Physical COR24-TB acceptance is
-tracked separately in `docs/hardware-validation.md` because it requires an
+tracked separately in `docs/hw-validation.md` because it requires an
 external board, UART adapter, and loader.
 
 | Milestone | State | Executable evidence |

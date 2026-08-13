@@ -293,6 +293,7 @@ bundle run:
 just hardware-validation-bundle
 ```
 
-Then follow `docs/hardware-validation.md`. Hardware requires a COR24-TB, a
+Then follow `docs/hw-validation.md` and complete the bundled
+`VALIDATION-RESULT.md`. Hardware requires a COR24-TB, a
 921,600-baud UART adapter with RTS/CTS, and a separate `loadngo`-compatible
 uploader. The emulator's `--load-binary` option is not a board uploader.

@@ -193,4 +193,4 @@ handoff without claiming physical validation.
 
 The emulator is the normal development and acceptance environment. Physical
 hardware validation is a separate final boundary because it requires a board,
-UART adapter, and external loader. See `docs/hardware-validation.md`.
+UART adapter, and external loader. See `docs/hw-validation.md`.
