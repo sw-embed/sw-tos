@@ -1165,7 +1165,11 @@ A 546-byte C24IMG fixture extends that proof across another boundary. The
 catalog and runtime descriptor are generated from the same alternate manifest,
 the executable starts at byte 512, and its initialized payload continues into
 sector two. Successful target CRC and execution with exactly three physical
-fetches prove one provider read can refill the cache mid-request.
+fetches prove one provider read can refill the cache mid-request. A companion
+run truncates the host-backed SD medium at 1024 bytes; the missing sector-two
+data cannot reproduce the authenticated nonzero suffix, so the loader rejects
+the partial image without executing its entry point even if the emulator
+zero-fills a read beyond the host file.
 
 ---
 

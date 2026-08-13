@@ -6,4 +6,5 @@ bss_words = 0
 entry_offset = 0
 relocation_count = 0
 payload_hex = "44452b 0001ff 820027"
-payload_zero_words = 170
+payload_zero_words = 169
+payload_suffix_hex = "a5c33c"

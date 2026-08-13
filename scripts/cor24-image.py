@@ -23,9 +23,10 @@ MANIFEST_KEYS = {
     "entry_offset",
     "relocation_count",
     "payload_hex",
+    "payload_suffix_hex",
     "payload_zero_words",
 }
-REQUIRED_MANIFEST_KEYS = MANIFEST_KEYS - {"payload_zero_words"}
+REQUIRED_MANIFEST_KEYS = MANIFEST_KEYS - {"payload_suffix_hex", "payload_zero_words"}
 LABEL_PATTERN = re.compile(r"_[A-Za-z_][A-Za-z0-9_]*\Z")
 
 
@@ -66,19 +67,25 @@ def load_manifest(path: Path) -> dict:
         raise ValueError("version 1 does not yet support relocations")
     if not isinstance(manifest["payload_hex"], str):
         raise ValueError("payload_hex must be a string")
+    suffix_hex = manifest.get("payload_suffix_hex", "")
+    if not isinstance(suffix_hex, str):
+        raise ValueError("payload_suffix_hex must be a string")
     try:
         payload = bytes.fromhex(manifest["payload_hex"])
+        suffix = bytes.fromhex(suffix_hex)
     except ValueError as error:
-        raise ValueError("payload_hex is invalid") from error
+        raise ValueError("payload hex is invalid") from error
     explicit_words = manifest["text_words"] + manifest["data_words"] - zero_words
     expected_bytes = explicit_words * WORD_BYTES
-    if len(payload) != expected_bytes:
-        raise ValueError(f"payload is {len(payload)} bytes; expected {expected_bytes}")
+    if len(payload) + len(suffix) != expected_bytes:
+        raise ValueError(
+            f"explicit payload is {len(payload) + len(suffix)} bytes; expected {expected_bytes}"
+        )
     if manifest["text_words"] == 0:
         raise ValueError("text_words must be positive")
     if manifest["entry_offset"] >= manifest["text_words"]:
         raise ValueError("entry_offset must address a text word")
-    return manifest | {"payload": payload + bytes(zero_words * WORD_BYTES)}
+    return manifest | {"payload": payload + bytes(zero_words * WORD_BYTES) + suffix}
 
 
 def build_image(manifest: dict) -> bytes:

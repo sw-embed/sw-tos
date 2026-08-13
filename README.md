@@ -414,9 +414,11 @@ builds a sector-aligned fixture with the executable beginning at byte 512; it
 requires two physical fetches and proves the cache turns over from the catalog
 in sector zero to authenticated executable data in sector one.
 A larger 546-byte C24IMG then exercises a single payload read spanning sectors
-one and two. Its compact manifest uses `payload_zero_words` for initialized
-zero data, and the target requires three total sector fetches before CRC
-validation and execution succeed.
+one and two. Its compact manifest uses `payload_zero_words` plus an authenticated
+nonzero suffix in sector two, and the target requires three total sector fetches
+before CRC validation and execution succeed. Truncating the emulated medium at
+the end of sector one proves a missing or zero-filled sector-two read rejects
+the partial image before its PL/SW entry can execute.
 
 ## License
 

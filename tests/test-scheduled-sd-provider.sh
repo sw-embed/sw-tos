@@ -85,3 +85,19 @@ if [ "$cross_image_output" != "$expected" ]; then
 fi
 
 echo "PASS: one authenticated executable read crossed from SD sector one into sector two"
+
+TRUNCATED_CROSS_IMAGE_MEDIA="$OUT_DIR/truncated-cross-sector-image-storage.bin"
+cp "$CROSS_IMAGE_MEDIA" "$TRUNCATED_CROSS_IMAGE_MEDIA"
+truncate -s 1024 "$TRUNCATED_CROSS_IMAGE_MEDIA"
+truncated_cross_output=$("$ROOT_DIR/tools/bin/cor24-emu" \
+    --lgo "$OUT_DIR/seed.lgo" \
+    --load-binary "$ROOT_DIR/build/scheduled-sd-cross-image/program.bin@0" --entry 0 \
+    --spi-device "sdcard@cs=2?file=$TRUNCATED_CROSS_IMAGE_MEDIA" \
+    --speed 0 -n 5000000 --quiet 2>/dev/null | sed '/^Entry point:/d')
+if [ "$truncated_cross_output" != 'SPAWN' ]; then
+    echo "FAIL: loader executed or accepted an image missing SD sector two" >&2
+    echo "$truncated_cross_output" >&2
+    exit 1
+fi
+
+echo "PASS: missing SD sector two rejected the partial image before execution"
