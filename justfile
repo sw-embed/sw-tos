@@ -35,6 +35,10 @@ dump: smoke
 catalog-generate:
     python3 scripts/generate-catalog.py
 
+# Verify declarative image-provider build records
+provider-config-smoke:
+    ./tests/test-provider-config.sh
+
 # Verify the checked-in catalog matches its manifest and compiles into SWTOS
 catalog-smoke: plsw-system
     python3 scripts/generate-catalog.py --check

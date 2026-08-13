@@ -47,16 +47,8 @@ while IFS=$'\t' read -r image_name image_manifest; do
         --label "_embedded_${image_label}_image"
     sed -n 'p' "$image_asm" >> "$OUT_DIR/kernel.raw.s"
 done < <(python3 "$ROOT_DIR/scripts/generate-catalog.py" --list-images)
-if [ "$PROVIDER_MODE" = "composite-spi" ]; then
-    perl -pi -e 's/\.word   _memory_image_provider/\.word   _composite_image_provider/' \
-        "$OUT_DIR/kernel.raw.s"
-elif [ "$PROVIDER_MODE" = "composite-sd" ]; then
-    perl -pi -e 's/\.word   _memory_image_provider/\.word   _composite_image_provider/; s/\.word   _composite_prepare_spi/\.word   _composite_prepare_sd/; s/\.word   _composite_external_spi_read/\.word   _composite_external_sd_read/' \
-        "$OUT_DIR/kernel.raw.s"
-elif [ "$PROVIDER_MODE" != "memory" ]; then
-    echo "unknown provider mode: $PROVIDER_MODE" >&2
-    exit 1
-fi
+python3 "$ROOT_DIR/scripts/configure-provider.py" \
+    "$OUT_DIR/kernel.raw.s" "$PROVIDER_MODE"
 
 sizes=()
 for module in "${MODULES[@]}"; do

@@ -215,6 +215,10 @@ independent of whether its external provider is W25Q32 or SD.
 Both targets use one composite implementation. Link configuration supplies an
 external preparation callback and read callback; resident lookup, fallback,
 catalog validation, and source tracking are shared.
+The supported configurations live in `catalog/providers.toml`. Each entry
+declares the initial provider plus its preparation and read callbacks, so a new
+provider does not require another conditional branch in the link script.
+`just provider-config-smoke` validates the memory, W25Q32, and SD mappings.
 
 Boot initializes that table and scans its flags rather than naming the shell
 entry directly. To verify metadata-driven `IMAGE_AUTOSTART` dispatch:

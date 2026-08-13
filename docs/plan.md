@@ -1102,6 +1102,10 @@ followed by resident Counter in a single shell session.
 W25Q32 and SD no longer duplicate composite traversal. A single resident-first
 adapter invokes link-configured external preparation and read callbacks, while
 the provider-independent catalog manager continues to own lookup and loading.
+Provider selection is declarative in `catalog/providers.toml`: the build names
+an initial provider, preparation callback, and read callback, and one validated
+configuration pass applies those records. Adding another provider no longer
+requires mode-specific linker-script substitution logic.
 
 A second nonresident image proves the storage path is not specialized for one
 fixture. `embedded-ping.plsw` compiles to a 17-byte position-independent PL/SW
@@ -1226,6 +1230,7 @@ The name in `FILE:` must match the `%INCLUDE` name (without .msw).
 | `just scheduled-sd-provider-smoke` | Load and authenticate a catalog app through cached SD sectors |
 | `just clock-smoke` | Verify the heartbeat-driven PL/SW Clock menu app |
 | `just catalog-smoke` | Validate, generate, and compile the resident catalog |
+| `just provider-config-smoke` | Validate declarative memory, W25Q32, and SD provider records |
 | `just cor24-image-smoke` | Build and corruption-test a versioned COR24 image |
 | `just cor24-loader-smoke` | Copy a C24IMG payload, clear BSS, and relocate entry |
 | `just autostart-smoke` | Verify metadata-driven shell service startup |

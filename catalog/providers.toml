@@ -1,0 +1,14 @@
+[providers.memory]
+initial = "_memory_image_provider"
+prepare = "_composite_prepare_spi"
+read = "_composite_external_spi_read"
+
+[providers.composite-spi]
+initial = "_composite_image_provider"
+prepare = "_composite_prepare_spi"
+read = "_composite_external_spi_read"
+
+[providers.composite-sd]
+initial = "_composite_image_provider"
+prepare = "_composite_prepare_sd"
+read = "_composite_external_sd_read"
