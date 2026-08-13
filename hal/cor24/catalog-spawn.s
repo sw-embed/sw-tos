@@ -274,6 +274,35 @@ _descriptor_snapshot_fail:
         la      r2,_TASK_HALT
         jmp     (r2)
 
+; Mixed composite proof: slot B must retain the resident Counter descriptor,
+; while slot C owns a snapshot of the SD-backed image descriptor.
+        .globl  _TASK_MIXED_DESCRIPTOR_VERIFY
+_TASK_MIXED_DESCRIPTOR_VERIFY:
+        push    r1
+        la      r2,_proc_b
+        lw      r0,33(r2)
+        la      r1,_scheduled_counter_descriptor
+        ceq     r0,r1
+        brf     _mixed_descriptor_fail
+        la      r2,_proc_c
+        lw      r0,33(r2)
+        la      r1,_proc_c_image_descriptor
+        ceq     r0,r1
+        brf     _mixed_descriptor_fail
+        la      r2,_proc_c_image_descriptor
+        lw      r0,3(r2)
+        lc      r1,1
+        ceq     r0,r1
+        brf     _mixed_descriptor_fail
+        la      r0,_mixed_descriptor_message
+        la      r2,_puts
+        jal     r1,(r2)
+        pop     r1
+        jmp     (r1)
+_mixed_descriptor_fail:
+        la      r2,_TASK_HALT
+        jmp     (r2)
+
 ; Test-only fault injection consumed by the next memory-provider read.
         .globl  _TASK_PROVIDER_FAIL_NEXT
 _TASK_PROVIDER_FAIL_NEXT:
@@ -2483,3 +2512,5 @@ _recovery_reclaim_message:
         .byte   82,69,67,76,65,73,77,69,68,10,0
 _descriptor_snapshot_message:
         .byte   83,78,65,80,83,72,79,84,10,0
+_mixed_descriptor_message:
+        .byte   77,73,88,69,68,10,0

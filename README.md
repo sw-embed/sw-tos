@@ -118,6 +118,9 @@ then schedules both to completion.
 `just scheduled-concurrent-sd-smoke` applies the same two-live-child proof to
 the cached SD provider and additionally requires both slots and their shared
 allocation generation to be reclaimed after the join.
+`just scheduled-composite-sd-mixed-smoke` keeps resident Counter and an
+SD-backed image live together, verifies the resident descriptor remains direct
+while the external child owns its snapshot, and schedules both to completion.
 
 Catalog lookup and embedded loading now share an explicit two-operation image
 provider record. The in-memory provider implements `find` over the generated
