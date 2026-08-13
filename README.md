@@ -142,8 +142,8 @@ callback for every C24IMG read.
 Catalog lookup and embedded loading now share an explicit two-operation image
 provider record. The in-memory provider implements `find` over the generated
 descriptor table and `read` over embedded image bytes; shell lookup and loader
-header/payload reads dispatch through those callbacks. This is the same seam a
-future block or SPI-backed provider will implement.
+header/payload reads dispatch through those callbacks. Block, W25Q32 SPI, and
+SD providers implement the same seam.
 
 Embedded descriptors carry their complete stored-image word length. Provider
 reads reject requests whose `offset + count` exceeds that byte limit and return

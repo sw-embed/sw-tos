@@ -491,12 +491,12 @@ void counter_main(void *state_ptr) {
 }
 ```
 
-### Future: Embedded Executable Blobs
+### Embedded Executable Blobs
 
-For dynamically loaded programs (from SPI flash, for example), the same
+For dynamically loaded programs from SPI flash or SD, the same
 catalog interface is retained. The image descriptor includes `base`,
 `text_words`, `data_words`, `bss_words`, and `entry_offset`. The loader
-copies text/data, clears BSS, applies relocations, and sets PC.
+copies text/data, clears BSS, rejects relocations in version 1, and sets PC.
 
 The implemented version 1 on-storage header is nine COR24 words (27 bytes).
 Every word is encoded most-significant byte first so host tooling is independent
@@ -526,22 +526,24 @@ magic, version, and the version 1 zero-relocation rule; decodes big-endian
 24-bit fields; copies packed text/data to a RAM allocation; clears BSS that was
 pre-filled with a nonzero pattern; and returns `load_base + entry_offset * 3`.
 `just cor24-loader-smoke` verifies the parsed `T2 D1 B2 E0` metadata, copied
-payload, cleared BSS, and relocated entry in the emulator. Payload checksum
-validation remains at the provider/build boundary for version 1; a future SPI
-provider must validate before handing bytes to this loader.
+payload, cleared BSS, and relocated entry in the emulator. The integrated
+scheduled loader also computes the payload CRC on target and rejects corrupt
+memory-, SPI-, and SD-backed images before execution.
 
-Two image providers coexist:
+Four provider paths coexist behind the same contract:
 
 ```
 resident provider  ->  direct memory reference
-SPI provider       ->  block reads through SPI HAL
+block provider     ->  host-backed eight-byte reads
+SPI provider       ->  W25Q32 reads through SPI HAL
+SD provider        ->  cached 512-byte sector reads
 ```
 
 The shell does not care where the program resides.
 
-### Future: Storage Providers
+### Storage Providers
 
-When SPI storage arrives, the same `image_provider` interface is used:
+SPI and SD storage use the same `image_provider` interface:
 
 ```c
 struct image_provider {
@@ -551,7 +553,9 @@ struct image_provider {
 };
 ```
 
-The catalog manager searches: (1) resident catalog, (2) SPI catalog.
+The composite catalog manager searches the resident catalog first, then its
+link-configured SPI or SD catalog. The concrete reader returned by lookup is
+captured in child-owned sidecar state before loading.
 
 ---
 
@@ -741,6 +745,22 @@ swtos/
 
 ## 15. Development Milestones
 
+All planned emulator milestones are complete. Physical COR24-TB acceptance is
+tracked separately in `docs/hardware-validation.md` because it requires an
+external board, UART adapter, and loader.
+
+| Milestone | State | Executable evidence |
+|---|---|---|
+| 0: PL/SW readiness | Complete | `plsw-smoke-run`, `plsw-link-smoke` |
+| 1: Context switch | Complete | `context-switch-smoke` |
+| 2: Synchronous IPC | Complete | `ipc-smoke` |
+| 3: Heartbeat clock | Complete within current interrupt ABI | `heartbeat-smoke`, `clock-smoke` |
+| 4: Catalog/autostart | Complete | `catalog-smoke`, `autostart-smoke`, `scheduled-catalog-smoke` |
+| 5: Process-local state | Complete | `scheduled-multislot-smoke`, `scheduled-reclaim-smoke` |
+| 6: Executable blobs | Complete for C24IMG version 1 | image, loader, and provider smoke recipes |
+| 7: SPI image provider | Complete | `scheduled-spi-provider-smoke`, composite/concurrent SPI recipes |
+| Peripheral clients | Complete for planned DS1307, SSD1306, and SD clients | I2C/OLED/SD smoke recipes |
+
 ### Milestone 0 -- PL/SW Systems Programming Readiness
 
 Before building OS components, prove PL/SW can handle systems-level
@@ -778,8 +798,7 @@ DO WHILE loop, PROC with stack frame.
 generates symbol/FIXUP metadata, performs two-pass assembly, links them with
 link24, and verifies the linked program output in the emulator.
 
-**Status:** Complete. Next: Milestone 1, linked tasks with cooperative context
-switching.
+**Status:** Complete.
 
 ### Milestone 1 -- Linked Tasks with Context Switch
 
@@ -803,7 +822,7 @@ the current descriptor pointer. The boot trampoline establishes the kernel
 stack and prints `SWTOS M1` through the polling UART path before allocating
 tasks.
 
-**Status:** Complete. Next: Milestone 2, MINIX-style synchronous IPC.
+**Status:** Complete.
 
 ### Milestone 2 -- MINIX-Style IPC
 
@@ -822,7 +841,7 @@ private buffer, wakes the sender, emits the payload, and synchronously replies.
 `send`, `receive`, and `sendrec` use the PL/SW stack calling convention and are
 called normally by the demo tasks.
 
-**Status:** Complete. Next: Milestone 3, UART heartbeat clock and sleep queue.
+**Status:** Complete.
 
 ### Milestone 3 -- UART Heartbeat Clock
 
@@ -873,8 +892,7 @@ declare the host clock stale by itself.
 **Status:** Complete for the current COR24 interrupt ABI: heartbeat framing,
 monotonic time, sleep wakeups, host clock generation, a resident Clock app,
 and pre-synchronization cooperative fallback are proven. Interrupt-time
-preemption remains an explicitly documented ISA blocker. Next: Milestone 4,
-the generated resident catalog and autostart metadata.
+preemption remains an explicitly documented ISA blocker.
 
 ### Milestone 4 -- Generated Catalog and Autostart
 
@@ -953,9 +971,9 @@ generation reclamation. A kernel process-table listing service is wired to the
 scheduled shell: `ps` reports stable endpoint identities and symbolic `FREE` or
 `RUNNABLE` states for all three slots. Scheduled catalog coverage proves the
 idle shell view, while the multislot proof calls the same service after two
-spawns and observes all three slots runnable. Milestone 5 is complete. Next:
-define the embedded COR24 executable header and add generator-side validation
-for the first Milestone 6 image blob.
+spawns and observes all three slots runnable.
+
+**Status:** Complete.
 
 ### Milestone 5 -- Process-Local State
 
@@ -963,6 +981,9 @@ for the first Milestone 6 image blob.
 - [x] Multiple instances of the same program (e.g., two counters)
 - [x] Process-global state accessed only via passed state pointer
 - [x] `ps` shows all processes with endpoints and states
+
+**Status:** Complete. Multiple live instances retain independent state and the
+last exiting child reclaims the shared allocation generation.
 
 ### Milestone 6 -- Embedded Executable Blobs
 
@@ -1034,8 +1055,8 @@ those registers. `just spi-flash-read-smoke` executes the HAL on COR24 and
 reads the generated catalog header from the emulator's file-backed W25Q32.
 The HAL now also converts an eight-byte block number to a 24-bit flash address,
 issues a W25Q32 `03h` READ transaction, and fills an eight-byte target buffer.
-The proof reads both catalog block 0 and the block-16 `C24IMG` magic. The next
-provider now adapts arbitrary bounded byte ranges to that block primitive.
+The proof reads both catalog block 0 and the block-16 `C24IMG` magic. The SPI
+provider adapts arbitrary bounded byte ranges to that block primitive.
 SPI-backed `find` reads the media catalog, copies the matching generated runtime
 descriptor, and substitutes its recorded 24-bit media offset. The unchanged
 loader then obtains every header and payload byte through W25Q32 transactions;
@@ -1089,8 +1110,8 @@ corruption is rejected even when the altered record is not the requested one.
 
 The interactive integration is now explicit rather than test-only. A composite
 provider searches resident program descriptors first and consults SPI only for
-nonresident names; its read callback follows the source selected by the last
-successful lookup. `just scheduled-composite-spi-smoke` proves flash-backed
+nonresident names; lookup publishes the concrete reader callback that spawn
+captures in child-owned sidecar state. `just scheduled-composite-spi-smoke` proves flash-backed
 `embedded-hello` followed by resident Counter execution. The
 `plsw-system-spi-interactive` recipe builds the same composite shell, generates
 and attaches its W25Q32 media, and uses the LGO overlay launch workaround.
@@ -1147,12 +1168,20 @@ no longer a global memory-versus-external flag for spawn or read dispatch to
 reinterpret. The transient lookup result has one representation from provider
 selection through its copy into durable child-owned state.
 
-### Milestone 7 -- SPI Image Provider (Future)
+**Status:** Complete for C24IMG version 1 across memory, block, W25Q32 SPI, and
+SD providers, including corruption rejection, failed-load rollback, concurrent
+children, descriptor/source ownership, and allocation reclamation.
+
+### Milestone 7 -- SPI Image Provider
 
 - [x] SPI mode-0 byte exchange HAL and W25Q32 media-read proof
 - [x] SPI block device HAL read driver
 - [x] SPI catalog provider (same interface as resident provider)
 - [x] Programs loaded from SPI flash transparently
+
+**Status:** Complete. The interactive and scripted composite shells resolve
+resident programs without bus traffic and load nonresident PL/SW images from
+the authenticated W25Q32 media image.
 
 ### Peripheral clients
 
@@ -1161,6 +1190,9 @@ selection through its copy into durable child-owned state.
 - [x] SSD1306 display client rendering DS1307 time
 - [x] PL/SW-callable SD-card 512-byte sector reader
 - [x] Adapt SD-card sector reads to the catalog image-provider interface
+
+**Status:** Complete for the planned emulator clients. Physical device
+acceptance remains part of the separate COR24-TB validation procedure.
 
 `just i2c-ds1307-smoke` configures the Rust emulator's DS1307 for 12:34:56,
 runs a PL/SW client through the scheduled kernel, and requires the complete
