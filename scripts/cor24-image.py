@@ -23,7 +23,9 @@ MANIFEST_KEYS = {
     "entry_offset",
     "relocation_count",
     "payload_hex",
+    "payload_zero_words",
 }
+REQUIRED_MANIFEST_KEYS = MANIFEST_KEYS - {"payload_zero_words"}
 LABEL_PATTERN = re.compile(r"_[A-Za-z_][A-Za-z0-9_]*\Z")
 
 
@@ -45,15 +47,19 @@ def load_manifest(path: Path) -> dict:
     with path.open("rb") as stream:
         manifest = tomllib.load(stream)
     unknown = set(manifest) - MANIFEST_KEYS
-    missing = MANIFEST_KEYS - set(manifest)
+    missing = REQUIRED_MANIFEST_KEYS - set(manifest)
     if unknown:
         raise ValueError(f"unknown manifest key: {sorted(unknown)[0]}")
     if missing:
         raise ValueError(f"missing manifest key: {sorted(missing)[0]}")
     if not isinstance(manifest["name"], str) or not manifest["name"]:
         raise ValueError("name must be a nonempty string")
-    for key in MANIFEST_KEYS - {"name", "payload_hex"}:
+    for key in REQUIRED_MANIFEST_KEYS - {"name", "payload_hex"}:
         word(manifest[key])
+    zero_words = manifest.get("payload_zero_words", 0)
+    word(zero_words)
+    if zero_words > manifest["data_words"]:
+        raise ValueError("payload_zero_words exceeds data_words")
     if manifest["version"] != VERSION:
         raise ValueError(f"unsupported image version: {manifest['version']}")
     if manifest["relocation_count"] != 0:
@@ -64,14 +70,15 @@ def load_manifest(path: Path) -> dict:
         payload = bytes.fromhex(manifest["payload_hex"])
     except ValueError as error:
         raise ValueError("payload_hex is invalid") from error
-    expected_bytes = (manifest["text_words"] + manifest["data_words"]) * WORD_BYTES
+    explicit_words = manifest["text_words"] + manifest["data_words"] - zero_words
+    expected_bytes = explicit_words * WORD_BYTES
     if len(payload) != expected_bytes:
         raise ValueError(f"payload is {len(payload)} bytes; expected {expected_bytes}")
     if manifest["text_words"] == 0:
         raise ValueError("text_words must be positive")
     if manifest["entry_offset"] >= manifest["text_words"]:
         raise ValueError("entry_offset must address a text word")
-    return manifest | {"payload": payload}
+    return manifest | {"payload": payload + bytes(zero_words * WORD_BYTES)}
 
 
 def build_image(manifest: dict) -> bytes:

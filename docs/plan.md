@@ -1161,6 +1161,11 @@ the target CRC rejects a corrupted SD-backed payload. It also rebuilds the same
 catalog with the first executable aligned to byte 512 and requires exactly two
 fetches, proving catalog reads in sector zero and authenticated image loading in
 sector one exercise cache turnover through the Rust SD-card emulator.
+A 546-byte C24IMG fixture extends that proof across another boundary. The
+catalog and runtime descriptor are generated from the same alternate manifest,
+the executable starts at byte 512, and its initialized payload continues into
+sector two. Successful target CRC and execution with exactly three physical
+fetches prove one provider read can refill the cache mid-request.
 
 ---
 

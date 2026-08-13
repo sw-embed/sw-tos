@@ -13,6 +13,14 @@ IMAGE="$OUT_DIR/loader-smoke.c24"
 "$TOOL" build "$MANIFEST" "$IMAGE" --check
 "$TOOL" validate "$IMAGE"
 
+LARGE_IMAGE="$OUT_DIR/embedded-hello-large.c24"
+"$TOOL" build "$ROOT_DIR/catalog/images/embedded-hello-large.toml" "$LARGE_IMAGE"
+"$TOOL" validate "$LARGE_IMAGE"
+if [ "$(wc -c < "$LARGE_IMAGE" | tr -d ' ')" != 546 ]; then
+    echo "FAIL: zero-filled cross-sector image is not 546 bytes" >&2
+    exit 1
+fi
+
 "$ASM" "$ROOT_DIR/catalog/images/embedded-hello.s" \
     --bin "$OUT_DIR/embedded-hello.bin" -o "$OUT_DIR/embedded-hello.lgo"
 "$TOOL" build "$ROOT_DIR/catalog/images/embedded-hello.toml" \
@@ -57,4 +65,4 @@ if "$TOOL" validate "$OUT_DIR/truncated.c24" 2>/dev/null; then
     exit 1
 fi
 
-echo "PASS: COR24 images match source and reject magic, checksum, and length corruption"
+echo "PASS: COR24 images match source, support zero-filled data, and reject corruption"

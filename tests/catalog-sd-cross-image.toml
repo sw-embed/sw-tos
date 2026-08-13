@@ -1,0 +1,49 @@
+[[program]]
+name = "hello"
+entry = "HELLO"
+scheduled_entry = "_plsw_hello_trampoline"
+stack_words = 128
+state_words = 0
+flags = ["resident"]
+
+[[program]]
+name = "counter"
+entry = "COUNTER"
+scheduled_entry = "_plsw_counter_trampoline"
+stack_words = 192
+state_words = 1
+flags = ["resident"]
+
+[[program]]
+name = "clock"
+entry = "CLOCK"
+scheduled_entry = "_plsw_clock_trampoline"
+stack_words = 192
+state_words = 4
+flags = ["resident", "single_instance"]
+
+[[service]]
+name = "shell"
+entry = "MENU"
+scheduled_entry = "_plsw_launcher_trampoline"
+stack_words = 256
+state_words = 5
+flags = ["resident", "single_instance", "privileged", "autostart"]
+
+[[program]]
+name = "embedded-hello"
+entry = "HELLO"
+scheduled_entry = "_embedded_loader_trampoline"
+image_manifest = "catalog/images/embedded-hello-large.toml"
+stack_words = 128
+state_words = 0
+flags = []
+
+[[program]]
+name = "embedded-ping"
+entry = "HELLO"
+scheduled_entry = "_embedded_loader_trampoline"
+image_manifest = "catalog/images/embedded-ping.toml"
+stack_words = 128
+state_words = 0
+flags = []

@@ -65,3 +65,23 @@ if [ "$cross_output" != "$expected" ]; then
 fi
 
 echo "PASS: catalog traversal and executable loading turned the SD cache over to sector one"
+
+CROSS_IMAGE_MEDIA="$OUT_DIR/cross-sector-image-storage.bin"
+"$ROOT_DIR/scripts/cor24-storage.py" build "$CROSS_IMAGE_MEDIA" \
+    --manifest "$ROOT_DIR/tests/catalog-sd-cross-image.toml" \
+    --image-alignment 512
+"$ROOT_DIR/scripts/catalog-spawn-link.sh" \
+    "$ROOT_DIR/tests/catalog-sd-cross-image.plsw" scheduled-sd-cross-image memory \
+    "$ROOT_DIR/tests/catalog-sd-cross-image.toml"
+cross_image_output=$("$ROOT_DIR/tools/bin/cor24-emu" \
+    --lgo "$OUT_DIR/seed.lgo" \
+    --load-binary "$ROOT_DIR/build/scheduled-sd-cross-image/program.bin@0" --entry 0 \
+    --spi-device "sdcard@cs=2?file=$CROSS_IMAGE_MEDIA" \
+    --speed 0 -n 5000000 --quiet 2>/dev/null | sed '/^Entry point:/d')
+if [ "$cross_image_output" != "$expected" ]; then
+    echo "FAIL: SD provider did not load an executable spanning sectors one and two" >&2
+    echo "$cross_image_output" >&2
+    exit 1
+fi
+
+echo "PASS: one authenticated executable read crossed from SD sector one into sector two"

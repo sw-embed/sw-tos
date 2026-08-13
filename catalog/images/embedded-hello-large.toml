@@ -1,0 +1,9 @@
+name = "embedded-hello-large"
+version = 1
+text_words = 3
+data_words = 170
+bss_words = 0
+entry_offset = 0
+relocation_count = 0
+payload_hex = "44452b 0001ff 820027"
+payload_zero_words = 170

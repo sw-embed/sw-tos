@@ -7,6 +7,7 @@ TOOL_DIR="$ROOT_DIR/tools/bin"
 PLSW_SOURCE="${1:-$ROOT_DIR/tests/catalog-counter.plsw}"
 BUILD_NAME="${2:-catalog-spawn}"
 PROVIDER_MODE="${3:-memory}"
+CATALOG_MANIFEST="${4:-$ROOT_DIR/catalog/catalog.toml}"
 OUT_DIR="$ROOT_DIR/build/$BUILD_NAME"
 ASM="$TOOL_DIR/cor24-asm"
 EMU="$TOOL_DIR/cor24-emu"
@@ -16,7 +17,16 @@ PLSW="$ROOT_DIR/tools/plsw.lgo"
 MODULES=(kernel app)
 
 mkdir -p "$OUT_DIR"
-python3 "$ROOT_DIR/scripts/generate-catalog.py"
+if [ "$CATALOG_MANIFEST" = "$ROOT_DIR/catalog/catalog.toml" ]; then
+    python3 "$ROOT_DIR/scripts/generate-catalog.py"
+    SCHEDULED_CATALOG="$ROOT_DIR/hal/cor24/catalog_generated.s"
+else
+    SCHEDULED_CATALOG="$OUT_DIR/catalog_generated.s"
+    python3 "$ROOT_DIR/scripts/generate-catalog.py" \
+        --manifest "$CATALOG_MANIFEST" \
+        --output "$OUT_DIR/catalog_generated.msw" \
+        --scheduled-output "$SCHEDULED_CATALOG"
+fi
 scratch=$(mktemp -d /tmp/swtos-catalog-spawn-XXXXXX)
 trap 'rm -rf "$scratch"' EXIT
 {
@@ -38,7 +48,7 @@ echo "$compiler_output" | sed -n \
 cp "$ROOT_DIR/hal/cor24/catalog-spawn.s" "$OUT_DIR/kernel.raw.s"
 sed -n 'p' "$ROOT_DIR/hal/cor24/i2c.s" >> "$OUT_DIR/kernel.raw.s"
 sed -n 'p' "$ROOT_DIR/hal/cor24/spi.s" >> "$OUT_DIR/kernel.raw.s"
-sed -n 'p' "$ROOT_DIR/hal/cor24/catalog_generated.s" >> "$OUT_DIR/kernel.raw.s"
+sed -n 'p' "$SCHEDULED_CATALOG" >> "$OUT_DIR/kernel.raw.s"
 while IFS=$'\t' read -r image_name image_manifest; do
     image_label="${image_name//-/_}"
     image_asm="$OUT_DIR/$image_name.s"
@@ -46,7 +56,8 @@ while IFS=$'\t' read -r image_name image_manifest; do
         "$ROOT_DIR/$image_manifest" "$image_asm" \
         --label "_embedded_${image_label}_image"
     sed -n 'p' "$image_asm" >> "$OUT_DIR/kernel.raw.s"
-done < <(python3 "$ROOT_DIR/scripts/generate-catalog.py" --list-images)
+done < <(python3 "$ROOT_DIR/scripts/generate-catalog.py" \
+    --manifest "$CATALOG_MANIFEST" --list-images)
 python3 "$ROOT_DIR/scripts/configure-provider.py" \
     "$OUT_DIR/kernel.raw.s" "$PROVIDER_MODE"
 
