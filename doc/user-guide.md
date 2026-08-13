@@ -178,6 +178,17 @@ back the child allocation; an invalid image must never reach its entry point.
 
 ## Test groups
 
+Run the complete noninteractive emulator acceptance gate before a release or
+hardware handoff:
+
+```sh
+just emulator-acceptance
+```
+
+The runner prints and executes each canonical recipe sequentially. To inspect
+its scope without building anything, run
+`./scripts/emulator-acceptance.sh --list`.
+
 Use focused tests while developing:
 
 ```sh
@@ -213,7 +224,7 @@ just spi-sdcard-smoke
 Run recipes that build `swtos-storage.bin` sequentially. Several storage tests
 intentionally corrupt or truncate a shared fixture during negative cases, so
 parallel invocations can interfere with one another even when the target code
-is correct.
+is correct. `just emulator-acceptance` enforces this sequencing internally.
 
 ## Troubleshooting
 
@@ -265,4 +276,3 @@ just hardware-validation-bundle
 Then follow `docs/hardware-validation.md`. Hardware requires a COR24-TB, a
 921,600-baud UART adapter with RTS/CTS, and a separate `loadngo`-compatible
 uploader. The emulator's `--load-binary` option is not a board uploader.
-

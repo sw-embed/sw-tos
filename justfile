@@ -12,6 +12,10 @@ PIPELINE := "./scripts/plsw-pipeline.sh"
 # Default: compile and run PL/SW smoke test
 default: plsw-smoke-run
 
+# Run every noninteractive emulator acceptance proof sequentially
+emulator-acceptance:
+    ./scripts/emulator-acceptance.sh
+
 # ---- Assembly smoke test (pure .s, no PL/SW compiler) ----
 
 # Assemble smoke test

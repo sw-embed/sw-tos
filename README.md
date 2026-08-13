@@ -63,8 +63,18 @@ Requires the PL/SW toolchain (compiler, assembler, and linker):
 - `meta-gen` -- cross-module symbol and FIXUP metadata generator
 
 ```
-just build
+just plsw-system
 ```
+
+Run the complete noninteractive emulator acceptance gate with:
+
+```
+just emulator-acceptance
+```
+
+The gate runs its component recipes sequentially because storage-provider
+negative tests intentionally mutate shared generated media fixtures. Inspect
+the exact ordered recipe list with `./scripts/emulator-acceptance.sh --list`.
 
 The resident catalog is generated from `catalog/catalog.toml`. To regenerate
 it and verify that the checked-in PL/SW descriptor table is current and

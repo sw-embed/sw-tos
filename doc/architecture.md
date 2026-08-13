@@ -178,6 +178,10 @@ The smoke recipes are executable architectural claims. Important groups are:
 - devices: `i2c-ds1307-smoke`, `i2c-oled-clock-smoke`, and
   `spi-sdcard-smoke`.
 
+`just emulator-acceptance` is the aggregate emulator gate. Its runner invokes
+the canonical noninteractive recipes one at a time, preventing shared storage
+corruption fixtures from racing under a parallel outer build.
+
 The emulator is the normal development and acceptance environment. Physical
 hardware validation is a separate final boundary because it requires a board,
 UART adapter, and external loader. See `docs/hardware-validation.md`.
