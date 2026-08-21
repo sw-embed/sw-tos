@@ -30,6 +30,8 @@ _start:
         sw      r0,9(r2)
         la      r0,_scheduled_embedded_hello_descriptor
         sw      r0,12(r2)
+        la      r0,_scheduled_uptime_descriptor
+        sw      r0,15(r2)
 
         ; Endpoint identities belong to process-table slots, including FREE
         ; slots, so process inspection remains stable before first spawn.
@@ -1974,6 +1976,14 @@ _plsw_hello_trampoline:
 _plsw_clock_trampoline:
         push    r0
         la      r2,_PLSW_CLOCK
+        jal     r1,(r2)
+        add     sp,3
+        la      r2,_halt
+        jmp     (r2)
+
+_plsw_uptime_trampoline:
+        push    r0
+        la      r2,_PLSW_UPTIME
         jal     r1,(r2)
         add     sp,3
         la      r2,_halt

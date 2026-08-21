@@ -6,7 +6,7 @@ _start:
         la      r2,_SPI_INIT
         jal     r1,(r2)
 
-        ; Media block 0 begins count=6, version=1, and ASCII SWT.
+        ; Media block 0 begins count=7, version=1, and ASCII SWT.
         lc      r0,0
         la      r2,_SPI_FLASH_READ_BLOCK
         jal     r1,(r2)
@@ -29,8 +29,8 @@ _check_header_prefix:
         ceq     r0,z
         pop     r0
         brf     _check_header_prefix
-        ; Block 19 starts the first embedded image at byte offset 152.
-        lc      r0,19
+        ; Block 22 starts the first embedded image at byte offset 176.
+        lc      r0,22
         la      r2,_SPI_FLASH_READ_BLOCK
         jal     r1,(r2)
         la      r2,_image_magic
@@ -68,6 +68,6 @@ _spi_fail:
         jmp     (r2)
 
 _header_prefix:
-        .byte   6,1,83,87,84
+        .byte   7,1,83,87,84
 _image_magic:
         .byte   67,50,52,73,77,71

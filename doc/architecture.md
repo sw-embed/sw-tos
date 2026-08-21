@@ -16,7 +16,7 @@ and milestone record remains in `docs/plan.md`.
 ## System layers
 
 ```text
-PL/SW applications: Hello, Counter, Clock, external images
+PL/SW applications: Hello, Counter, Uptime, Clock, external images
 PL/SW shell: menu, ls, ps, run <name>
 Catalog and process services: lookup, spawn, join, exit
 Kernel: cooperative scheduling, contexts, IPC, allocation, virtual time
@@ -143,7 +143,7 @@ shell has printed `Choice: `. If a numeric choice is followed by Return, the
 frontend discards that one CR/LF so it cannot be consumed by Hello or become a
 new invalid menu choice.
 
-While Clock is active, the frontend emits escaped heartbeat frames:
+While a time app is active, the frontend emits escaped time frames:
 
 ```text
 FF 01 <tick-low> <tick-middle> <tick-high>
@@ -151,7 +151,9 @@ FF 00 encodes a literal FF payload byte
 FF 03 encodes a literal 1D payload byte
 ```
 
-Ticks are 24-bit centiseconds and may wrap. Clock derives elapsed uptime from
+Frame type `0x01` carries centiseconds since the frontend opened the terminal;
+frame type `0x02` carries host-local centiseconds since midnight. Uptime and
+Clock display these values respectively. Ticks are 24-bit centiseconds and may wrap.
 deltas and prints `mm:ss` once per second. Ctrl-] is translated to target ESC
 because the emulator reserves Ctrl-] for its own terminal control.
 

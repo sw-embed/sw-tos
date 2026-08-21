@@ -22,12 +22,20 @@ stack_words = 192
 state_words = 4
 flags = ["resident", "single_instance"]
 
+[[program]]
+name = "uptime"
+entry = "UPTIME"
+scheduled_entry = "_plsw_uptime_trampoline"
+stack_words = 192
+state_words = 4
+flags = ["resident", "single_instance"]
+
 [[service]]
 name = "shell"
 entry = "MENU"
 scheduled_entry = "_plsw_launcher_trampoline"
 stack_words = 256
-state_words = 5
+state_words = 6
 flags = ["resident", "single_instance", "privileged", "autostart"]
 
 [[program]]

@@ -5,7 +5,7 @@ Copyright (c) 2026 Michael A Wright
 ## What you can run
 
 SWTOS provides a scheduler-integrated menu in the COR24 emulator. Its resident
-applications are Hello, Counter, and Clock. The shell also lists catalog
+applications are Hello, Counter, Uptime, and Clock. The shell also lists catalog
 entries, reports process slots, and can load PL/SW applications from emulated
 W25Q32 flash or SD media.
 
@@ -53,19 +53,23 @@ system. Wait for `Choice: `, then use:
 |---|---|
 | `1` | Run Hello; press a key when prompted to return |
 | `2` | Run Counter and print its sequence |
-| `3` | Run Clock and print uptime once per second |
+| `3` | Run Uptime, measured from terminal connection |
+| `4` | Run Clock, synchronized to the host's local wall time |
 | `0` | Exit the shell |
 | `ls` + Return | List catalog programs and services |
 | `ps` + Return | Show process slots and their states |
 | `run hello` + Return | Spawn a resident program by catalog name |
 | `run counter` + Return | Spawn Counter by catalog name |
+| `run uptime` + Return | Spawn Uptime by catalog name |
 | `run clock` + Return | Spawn Clock by catalog name |
 
 For numeric choices, either type the digit alone or type digit plus Return.
 The terminal wrapper filters the optional line ending at the menu boundary so
 it is not mistaken for Hello's keypress or a later menu choice.
 
-Clock initially prints `00:00`. Press Ctrl-] to return to the menu. The wrapper
+Uptime prints `mm:ss` since the terminal connected; re-entering it does not reset
+the count. Clock prints host local time as `HH:MM:SS`. Press Ctrl-] to return to
+the menu. The wrapper
 translates Ctrl-] into the app's ESC byte and continues running the shell. A
 literal Escape sent by another frontend has the same target-side meaning.
 
@@ -266,10 +270,11 @@ This also indicates leftover line endings or scripted input sent without prompt
 synchronization. Use the interactive wrapper or the repository smoke scripts,
 which wait for target output before sending the next byte sequence.
 
-### Clock does not advance
+### Uptime or Clock does not advance
 
-Clock requires heartbeat frames from `scripts/swtos-terminal.py`. It will print
-`00:00` without synchronization but cannot advance from ordinary UART input.
+Both time apps require control frames from `scripts/swtos-terminal.py` or
+`scripts/swtos-hardware-terminal.py`; an ordinary UART terminal does not supply
+them. Uptime uses connection elapsed time and Clock uses host local wall time.
 Run the primary interactive recipe and keep the wrapper active.
 
 ### An external application is not found

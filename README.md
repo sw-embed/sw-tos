@@ -292,9 +292,10 @@ private state to create task B, then both tasks call back into the scheduler to
 yield.
 
 The scheduler-integrated persistent PL/SW menu supports `1: Hello`,
-`2: Counter`, `3: Clock`, and `0: Exit`. Hello waits for a key in its own
-process; Counter prints `B1` and `B2`; Clock logs `mm:ss` from host UART
-heartbeats until Ctrl-]. Each app exits, releases its process slot, and returns
+`2: Counter`, `3: Uptime`, `4: Clock`, and `0: Exit`. Hello waits for a key in
+its own process; Counter prints `B1` and `B2`; Uptime logs terminal-connection
+elapsed `mm:ss`, while Clock logs host-local `HH:MM:SS`, until Ctrl-]. Each app
+exits, releases its process slot, and returns
 to the preserved menu context:
 
 ```
@@ -340,10 +341,10 @@ To compile and run the SWTOS menu interactively in the emulator:
 just plsw-system-interactive
 ```
 
-This is now the scheduler-integrated image: Hello, Counter, and Clock run as
+This is now the scheduler-integrated image: Hello, Counter, Uptime, and Clock run as
 descriptor-backed processes with private stacks/state and return to the
 persistent menu through `TASK_EXIT`. The shell also accepts `ls` and
-`ps`, plus `run hello`, `run counter`, or `run clock`. `just plsw-system-run` remains an
+`ps`, plus `run hello`, `run counter`, `run uptime`, or `run clock`. `just plsw-system-run` remains an
 alias.
 The terminal wrapper supplies timestamped UART heartbeats while Clock is
 active. Choose `3` to log uptime as `mm:ss` once per second, and press Ctrl-]

@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Interactive SWTOS terminal with a UART heartbeat source for Clock."""
+"""Interactive SWTOS terminal with uptime and wall-clock frames."""
 
 import os
 import argparse
@@ -25,7 +25,7 @@ def filter_menu_input(byte: int, menu_prompt: bool, discard_newline: bool):
         return None, True
     if discard_newline:
         discard_newline = False
-    if menu_prompt and byte in b"0123":
+    if menu_prompt and byte in b"01234":
         discard_newline = True
     return byte, discard_newline
 
@@ -79,15 +79,16 @@ def main() -> int:
         old_tty = termios.tcgetattr(stdin_fd)
         tty.setraw(stdin_fd)
 
-    clock_active = False
-    clock_started = 0.0
+    time_mode = None
+    connection_started = time.monotonic()
     menu_prompt = False
     discard_menu_newline = False
     output_tail = b""
+    input_line = bytearray()
     next_heartbeat = time.monotonic()
     try:
         while child.poll() is None:
-            timeout = max(0.0, next_heartbeat - time.monotonic()) if clock_active else 0.1
+            timeout = max(0.0, next_heartbeat - time.monotonic()) if time_mode else 0.1
             readable, _, _ = select.select([stdin_fd, stdout_fd], [], [], timeout)
 
             if stdout_fd in readable:
@@ -95,9 +96,11 @@ def main() -> int:
                 if not data:
                     break
                 os.write(sys.stdout.fileno(), data)
-                output_tail = (output_tail + data)[-64:]
-                if b"Choice: " in output_tail:
+                combined = output_tail + data
+                if b"Choice: " in combined:
                     menu_prompt = True
+                    time_mode = None
+                output_tail = combined[-7:]
 
             if stdin_fd in readable:
                 data = os.read(stdin_fd, 64)
@@ -107,22 +110,43 @@ def main() -> int:
                     )
                     if byte is None:
                         continue
-                    if clock_active and byte == CTRL_RIGHT_BRACKET:
+                    if time_mode and byte == CTRL_RIGHT_BRACKET:
                         os.write(child_master, bytes([APP_ESCAPE]))
-                        clock_active = False
+                        time_mode = None
                     else:
                         os.write(child_master, bytes([byte]))
+                        if menu_prompt and byte not in (ord("\r"), ord("\n")):
+                            input_line.append(byte)
+                        if menu_prompt and byte in (ord("\r"), ord("\n")):
+                            command = bytes(input_line).strip().lower()
+                            if command == b"run uptime":
+                                time_mode = "uptime"
+                                next_heartbeat = time.monotonic()
+                            elif command == b"run clock":
+                                time_mode = "clock"
+                                next_heartbeat = time.monotonic()
+                            input_line.clear()
+                            menu_prompt = False
                         if menu_prompt and byte == ord("3"):
-                            clock_active = True
-                            clock_started = time.monotonic()
+                            time_mode = "uptime"
                             next_heartbeat = time.monotonic()
-                        if menu_prompt:
+                        elif menu_prompt and byte == ord("4"):
+                            time_mode = "clock"
+                            next_heartbeat = time.monotonic()
+                        if menu_prompt and byte in b"01234":
                             menu_prompt = False
 
             now = time.monotonic()
-            if clock_active and now >= next_heartbeat:
-                elapsed_seconds = int(now - clock_started)
-                tick = (elapsed_seconds * 100) & 0xFFFFFF
+            if time_mode and now >= next_heartbeat:
+                if time_mode == "uptime":
+                    tick = int((now - connection_started) * 100) & 0xFFFFFF
+                    frame_code = 1
+                else:
+                    wall = time.time()
+                    local = time.localtime(wall)
+                    tick = (((local.tm_hour * 3600 + local.tm_min * 60 + local.tm_sec) * 100
+                            + int((wall % 1) * 100)) & 0xFFFFFF)
+                    frame_code = 2
                 payload = bytearray()
                 for byte in (tick & 0xFF, (tick >> 8) & 0xFF, (tick >> 16) & 0xFF):
                     if byte == 0xFF:
@@ -131,7 +155,7 @@ def main() -> int:
                         payload.extend((0xFF, 0x03))
                     else:
                         payload.append(byte)
-                frame = bytes([0xFF, 0x01]) + bytes(payload)
+                frame = bytes([0xFF, frame_code]) + bytes(payload)
                 os.write(child_master, frame)
                 next_heartbeat += 1.0
                 if next_heartbeat < now - 0.1:

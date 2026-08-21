@@ -6,10 +6,10 @@ ROOT_DIR="$(cd "$(dirname "$0")/.." && pwd)"
 EMU="$ROOT_DIR/tools/bin/cor24-emu"
 
 output=$($EMU --lgo "$ROOT_DIR/build/system.lgo" \
-    -u '3\xFF\x01\x00\x00\x00\xFF\x01\x64\x00\x00\xFF\x01\xC8\x00\x00\x1B0' \
+    -u '3\xFF\x01\xF4\x01\x00\xFF\x01\x58\x02\x00\xFF\x01\xBC\x02\x00\x1B4\xFF\x02\xC0\xFF\x03\x45\xFF\x02\x24\x1E\x45\xFF\x02\x88\x1E\x45\x1B0' \
     --speed 0 -n 5000000 --quiet 2>/dev/null)
 
-for expected in '3: Clock' 'Clock uptime log' '00:00' '00:01' '00:02'; do
+for expected in '3: Uptime' '4: Clock' 'Uptime' '00:05' '00:06' '00:07' 'Clock' '12:34:56' '12:34:57' '12:34:58'; do
     if ! echo "$output" | grep -q "$expected"; then
         echo "FAIL: clock output missing '$expected'" >&2
         echo "$output" >&2
@@ -18,9 +18,9 @@ for expected in '3: Clock' 'Clock uptime log' '00:00' '00:01' '00:02'; do
 done
 
 menu_count=$(echo "$output" | grep -c 'SWTOS System Menu')
-if [ "$menu_count" -ne 2 ]; then
-    echo "FAIL: expected Clock to return to menu once, saw $menu_count menus" >&2
+if [ "$menu_count" -ne 3 ]; then
+    echo "FAIL: expected both time apps to return to menu, saw $menu_count menus" >&2
     exit 1
 fi
 
-echo "PASS: Clock logged 00:00 through 00:02 and returned to menu"
+echo "PASS: Uptime used connection time and Clock used wall time"

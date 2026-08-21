@@ -14,7 +14,7 @@ output=$($EMU --load-binary "$OUT_DIR/program.bin@0" --entry 0 \
     --speed 0 -n 2000000 --quiet 2>/dev/null \
     | sed '/^Entry point:/d')
 
-for expected in hello counter clock shell embedded-hello embedded-ping E B1 B2 READY BYE; do
+for expected in hello counter uptime clock shell embedded-hello embedded-ping E B1 B2 READY BYE; do
     if ! echo "$output" | grep -q "$expected"; then
         echo "FAIL: scheduled catalog command output missing '$expected'" >&2
         echo "$output" >&2

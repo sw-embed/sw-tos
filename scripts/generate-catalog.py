@@ -142,31 +142,20 @@ def render(entries: list[dict], manifest: Path) -> str:
     for index, entry in enumerate(entries):
         size = len(entry["name"]) + 1
         lines.append(f"DCL CATALOG_NAME_{index}({size}) CHAR INIT('{entry['name']}');")
-    lines.extend(["", "CATALOG_INIT: PROC;"])
+    lines.extend(["", "CATALOG_INIT: PROC;", "    ASM DO;", "        'la      r2,_CATALOG_TABLE';"])
     for index, entry in enumerate(entries):
-        offset = index * 8
         flag_value = sum(FLAGS[flag][1] for flag in entry["flags"])
-        lines.extend(
-            [
-                f"    CATALOG_TABLE({offset}) = ADDR(CATALOG_NAME_{index});",
-                f"    CATALOG_TABLE({offset + 1}) = {entry['kind']};",
-                f"    CATALOG_TABLE({offset + 2}) = 0;",
-                f"    CATALOG_TABLE({offset + 3}) = {entry['image_words']};",
-                f"    CATALOG_TABLE({offset + 4}) = 0;",
-                f"    CATALOG_TABLE({offset + 5}) = {entry['stack_words']};",
-                f"    CATALOG_TABLE({offset + 6}) = {entry['state_words']};",
-                f"    CATALOG_TABLE({offset + 7}) = {flag_value};",
-            ]
+        kind_value = 0 if entry["kind"] == "IMAGE_PROGRAM" else 2
+        values = (
+            f"_CATALOG_NAME_{index}", kind_value, f"_{entry['entry']}",
+            entry["image_words"], 0, entry["stack_words"],
+            entry["state_words"], flag_value,
         )
-    lines.extend(["    ASM DO;", "        'la      r2,_CATALOG_TABLE';"])
-    for index, entry in enumerate(entries):
-        byte_offset = index * 24 + 6
-        lines.extend(
-            [
-                f"        'la      r0,_{entry['entry']}';",
-                f"        'sw      r0,{byte_offset}(r2)';",
-            ]
-        )
+        for word, value in enumerate(values):
+            lines.append(f"        'la      r0,{value}';")
+            lines.append(f"        'sw      r0,{word * 3}(r2)';")
+        if index + 1 < len(entries):
+            lines.append("        'add     r2,24';")
     lines.extend(["    END;", "END;", ""])
     return "\n".join(lines)
 

@@ -53,11 +53,11 @@ for corruption in magic entry size; do
     bad_media="$OUT_DIR/corrupt-$corruption.bin"
     cp "$MEDIA" "$bad_media"
     if [ "$corruption" = magic ]; then
-        printf 'X' | dd of="$bad_media" bs=1 seek=152 conv=notrunc 2>/dev/null
+        printf 'X' | dd of="$bad_media" bs=1 seek=176 conv=notrunc 2>/dev/null
     elif [ "$corruption" = entry ]; then
-        printf '\377\377\377' | dd of="$bad_media" bs=1 seek=170 conv=notrunc 2>/dev/null
+        printf '\377\377\377' | dd of="$bad_media" bs=1 seek=194 conv=notrunc 2>/dev/null
     else
-        printf '\377\377\377' | dd of="$bad_media" bs=1 seek=161 conv=notrunc 2>/dev/null
+        printf '\377\377\377' | dd of="$bad_media" bs=1 seek=185 conv=notrunc 2>/dev/null
     fi
     bad_output=$("$ROOT_DIR/tools/bin/cor24-emu" \
         --lgo "$OUT_DIR/seed.lgo" --load-binary "$OUT_DIR/program.bin@0" --entry 0 \
@@ -72,17 +72,17 @@ done
 
 echo "PASS: target rejected corrupt C24IMG magic, entry, and size metadata"
 
-# Programs precede services in generated media, so embedded-hello is record 3:
-# record 80..103, with ordinal, offset, length, and flags at bytes 96..103.
+# Programs precede services in generated media, so embedded-hello is record 4:
+# record 104..127, with ordinal, offset, length, and flags at bytes 120..127.
 for corruption in ordinal alignment length flags bounds; do
     bad_media="$OUT_DIR/corrupt-extent-$corruption.bin"
     cp "$MEDIA" "$bad_media"
     case "$corruption" in
-        ordinal) printf '\004' | dd of="$bad_media" bs=1 seek=96 conv=notrunc 2>/dev/null ;;
-        alignment) printf '\201' | dd of="$bad_media" bs=1 seek=99 conv=notrunc 2>/dev/null ;;
-        length) printf '\000\000\045' | dd of="$bad_media" bs=1 seek=100 conv=notrunc 2>/dev/null ;;
-        flags) printf '\000' | dd of="$bad_media" bs=1 seek=103 conv=notrunc 2>/dev/null ;;
-        bounds) printf '\077\377\370' | dd of="$bad_media" bs=1 seek=97 conv=notrunc 2>/dev/null ;;
+        ordinal) printf '\005' | dd of="$bad_media" bs=1 seek=120 conv=notrunc 2>/dev/null ;;
+        alignment) printf '\201' | dd of="$bad_media" bs=1 seek=123 conv=notrunc 2>/dev/null ;;
+        length) printf '\000\000\045' | dd of="$bad_media" bs=1 seek=124 conv=notrunc 2>/dev/null ;;
+        flags) printf '\000' | dd of="$bad_media" bs=1 seek=127 conv=notrunc 2>/dev/null ;;
+        bounds) printf '\077\377\370' | dd of="$bad_media" bs=1 seek=121 conv=notrunc 2>/dev/null ;;
     esac
     bad_output=$("$ROOT_DIR/tools/bin/cor24-emu" \
         --lgo "$OUT_DIR/seed.lgo" --load-binary "$OUT_DIR/program.bin@0" --entry 0 \
@@ -101,7 +101,7 @@ for corruption in count name; do
     bad_media="$OUT_DIR/corrupt-catalog-$corruption.bin"
     cp "$MEDIA" "$bad_media"
     if [ "$corruption" = count ]; then
-        printf '\007' | dd of="$bad_media" bs=1 seek=0 conv=notrunc 2>/dev/null
+        printf '\010' | dd of="$bad_media" bs=1 seek=0 conv=notrunc 2>/dev/null
     else
         printf 'xxxxxxxxxxxxxxxx' | dd of="$bad_media" bs=1 seek=80 conv=notrunc 2>/dev/null
     fi
