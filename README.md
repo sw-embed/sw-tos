@@ -360,6 +360,10 @@ validated load profile is `--sync --byte-delay 100 --delay 10`.
 This transcript was captured from the Rust frontend on physical hardware. The
 menu redisplayed after every completed command; repeated menu lines are omitted.
 
+[Watch the 20-second terminal demo (WebM, 133 KB)](videos/cor24-terminal-demo.webm).
+The reproducible VHS source is
+[`docs/demos/cor24-terminal.tape`](docs/demos/cor24-terminal.tape).
+
 ```text
 MENU 1=Hello 2=Counter 3=Uptime 4=Clock 5=Multitask
 Choice: help
