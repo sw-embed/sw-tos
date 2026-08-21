@@ -21,7 +21,7 @@ output=$($EMU --load-binary "$OUT_DIR/program.bin@0" --entry 0 \
     -u "$input" --speed 0 -n 8000000 --quiet 2>/dev/null \
     | sed '/^Entry point:/d')
 
-for marker in B1 B2 READY BYE; do
+for marker in B1 B2 READY; do
     if ! echo "$output" | grep -q "$marker"; then
         echo "FAIL: reclaim stress output missing '$marker'" >&2
         echo "$output" >&2

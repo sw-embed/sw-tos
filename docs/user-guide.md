@@ -275,6 +275,11 @@ which wait for target output before sending the next byte sequence.
 Both time apps require control frames from `scripts/swtos-terminal.py` or
 `scripts/swtos-hardware-terminal.py`; an ordinary UART terminal does not supply
 them. Uptime uses connection elapsed time and Clock uses host local wall time.
+The Rust hardware frontend provides the same protocol:
+
+```sh
+cargo run --release --manifest-path tools/te-rs/Cargo.toml -- --swtos DEVICE
+```
 Run the primary interactive recipe and keep the wrapper active.
 
 ### An external application is not found

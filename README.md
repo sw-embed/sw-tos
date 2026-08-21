@@ -45,8 +45,8 @@ a PL/I-inspired systems programming language for the COR24 ISA.
 
 ## Documentation
 
-See [doc/architecture.md](doc/architecture.md) for the implemented system
-architecture and [doc/user-guide.md](doc/user-guide.md) for setup, interactive
+See [docs/architecture.md](docs/architecture.md) for the implemented system
+architecture and [docs/user-guide.md](docs/user-guide.md) for setup, interactive
 operation, application workflows, testing, and troubleshooting.
 
 See [docs/plan.md](docs/plan.md) for the full development plan including
@@ -292,7 +292,7 @@ private state to create task B, then both tasks call back into the scheduler to
 yield.
 
 The scheduler-integrated persistent PL/SW menu supports `1: Hello`,
-`2: Counter`, `3: Uptime`, `4: Clock`, and `0: Exit`. Hello waits for a key in
+`2: Counter`, `3: Uptime`, and `4: Clock`. Hello waits for a key in
 its own process; Counter prints `B1` and `B2`; Uptime logs terminal-connection
 elapsed `mm:ss`, while Clock logs host-local `HH:MM:SS`, until Ctrl-]. Each app
 exits, releases its process slot, and returns
@@ -350,6 +350,9 @@ The terminal wrapper supplies timestamped UART heartbeats while Clock is
 active. Choose `3` to log uptime as `mm:ss` once per second, and press Ctrl-]
 to return to the menu. The wrapper translates that key because Ctrl-] is
 reserved by the emulator terminal itself.
+
+For physical COR24-TB UART sessions, the Rust frontend is available with
+`cargo run --release --manifest-path tools/te-rs/Cargo.toml -- --swtos DEVICE`.
 
 The former direct-call image remains available as a compatibility reference:
 

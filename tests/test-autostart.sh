@@ -20,8 +20,8 @@ if ! echo "$output" | grep -q 'SWTOS System Menu'; then
 fi
 
 menu_count=$(echo "$output" | grep -c 'SWTOS System Menu')
-if [ "$menu_count" -ne 1 ]; then
-    echo "FAIL: expected one autostart shell, saw $menu_count" >&2
+if [ "$menu_count" -ne 2 ] || ! echo "$output" | grep -q 'Invalid choice'; then
+    echo "FAIL: expected autostart plus invalid-input refresh, saw $menu_count menus" >&2
     exit 1
 fi
 

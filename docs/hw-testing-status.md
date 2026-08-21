@@ -39,7 +39,7 @@ TE2 reported:
 verified: 581 records, CRC16=ECED
 jump: 000000
 SPAWN
-MENU 1=Hello 2=Counter 3=Clock 0=Exit
+MENU 1=Hello 2=Counter 3=Uptime 4=Clock
 Choice:
 ```
 
@@ -115,11 +115,11 @@ terminal output.
 ## Remaining work
 
 1. Exercise `run hello`, `run counter`, invalid catalog names, repeated task
-   reuse, and clean choice `0` termination on hardware.
+   reuse, and Return-driven menu refresh on hardware.
 2. Preserve a complete timestamped terminal transcript and fill out
    `VALIDATION-RESULT.md` for the resident phase.
 3. Establish a verified W25Q32 programming and read-back procedure before
    beginning SPI-backed catalog acceptance.
-4. Implement a Rust hardware terminal with the same serial, newline-filtering,
-   heartbeat, byte-stuffing, and Ctrl-] behavior. The Python implementation is
-   the executable protocol reference for that port.
+4. Continue soak testing the Rust terminal in `tools/te-rs`; its `--swtos`,
+   `--uptime-active`, and `--clock-active` modes now implement echo, time-frame
+   byte stuffing, and Ctrl-] behavior and have been exercised on COR24-TB.

@@ -28,7 +28,7 @@ if ! echo "$output" | grep -q 'PREADY'; then
     echo "$output" >&2
     exit 1
 fi
-for expected in B1 B2 BYE; do
+for expected in B1 B2; do
     if ! echo "$output" | grep -q "$expected"; then
         echo "FAIL: composite provider resident fallback missing $expected" >&2
         echo "$output" >&2

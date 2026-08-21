@@ -18,8 +18,8 @@ for expected in '3: Uptime' '4: Clock' 'Uptime' '00:05' '00:06' '00:07' 'Clock' 
 done
 
 menu_count=$(echo "$output" | grep -c 'SWTOS System Menu')
-if [ "$menu_count" -ne 3 ]; then
-    echo "FAIL: expected both time apps to return to menu, saw $menu_count menus" >&2
+if [ "$menu_count" -ne 4 ]; then
+    echo "FAIL: expected both time apps and invalid 0 to return to menu, saw $menu_count menus" >&2
     exit 1
 fi
 

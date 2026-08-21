@@ -6,7 +6,7 @@ ROOT_DIR="$(cd "$(dirname "$0")/.." && pwd)"
 EMU="$ROOT_DIR/tools/bin/cor24-emu"
 
 output=$($EMU --lgo "$ROOT_DIR/build/system.lgo" \
-    -u 'ls\n0' --speed 0 -n 1500000 --quiet 2>/dev/null)
+    -u 'ls\n' --speed 0 -n 1500000 --quiet 2>/dev/null)
 
 for name in hello counter clock shell; do
     if ! echo "$output" | grep -q "^${name}$"; then

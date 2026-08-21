@@ -14,7 +14,7 @@ output=$($EMU --load-binary "$OUT_DIR/program.bin@0" --entry 0 \
     --speed 0 -n 3000000 --quiet 2>/dev/null \
     | sed '/^Entry point:/d')
 
-for expected in 'Hello' 'B1' 'B2' 'Uptime' '00:05' '00:06' '00:07' 'Clock' '12:34:56' '12:34:57' '12:34:58' 'BYE'; do
+for expected in 'Hello' 'B1' 'B2' 'Uptime' '00:05' '00:06' '00:07' 'Clock' '12:34:56' '12:34:57' '12:34:58' 'BAD'; do
     if ! echo "$output" | grep -q "$expected"; then
         echo "FAIL: scheduled menu output missing '$expected'" >&2
         echo "$output" >&2
@@ -23,8 +23,8 @@ for expected in 'Hello' 'B1' 'B2' 'Uptime' '00:05' '00:06' '00:07' 'Clock' '12:3
 done
 
 menu_count=$(echo "$output" | grep -o 'MENU 1=Hello' | wc -l | tr -d ' ')
-if [ "$menu_count" -ne 5 ]; then
-    echo "FAIL: expected five scheduled menu displays, saw $menu_count" >&2
+if [ "$menu_count" -ne 6 ]; then
+    echo "FAIL: expected six scheduled menu displays, saw $menu_count" >&2
     echo "$output" >&2
     exit 1
 fi

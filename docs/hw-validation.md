@@ -104,7 +104,7 @@ connecting TX/RX or powering the board.
    with no repeating `Invalid choice` loop.
 8. Choose `3`. Require `00:00` followed by increasing `mm:ss` values. Press
    Ctrl-] and require a return to the menu.
-9. Choose `0` and require `BYE` or the documented clean shell termination.
+9. Press Return at the menu and require `BAD` followed by a refreshed menu.
 
 Record each check as pass or fail. A reset, hang, unexpected prompt loop,
 missing output, or input consumed by the wrong app is a failure even if later
@@ -167,4 +167,3 @@ A hardware validation is complete only when:
 
 Until then, project status remains “emulator accepted; physical validation
 pending.”
-

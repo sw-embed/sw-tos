@@ -18,7 +18,7 @@ output=$("$ROOT_DIR/tools/bin/cor24-emu" --lgo "$OUT_DIR/seed.lgo" \
     -u 'run embedded-hello\nrun embedded-ping\nrun counter\n0' \
     --speed 0 -n 6000000 --quiet 2>/dev/null | sed '/^Entry point:/d')
 
-for expected in EREADY PREADY B1 B2 BYE; do
+for expected in EREADY PREADY B1 B2; do
     if ! echo "$output" | grep -q "$expected"; then
         echo "FAIL: SD composite shell output missing $expected" >&2
         echo "$output" >&2

@@ -9,6 +9,7 @@ build/
 
 # Tool binaries (built from sw-cor24-x-assembler and sw-cor24-emulator)
 tools/bin/
+tools/te-rs/target/
 
 # Editor / IDE
 .vscode/

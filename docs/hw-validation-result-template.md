@@ -71,7 +71,7 @@ terminal capture:
 | Counter returns without invalid-choice loop | PENDING | |
 | Clock advances in `mm:ss` | PENDING | |
 | Ctrl-] returns from Clock | PENDING | |
-| Choice 0 exits cleanly | PENDING | |
+| Return reports BAD and refreshes menu | PENDING | |
 
 - Transcript file and SHA-256:
 
@@ -107,4 +107,3 @@ none / details:
 - Operator signature/name:
 - Date:
 - Project-owner review:
-
