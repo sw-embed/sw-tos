@@ -58,6 +58,6 @@ Ctrl+C
 Sleep 1s
 
 # The checked-in asset is reduced from this temporary master with:
-# ffmpeg -i /tmp/cor24-terminal-master.mp4 -vf fps=15 -an \
-#   -c:v libvpx-vp9 -crf 42 -b:v 0 -deadline good -cpu-used 2 \
-#   videos/cor24-terminal-demo.webm
+# ffmpeg -i /tmp/cor24-terminal-master.mp4 -vf fps=8 -an \
+#   -c:v libwebp_anim -lossless 0 -q:v 48 -compression_level 6 -loop 0 \
+#   videos/cor24-terminal-demo.webp

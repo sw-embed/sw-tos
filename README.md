@@ -13,6 +13,13 @@ a companion software emulator.
 SWTOS is implemented in [PL/SW](https://github.com/sw-embed/sw-cor24-plsw),
 a PL/I-inspired systems programming language for the COR24 ISA.
 
+## Hardware demo
+
+![SWTOS shell running on the COR24-TB](videos/cor24-terminal-demo.webp)
+
+[Full terminal transcript](docs/transcript.log) ·
+[Reproducible VHS tape](docs/demos/cor24-terminal.tape)
+
 ### Key Features
 
 - **Synchronous message-passing IPC** -- `send`, `receive`, `sendrec`
@@ -354,73 +361,6 @@ cargo run --release --manifest-path tools/te-rs/Cargo.toml -- --swtos DEVICE
 
 The uploader drains monitor echo continuously so RTS/CTS cannot deadlock. The
 validated load profile is `--sync --byte-delay 100 --delay 10`.
-
-### COR24-TB session
-
-This transcript was captured from the Rust frontend on physical hardware. The
-menu redisplayed after every completed command; repeated menu lines are omitted.
-
-[Watch the 20-second terminal demo (WebM, 133 KB)](videos/cor24-terminal-demo.webm).
-The reproducible VHS source is
-[`docs/demos/cor24-terminal.tape`](docs/demos/cor24-terminal.tape).
-
-```text
-MENU 1=Hello 2=Counter 3=Uptime 4=Clock 5=Multitask
-Choice: help
-help ls dir ps run
-df du stat uname
-
-Choice: df
-catalog entries=7 images=2 bytes=81
-
-Choice: du
-embedded-hello 36 bytes
-embedded-ping 45 bytes
-
-Choice: dir
-hello
-counter
-clock
-uptime
-embedded-hello
-embedded-ping
-shell
-
-Choice: uname
-SWTOS COR24 0.1
-
-Choice: stat hello
-hello kind=program source=resident stack=128 state=0 flags=1 image=0
-
-Choice: stat embedded-ping
-embedded-ping kind=program source=embedded stack=128 state=0 flags=0 image=45
-
-Choice: stat shell
-shell kind=service source=resident stack=256 state=6 flags=15 image=0
-
-Choice: 5
-B1
-C1
-B2
-C2
-READY
-
-Choice: 3
-Uptime
-01:46
-01:47
-01:48
-Escape
-READY
-
-Choice: 4
-Clock
-14:56:33
-14:56:34
-14:56:35
-Escape
-READY
-```
 
 The former direct-call image remains available as a compatibility reference:
 
