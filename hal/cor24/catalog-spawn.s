@@ -2199,6 +2199,55 @@ _task_catalog_find_done:
         pop     r1
         jmp     (r1)
 
+; TASK_CATALOG_STAT_FIND(name, result): search every generated descriptor,
+; including services and nonresident programs, for metadata inspection.
+        .globl  _TASK_CATALOG_STAT_FIND
+_TASK_CATALOG_STAT_FIND:
+        push    fp
+        push    r2
+        push    r1
+        mov     fp,sp
+        lw      r2,12(fp)
+        lc      r0,0
+        sw      r0,0(r2)
+        la      r2,_scheduled_catalog_table
+_task_catalog_stat_next:
+        lw      r0,0(r2)
+        ceq     r0,z
+        brt     _task_catalog_stat_done
+        push    r2
+        lw      r1,0(r0)
+        lw      r2,9(fp)
+_task_catalog_stat_compare:
+        push    r1
+        lbu     r0,0(r1)
+        push    r0
+        lbu     r0,0(r2)
+        pop     r1
+        ceq     r0,r1
+        pop     r1
+        brf     _task_catalog_stat_mismatch
+        ceq     r0,z
+        brt     _task_catalog_stat_match
+        add     r1,1
+        add     r2,1
+        bra     _task_catalog_stat_compare
+_task_catalog_stat_mismatch:
+        pop     r2
+        add     r2,3
+        bra     _task_catalog_stat_next
+_task_catalog_stat_match:
+        pop     r2
+        lw      r0,0(r2)
+        lw      r1,12(fp)
+        sw      r0,0(r1)
+_task_catalog_stat_done:
+        mov     sp,fp
+        pop     r1
+        pop     r2
+        pop     fp
+        jmp     (r1)
+
 ; TASK_JOIN(): cooperate until the spawned process exits. TASK_EXIT restores
 ; the shell inside _yield, after which this loop observes the released slot.
         .globl  _TASK_JOIN
@@ -2269,6 +2318,21 @@ _provider_bounds_pass:
         jmp     (r1)
 
 ; PL/SW runtime-compatible UART output entry.
+        .globl  _UART_PUTS
+_UART_PUTS:
+        push    fp
+        push    r2
+        push    r1
+        mov     fp,sp
+        lw      r0,9(fp)
+        la      r2,_puts
+        jal     r1,(r2)
+        mov     sp,fp
+        pop     r1
+        pop     r2
+        pop     fp
+        jmp     (r1)
+
         .globl  _UART_PUTCHAR
 _UART_PUTCHAR:
         push    fp

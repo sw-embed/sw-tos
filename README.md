@@ -291,72 +291,132 @@ the exported `TASK_SPAWN(descriptor)` service with a descriptor pointer held in
 private state to create task B, then both tasks call back into the scheduler to
 yield.
 
-The scheduler-integrated persistent PL/SW menu supports `1: Hello`,
-`2: Counter`, `3: Uptime`, `4: Clock`, and `5: Multitask`. Hello waits for a key in
-its own process; Counter prints `B1` and `B2`; Uptime logs terminal-connection
-elapsed `mm:ss`, while Clock logs host-local `HH:MM:SS`, until Ctrl-]. Each app
-exits, releases its process slot, and returns
-to the menu. Multitask launches two private Counter instances concurrently;
-their `B1 C1 B2 C2` output visibly demonstrates cooperative scheduling.
-The preserved menu context then continues running:
+### Scheduled shell
+
+The persistent PL/SW menu provides five demos:
+
+- `1`: Hello waits for a key in its own process.
+- `2`: Counter prints `B1` and `B2`.
+- `3`: Uptime prints terminal-connection elapsed time.
+- `4`: Clock prints host-local wall time.
+- `5`: Multitask prints `B1 C1 B2 C2` from two cooperative workers.
+
+Each app releases its process slot and returns to the preserved menu context.
+Run the smoke test or start an interactive session with:
 
 ```
 just scheduled-shell-smoke
 just scheduled-shell-interactive
 ```
 
-Its `ls` command walks the generated scheduler descriptor table, and
-`run <name>` searches that same table for program descriptors. A scheduler
-join service keeps the shell suspended until the selected app exits, so adding
-a cataloged program does not require a shell name branch or guessed yield
-count. `TASK_EXIT` also restores the app slot's saved EBR arena pointer,
-reclaiming its private state and stack as one LIFO allocation. Verify repeated
-reuse with `just scheduled-reclaim-smoke`.
+Shell commands include:
 
-The scheduler scans a contiguous three-entry process table rather than
-switching between hardcoded A/B descriptors. Two child slots can run
-concurrently; `just scheduled-multislot-smoke` launches two Counter instances
-and verifies round-robin `B1 C1 B2 C2` output from independent private state.
-Their allocation generation is reclaimed when its last child exits. The
-scheduled shell's `ps` command walks the same table and prints each stable
-endpoint with its `FREE` or `RUNNABLE` state.
+- `ls` and its CP/M-style alias `dir` list catalog entries.
+- `ps` lists process slots.
+- `run <name>` launches a program descriptor.
+- `help` lists commands.
+- `uname` identifies SWTOS and COR24.
+- `df` summarizes generated catalog/image totals.
+- `du` lists generated external-image sizes.
+- `stat <name>` reports kind, source, stack/state words, flags, and image bytes.
+
+Catalog-dependent utility text is generated from `catalog/catalog.toml` and
+the image manifests. Displayed sizes therefore stay tied to build inputs.
+
+The scheduler join service suspends the shell until a selected app exits.
+`TASK_EXIT` then restores the saved EBR arena pointer, reclaiming private state
+and stack as one LIFO allocation. Verify reuse with
+`just scheduled-reclaim-smoke`.
+
+The scheduler scans a three-entry process table. Two child slots can run
+concurrently. `just scheduled-multislot-smoke` verifies their independent
+state and round-robin `B1 C1 B2 C2` output. `ps` walks the same table and prints
+each endpoint as `FREE` or `RUNNABLE`.
 
 The heartbeat-aware frontend accepts `--image`, so the same byte stuffing,
 Ctrl-] translation, and line-ending filtering serve both the compatibility and
 scheduler-integrated images. The latter is ready to become the primary demo.
 
-Produces linked flat `.bin` images at address zero, plus `.lgo` containers for
-single-module assembly artifacts. Use the format required by the COR24 serial
-boot loader at 921,600 baud.
+Builds produce flat `.bin` images at address zero. Single-module assembly
+artifacts may also use `.lgo` containers.
 
-Physical-board acceptance is staged with `just hardware-validation-bundle`.
-After `just emulator-acceptance`, it validates that the report belongs to the
-current clean commit and produces checksummed resident, SPI-shell, launch-seed,
-W25Q32, and emulator-acceptance artifacts;
-the required 921,600-baud RTS/CTS setup and acceptance transcript are specified
-in [docs/hw-validation.md](docs/hw-validation.md). The repository
-does not contain the COR24 `loadngo` board uploader.
+### Hardware UART
 
-To compile and run the SWTOS menu interactively in the emulator:
+Create board artifacts with `just hardware-validation-bundle`. See
+[docs/hw-validation.md](docs/hw-validation.md) for the 921,600-baud RTS/CTS
+procedure and acceptance record.
 
-```
-just plsw-system-interactive
+Run the Rust frontend with:
+
+```sh
+cargo run --release --manifest-path tools/te-rs/Cargo.toml -- --swtos DEVICE
 ```
 
-This is now the scheduler-integrated image: Hello, Counter, Uptime, and Clock run as
-descriptor-backed processes with private stacks/state and return to the
-persistent menu through `TASK_EXIT`. The shell also accepts `ls` and
-`ps`, plus `run hello`, `run counter`, `run uptime`, or `run clock`. `just plsw-system-run` remains an
-alias.
-The terminal wrapper supplies timestamped UART heartbeats while Clock is
-active. Choose `3` to log uptime as `mm:ss` once per second, and press Ctrl-]
-to return to the menu. The wrapper translates that key because Ctrl-] is
-reserved by the emulator terminal itself.
+The uploader drains monitor echo continuously so RTS/CTS cannot deadlock. The
+validated load profile is `--sync --byte-delay 100 --delay 10`.
 
-For physical COR24-TB UART sessions, the Rust frontend is available with
-`cargo run --release --manifest-path tools/te-rs/Cargo.toml -- --swtos DEVICE`.
-Its uploader continuously drains monitor echo so RTS/CTS cannot deadlock; use
-`--sync --byte-delay 100 --delay 10` for the hardware-validated load profile.
+### COR24-TB session
+
+This transcript was captured from the Rust frontend on physical hardware. The
+menu redisplayed after every completed command; repeated menu lines are omitted.
+
+```text
+MENU 1=Hello 2=Counter 3=Uptime 4=Clock 5=Multitask
+Choice: help
+help ls dir ps run
+df du stat uname
+
+Choice: df
+catalog entries=7 images=2 bytes=81
+
+Choice: du
+embedded-hello 36 bytes
+embedded-ping 45 bytes
+
+Choice: dir
+hello
+counter
+clock
+uptime
+embedded-hello
+embedded-ping
+shell
+
+Choice: uname
+SWTOS COR24 0.1
+
+Choice: stat hello
+hello kind=program source=resident stack=128 state=0 flags=1 image=0
+
+Choice: stat embedded-ping
+embedded-ping kind=program source=embedded stack=128 state=0 flags=0 image=45
+
+Choice: stat shell
+shell kind=service source=resident stack=256 state=6 flags=15 image=0
+
+Choice: 5
+B1
+C1
+B2
+C2
+READY
+
+Choice: 3
+Uptime
+01:46
+01:47
+01:48
+Escape
+READY
+
+Choice: 4
+Clock
+14:56:33
+14:56:34
+14:56:35
+Escape
+READY
+```
 
 The former direct-call image remains available as a compatibility reference:
 

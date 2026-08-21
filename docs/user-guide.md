@@ -57,7 +57,13 @@ system. Wait for `Choice: `, then use:
 | `4` | Run Clock, synchronized to the host's local wall time |
 | `5` | Spawn two cooperative workers and show `B1 C1 B2 C2` |
 | `ls` + Return | List catalog programs and services |
+| `dir` + Return | Use the CP/M-style alias for `ls` |
 | `ps` + Return | Show process slots and their states |
+| `help` + Return | List shell commands |
+| `df` + Return | Show generated catalog and image totals |
+| `du` + Return | Show generated external-image sizes |
+| `stat NAME` + Return | Show catalog metadata for one entry |
+| `uname` + Return | Print the SWTOS target and version |
 | `run hello` + Return | Spawn a resident program by catalog name |
 | `run counter` + Return | Spawn Counter by catalog name |
 | `run uptime` + Return | Spawn Uptime by catalog name |
@@ -67,11 +73,12 @@ For numeric choices, either type the digit alone or type digit plus Return.
 The terminal wrapper filters the optional line ending at the menu boundary so
 it is not mistaken for Hello's keypress or a later menu choice.
 
-Uptime prints `mm:ss` since the terminal connected; re-entering it does not reset
-the count. Clock prints host local time as `HH:MM:SS`. Press Ctrl-] to return to
-the menu. The wrapper
-translates Ctrl-] into the app's ESC byte and continues running the shell. A
-literal Escape sent by another frontend has the same target-side meaning.
+Uptime prints `mm:ss` since the terminal connected; re-entering it does not
+reset the count. Clock prints host local time as `HH:MM:SS`.
+
+Press Ctrl-] to return to the menu. The wrapper translates it into the app's
+ESC byte and continues running the shell. A literal Escape sent by another
+frontend has the same target-side meaning.
 
 To leave an emulator session that is not accepting menu input, use the
 emulator's own terminal escape or interrupt the host command. Your terminal

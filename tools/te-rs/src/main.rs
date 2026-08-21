@@ -471,6 +471,10 @@ fn echo_swtos_key(tty: &mut File, byte: u8) -> io::Result<()> {
     }
 }
 
+fn is_numeric_menu_choice(byte: u8) -> bool {
+    matches!(byte, b'1'..=b'5')
+}
+
 fn run(options: &Options) -> io::Result<()> {
     let mut serial = OpenOptions::new()
         .read(true)
@@ -607,13 +611,16 @@ fn run(options: &Options) -> io::Result<()> {
                         serial.write_all(&[outgoing])?;
                         serial.flush()?;
                         if options.swtos && menu_prompt {
-                            if matches!(outgoing, b'3' | b'4') && input_line.is_empty() {
-                                time_mode = Some(if outgoing == b'3' {
-                                    TimeMode::Uptime
-                                } else {
-                                    TimeMode::Clock
-                                });
-                                next_frame = Instant::now();
+                            if is_numeric_menu_choice(outgoing) && input_line.is_empty() {
+                                time_mode = match outgoing {
+                                    b'3' => Some(TimeMode::Uptime),
+                                    b'4' => Some(TimeMode::Clock),
+                                    _ => None,
+                                };
+                                if time_mode.is_some() {
+                                    next_frame = Instant::now();
+                                }
+                                input_line.clear();
                                 discard_newline = true;
                                 menu_prompt = false;
                             } else if outgoing == b'\n' {
@@ -753,6 +760,15 @@ mod tests {
         assert_eq!(monitor_error(b"L000000...\r\n"), None);
         assert_eq!(monitor_error(b"; comment\r\n"), None);
         assert_eq!(monitor_error(b"G000015\r\nJump...\r\n"), None);
+    }
+
+    #[test]
+    fn recognizes_every_numeric_menu_choice() {
+        for byte in b'1'..=b'5' {
+            assert!(is_numeric_menu_choice(byte));
+        }
+        assert!(!is_numeric_menu_choice(b'0'));
+        assert!(!is_numeric_menu_choice(b'6'));
     }
 
     #[test]

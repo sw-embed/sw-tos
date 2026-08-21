@@ -20,23 +20,29 @@ mkdir -p "$OUT_DIR"
 if [ "$CATALOG_MANIFEST" = "$ROOT_DIR/catalog/catalog.toml" ]; then
     python3 "$ROOT_DIR/scripts/generate-catalog.py"
     SCHEDULED_CATALOG="$ROOT_DIR/hal/cor24/catalog_generated.s"
+    SHELL_CATALOG="$ROOT_DIR/include/shell_catalog_generated.msw"
 else
     SCHEDULED_CATALOG="$OUT_DIR/catalog_generated.s"
     python3 "$ROOT_DIR/scripts/generate-catalog.py" \
         --manifest "$CATALOG_MANIFEST" \
         --output "$OUT_DIR/catalog_generated.msw" \
-        --scheduled-output "$SCHEDULED_CATALOG"
+        --scheduled-output "$SCHEDULED_CATALOG" \
+        --shell-output "$OUT_DIR/shell_catalog_generated.msw"
+    SHELL_CATALOG="$OUT_DIR/shell_catalog_generated.msw"
 fi
 scratch=$(mktemp -d /tmp/swtos-catalog-spawn-XXXXXX)
 trap 'rm -rf "$scratch"' EXIT
 {
     printf 'c\n'
+    if [ "$(basename "$PLSW_SOURCE")" = "catalog-shell.plsw" ]; then
+        sed -n 'p' "$SHELL_CATALOG"
+    fi
     sed -n 'p' "$PLSW_SOURCE"
     printf '\x04'
 } > "$scratch/input.bin"
 
 compiler_output=$($EMU --lgo "$PLSW" --uart-file "$scratch/input.bin" \
-    --quiet --speed 0 -n 200000000 -t 120 2>&1)
+    --quiet --speed 0 -n 500000000 -t 120 2>&1)
 if echo "$compiler_output" | grep -q 'compilation failed\|COMPILE ERROR\|ERROR:'; then
     echo "PL/SW task compilation failed:" >&2
     echo "$compiler_output" >&2

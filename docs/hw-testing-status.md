@@ -13,6 +13,10 @@ to the menu from both applications.
 The UART-only Multitask choice requires no external peripherals. On 2026-08-21,
 choice `5` launched two workers on COR24-TB, printed the cooperative schedule
 `B1 C1 B2 C2`, returned `READY`, and redisplayed the five-choice menu.
+The expanded 13,218-byte image also passed `help`, `df`, `du`, `dir`, `uname`,
+and resident, embedded, and service `stat` queries on the board. Running choice
+`3` immediately after choice `5` confirmed that the Rust frontend clears
+numeric menu state and continues injecting Uptime frames.
 
 This is an initial engineering result, not yet a completed hardware acceptance
 record. The SPI-backed catalog and external images have not been programmed or
