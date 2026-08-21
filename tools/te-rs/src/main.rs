@@ -13,7 +13,7 @@ const MAX_MONITOR_RESPONSE: usize = 1024;
 
 // Keep monitor diagnostics in one place. Replace or extend these placeholders
 // when the monitor's exact error messages are known.
-const MONITOR_ERROR_PATTERNS: &[&str] = &["invalid", "too long"];
+const MONITOR_ERROR_PATTERNS: &[&str] = &["invalid", "too long", "bad hex", "unknown command"];
 
 #[derive(Debug, PartialEq)]
 struct Options {
@@ -148,7 +148,8 @@ impl TermiosGuard {
         let mut configured = original;
         // SAFETY: configured points to a valid termios structure.
         unsafe { libc::cfmakeraw(&mut configured) };
-        configured.c_cflag |= libc::CRTSCTS;
+        configured.c_cflag &= !(libc::PARENB | libc::CSTOPB | libc::CSIZE);
+        configured.c_cflag |= libc::CS8 | libc::CLOCAL | libc::CREAD | libc::CRTSCTS;
         configured.c_iflag |= libc::IGNBRK;
 
         // SAFETY: configured is valid and B921600 is a supported speed constant
@@ -159,6 +160,12 @@ impl TermiosGuard {
             return Err(io::Error::last_os_error());
         }
         set_termios(fd, &configured)?;
+        let modem_bits: libc::c_int = libc::TIOCM_RTS;
+        // Match the proven Python terminal: explicitly assert the FTDI RTS
+        // output after enabling hardware flow control.
+        if unsafe { libc::ioctl(fd, libc::TIOCMBIS, &modem_bits) } == -1 {
+            return Err(io::Error::last_os_error());
+        }
         Ok(Self { fd, original })
     }
 
@@ -289,7 +296,12 @@ fn read_monitor_response_line(
     Ok(())
 }
 
-fn wait_for_echo(serial: &mut File, tty: &mut File, expected: &[u8]) -> io::Result<()> {
+fn receive_echo(
+    serial: &mut File,
+    tty: &mut File,
+    expected: &[u8],
+    validate: bool,
+) -> io::Result<()> {
     let deadline = Instant::now() + SYNC_TIMEOUT;
     let mut received = Vec::with_capacity(expected.len());
     let mut byte = [0_u8; 1];
@@ -331,7 +343,7 @@ fn wait_for_echo(serial: &mut File, tty: &mut File, expected: &[u8]) -> io::Resu
         tty.flush()?;
         let index = received.len();
         received.push(byte[0]);
-        if byte[0] != expected[index] {
+        if validate && byte[0] != expected[index] {
             read_monitor_response_line(serial, tty, &mut received, deadline)?;
             if let Some(pattern) = monitor_error(&received) {
                 let message = String::from_utf8_lossy(&received);
@@ -387,7 +399,11 @@ fn upload(path: &Path, serial: &mut File, tty: &mut File, options: &Options) -> 
             eprintln!(
                 "upload: line {line_number}, {} bytes{}",
                 line.len(),
-                if options.sync { ", awaiting echo" } else { "" }
+                if options.sync {
+                    ", validating echo"
+                } else {
+                    ", draining echo"
+                }
             );
         }
 
@@ -401,11 +417,12 @@ fn upload(path: &Path, serial: &mut File, tty: &mut File, options: &Options) -> 
             serial.write_all(&line)?;
             serial.flush()?;
         }
-        if options.sync {
-            wait_for_echo(serial, tty, &line).map_err(|error| {
-                io::Error::new(error.kind(), format!("line {line_number}: {error}"))
-            })?;
-        }
+        // The monitor echoes every record. Always consume that echo so the
+        // host receive queue cannot fill, deassert RTS, and deadlock hardware
+        // flow control. --sync additionally validates every echoed byte.
+        receive_echo(serial, tty, &line, options.sync).map_err(|error| {
+            io::Error::new(error.kind(), format!("line {line_number}: {error}"))
+        })?;
         if let Some(delay) = options.delay {
             thread::sleep(delay);
         }
@@ -728,6 +745,7 @@ mod tests {
             monitor_error(b"Load line is TOO LONG\r\n"),
             Some("too long")
         );
+        assert_eq!(monitor_error(b"? Bad hex character:`\r\n"), Some("bad hex"));
     }
 
     #[test]

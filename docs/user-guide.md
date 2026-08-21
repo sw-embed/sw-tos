@@ -55,7 +55,7 @@ system. Wait for `Choice: `, then use:
 | `2` | Run Counter and print its sequence |
 | `3` | Run Uptime, measured from terminal connection |
 | `4` | Run Clock, synchronized to the host's local wall time |
-| `0` | Exit the shell |
+| `5` | Spawn two cooperative workers and show `B1 C1 B2 C2` |
 | `ls` + Return | List catalog programs and services |
 | `ps` + Return | Show process slots and their states |
 | `run hello` + Return | Spawn a resident program by catalog name |
@@ -280,6 +280,10 @@ The Rust hardware frontend provides the same protocol:
 ```sh
 cargo run --release --manifest-path tools/te-rs/Cargo.toml -- --swtos DEVICE
 ```
+For a checksummed hardware upload, press Ctrl-R and enter the `.lgo` path. The
+uploader always drains the monitor echo to keep RTS/CTS flowing; add `--sync`
+to validate every echoed byte. The validated COR24-TB settings are
+`--sync --byte-delay 100 --delay 10`.
 Run the primary interactive recipe and keep the wrapper active.
 
 ### An external application is not found

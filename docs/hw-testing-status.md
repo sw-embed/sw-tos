@@ -9,7 +9,10 @@ was loaded on COR24-TB and both time applications were confirmed in hardware.
 Uptime first displayed `00:05`, continued through `00:20`, and therefore used
 time since terminal attachment rather than time since app entry. Clock synced
 to host-local `09:59:06` and advanced once per second. Ctrl-] returned cleanly
-to the four-choice menu from both applications.
+to the menu from both applications.
+The UART-only Multitask choice requires no external peripherals. On 2026-08-21,
+choice `5` launched two workers on COR24-TB, printed the cooperative schedule
+`B1 C1 B2 C2`, returned `READY`, and redisplayed the five-choice menu.
 
 This is an initial engineering result, not yet a completed hardware acceptance
 record. The SPI-backed catalog and external images have not been programmed or
@@ -28,6 +31,18 @@ tested on the board.
 - Stable serial path:
   `/dev/serial/by-id/usb-FTDI_FT232R_USB_UART_A50285BI-if00-port0`
 - Uploader: the checksummed COR24 TE2 loader
+
+The Multitask image was uploaded with the Rust terminal using 100-microsecond
+byte pacing, 10-millisecond record pacing, and exact monitor-echo validation:
+
+```sh
+tools/te-rs/target/release/te-rs --swtos --sync \
+  --byte-delay 100 --delay 10 DEVICE
+```
+
+The Rust uploader must consume the monitor's echoed records during every
+upload, including without `--sync`; otherwise its receive queue fills, RTS is
+deasserted, and the full-duplex hardware-flow-control path deadlocks.
 
 The hardware-validation bundle passed every SHA-256 check before the resident
 binary was wrapped in complete, zero-preserving L records. Decoding that LGO
@@ -56,6 +71,8 @@ The following checks passed on the physical board:
   key was sent, then printed `READY` and returned to the menu.
 - Choice `2` printed `B1`, `B2`, and `READY`, then returned cleanly.
 - Choice `3` printed `Clock` and `00:00`.
+- Choice `5` printed `B1`, `C1`, `B2`, `C2`, and `READY`, then returned
+  cleanly to the menu.
 
 An initial `ls` attempt sent CR where the shell's short command parser requires
 LF and correctly returned `BAD`. Sending LF produced the expected catalog.

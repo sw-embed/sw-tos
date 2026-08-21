@@ -292,11 +292,13 @@ private state to create task B, then both tasks call back into the scheduler to
 yield.
 
 The scheduler-integrated persistent PL/SW menu supports `1: Hello`,
-`2: Counter`, `3: Uptime`, and `4: Clock`. Hello waits for a key in
+`2: Counter`, `3: Uptime`, `4: Clock`, and `5: Multitask`. Hello waits for a key in
 its own process; Counter prints `B1` and `B2`; Uptime logs terminal-connection
 elapsed `mm:ss`, while Clock logs host-local `HH:MM:SS`, until Ctrl-]. Each app
 exits, releases its process slot, and returns
-to the preserved menu context:
+to the menu. Multitask launches two private Counter instances concurrently;
+their `B1 C1 B2 C2` output visibly demonstrates cooperative scheduling.
+The preserved menu context then continues running:
 
 ```
 just scheduled-shell-smoke
@@ -353,6 +355,8 @@ reserved by the emulator terminal itself.
 
 For physical COR24-TB UART sessions, the Rust frontend is available with
 `cargo run --release --manifest-path tools/te-rs/Cargo.toml -- --swtos DEVICE`.
+Its uploader continuously drains monitor echo so RTS/CTS cannot deadlock; use
+`--sync --byte-delay 100 --delay 10` for the hardware-validated load profile.
 
 The former direct-call image remains available as a compatibility reference:
 
