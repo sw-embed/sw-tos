@@ -103,6 +103,10 @@ scheduled-shell-smoke:
 scheduled-catalog-smoke:
     ./tests/test-scheduled-catalog-commands.sh
 
+# Verify runtime memory accounting, peaks, reclamation, reset, and exhaustion
+scheduled-memory-smoke:
+    ./tests/test-scheduled-memory.sh
+
 # Verify exited scheduled apps reclaim their stack/state arena allocations
 scheduled-reclaim-smoke:
     ./tests/test-scheduled-reclaim.sh

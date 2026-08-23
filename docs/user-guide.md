@@ -166,6 +166,24 @@ Use `single_instance` when a program cannot safely have two live instances.
 Use `resident` only when its executable entry is linked into the system image.
 Do not add private fields to `PROC_DESC`; its 39-byte ABI is full.
 
+### Memory inspection
+
+The scheduled shell reports runtime memory accounting with:
+
+```text
+mem
+mem -p
+mem -r
+```
+
+`mem` prints physical capacity, linked-image words, current and peak process
+arena use, the measured boot/kernel-stack peak, estimated free words,
+allocation failures, and occupied process slots. `mem -p` prints the configured
+stack and state allocation for each live endpoint. `mem -r` resets the arena
+high-water mark to current use and clears the allocation-failure counter; it
+does not erase the boot-stack measurement. Values are COR24 24-bit words unless
+the field explicitly says bytes.
+
 ## Add an external PL/SW application
 
 External apps use a C24IMG manifest under `catalog/images/` and a catalog

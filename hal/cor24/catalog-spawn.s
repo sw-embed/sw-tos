@@ -8,6 +8,16 @@ _start:
         ; Keep the kernel call stack above the process allocation arena.
         la      r0,0xFEEC00
         mov     sp,r0
+        ; Paint the fixed boot/kernel stack reserve before its first use. The
+        ; final boot path scans this area to record an observed high-water mark.
+        la      r0,0xFEEB01
+        la      r1,0x5A5A5A
+        la      r2,0xFEEC00
+_kernel_stack_fill:
+        sw      r1,0(r0)
+        add     r0,3
+        ceq     r0,r2
+        brf     _kernel_stack_fill
         la      r0,_banner
         la      r2,_puts
         jal     r1,(r2)
@@ -45,6 +55,33 @@ _start:
         la      r0,_proc_a
         la      r2,_current_proc
         sw      r0,0(r2)
+        ; Stack grows down from FEEC00. Find the first word changed by boot and
+        ; retain the used byte count; later reporting converts it to words.
+        la      r0,0xFEEB01
+        la      r1,_kernel_stack_scan_cursor
+        sw      r0,0(r1)
+_kernel_stack_scan:
+        la      r1,_kernel_stack_scan_cursor
+        lw      r1,0(r1)
+        lw      r0,0(r1)
+        la      r2,0x5A5A5A
+        ceq     r0,r2
+        brf     _kernel_stack_found
+        add     r1,3
+        la      r2,_kernel_stack_scan_cursor
+        sw      r1,0(r2)
+        la      r2,0xFEEC00
+        mov     r0,r1
+        ceq     r0,r2
+        brf     _kernel_stack_scan
+_kernel_stack_found:
+        la      r0,_kernel_stack_scan_cursor
+        lw      r0,0(r0)
+        la      r1,0xFEEC00
+        sub     r1,r0
+        la      r2,_kernel_stack_peak_bytes
+        sw      r1,0(r2)
+        la      r0,_proc_a
         mov     r2,r0
         lw      r0,9(r2)
         mov     sp,r0
@@ -100,6 +137,11 @@ _spawn_descriptor_ready:
         lw      r0,18(r0)       ; PROGRAM_DESC state_words
         la      r2,_alloc_state_words
         jal     r1,(r2)
+        ceq     r0,z
+        brf     _spawn_state_allocated
+        la      r2,_spawn_allocation_failed
+        jmp     (r2)
+_spawn_state_allocated:
         la      r2,_spawn_process
         lw      r2,0(r2)
         sw      r0,36(r2)       ; PROC_DESC state pointer
@@ -168,6 +210,11 @@ _spawn_stack:
         lw      r0,15(r2)       ; PROGRAM_DESC stack_words
         la      r2,_alloc_stack_words
         jal     r1,(r2)
+        ceq     r0,z
+        brf     _spawn_stack_allocated
+        la      r2,_spawn_allocation_failed
+        jmp     (r2)
+_spawn_stack_allocated:
         la      r2,_spawn_process
         lw      r2,0(r2)
         lw      r1,36(r2)
@@ -191,6 +238,27 @@ _spawn_stack:
         lc      r0,1
         sw      r0,24(r2)       ; PROC_RUNNABLE
         lc      r0,0            ; spawn resident success
+        pop     r1
+        jmp     (r1)
+
+_spawn_allocation_failed:
+        la      r2,_spawn_process
+        lw      r2,0(r2)
+        lbu     r0,18(r2)
+        lc      r1,1
+        ceq     r0,r1
+        brf     _spawn_child_allocation_failed
+        la      r2,_halt
+        jmp     (r2)
+_spawn_child_allocation_failed:
+        la      r2,_spawn_arena_mark
+        lw      r0,0(r2)
+        la      r2,_ebr_next
+        sw      r0,0(r2)
+        lc      r0,3
+        la      r2,_spawn_status
+        sw      r0,0(r2)
+        lc      r0,1
         pop     r1
         jmp     (r1)
 
@@ -557,19 +625,71 @@ _block_provider_verified:
         pop     fp
         jmp     (r1)
 
+; Reserve r0 words from the installed EBR arena. Return the low address or
+; zero on exhaustion and retain the old high address for stack allocation.
+_reserve_words:
+        push    r1
+        push    r2
+        la      r2,_allocation_failed
+        lc      r1,0
+        sb      r1,0(r2)
+        la      r2,_allocation_word_count
+        sw      r0,0(r2)
+        mov     r1,r0
+        add     r0,r1
+        add     r0,r1           ; requested bytes = words * 3
+        la      r2,_allocation_bytes
+        sw      r0,0(r2)
+        la      r2,_ebr_next
+        lw      r1,0(r2)
+        la      r2,_allocation_old_high
+        sw      r1,0(r2)
+        la      r2,0xFEEB00
+        sub     r2,r1           ; current arena bytes
+        add     r0,r2           ; proposed arena bytes
+        la      r2,2814         ; 938 aligned words within the EBR window
+        cls     r2,r0
+        brt     _reserve_words_failed
+        la      r2,_allocation_peak_bytes
+        lw      r1,0(r2)
+        cls     r1,r0
+        brf     _reserve_words_keep_peak
+        sw      r0,0(r2)
+_reserve_words_keep_peak:
+        la      r2,_allocation_old_high
+        lw      r1,0(r2)
+        la      r2,_allocation_bytes
+        lw      r0,0(r2)
+        sub     r1,r0
+        la      r2,_ebr_next
+        sw      r1,0(r2)
+        mov     r0,r1
+        bra     _reserve_words_done
+_reserve_words_failed:
+        la      r2,_allocation_failed
+        lc      r1,1
+        sb      r1,0(r2)
+        la      r2,_allocation_failures
+        lw      r0,0(r2)
+        add     r0,1
+        sw      r0,0(r2)
+        lc      r0,0
+_reserve_words_done:
+        pop     r2
+        pop     r1
+        jmp     (r1)
+
 ; Allocate r0 words downward and return the exclusive stack high address.
 _alloc_stack_words:
         push    r1
         push    r2
-        mov     r1,r0
-        add     r0,r1
-        add     r0,r1           ; bytes = words * 3
-        la      r2,_ebr_next
-        lw      r1,0(r2)
-        push    r1              ; return old high address
-        sub     r1,r0
-        sw      r1,0(r2)
-        pop     r0
+        la      r2,_reserve_words
+        jal     r1,(r2)
+        ceq     r0,z
+        brt     _alloc_stack_words_done
+        la      r2,_allocation_old_high
+        lw      r0,0(r2)
+_alloc_stack_words_done:
         pop     r2
         pop     r1
         jmp     (r1)
@@ -580,17 +700,13 @@ _alloc_state_words:
         push    r2
         la      r2,_zero_remaining
         sw      r0,0(r2)
-        mov     r1,r0
-        add     r0,r1
-        add     r0,r1
-        la      r2,_ebr_next
-        lw      r1,0(r2)
-        sub     r1,r0
-        sw      r1,0(r2)
-        mov     r0,r1           ; allocated base
+        la      r2,_reserve_words
+        jal     r1,(r2)
+        ceq     r0,z
+        brt     _state_done
         la      r2,_allocated_base
         sw      r0,0(r2)
-        mov     r2,r1
+        mov     r2,r0
 _zero_state:
         la      r1,_zero_remaining
         lw      r0,0(r1)
@@ -604,8 +720,16 @@ _zero_state:
         sw      r0,0(r1)
         bra     _zero_state
 _state_done:
+        la      r2,_allocation_failed
+        lbu     r0,0(r2)
+        ceq     r0,z
+        brt     _state_return
+        lc      r0,0
+        bra     _state_return_done
+_state_return:
         la      r2,_allocated_base
         lw      r0,0(r2)
+_state_return_done:
         pop     r2
         pop     r1
         jmp     (r1)
@@ -1604,6 +1728,11 @@ _embedded_layout_ok:
         add     r0,r1
         la      r2,_alloc_state_words
         jal     r1,(r2)
+        ceq     r0,z
+        brf     _embedded_allocation_ok
+        la      r2,_embedded_load_fail
+        jmp     (r2)
+_embedded_allocation_ok:
         la      r2,_spawn_process
         lw      r2,0(r2)
         sw      r0,27(r2)       ; private executable allocation base
@@ -2117,6 +2246,121 @@ _task_process_list_state:
         pop     fp
         jmp     (r1)
 
+; TASK_MEM_INFO(result): snapshot fixed and runtime memory accounting.
+; Result words: total words, image bytes, arena current bytes, arena peak
+; bytes, kernel-stack peak bytes, allocation failures, used slots, total
+; slots, arena capacity bytes.
+        .globl  _TASK_MEM_INFO
+_TASK_MEM_INFO:
+        push    fp
+        push    r2
+        push    r1
+        mov     fp,sp
+        lw      r2,9(fp)
+        la      r0,0x100000
+        sw      r0,0(r2)
+        la      r0,_swtos_image_end
+        add     r0,1
+        sw      r0,3(r2)
+        la      r0,0xFEEB00
+        la      r1,_ebr_next
+        lw      r1,0(r1)
+        sub     r0,r1
+        sw      r0,6(r2)
+        la      r1,_allocation_peak_bytes
+        lw      r0,0(r1)
+        sw      r0,9(r2)
+        la      r1,_kernel_stack_peak_bytes
+        lw      r0,0(r1)
+        sw      r0,12(r2)
+        la      r1,_allocation_failures
+        lw      r0,0(r1)
+        sw      r0,15(r2)
+        la      r1,_child_count
+        lbu     r0,0(r1)
+        add     r0,1
+        sw      r0,18(r2)
+        lc      r0,3
+        sw      r0,21(r2)
+        la      r0,2814
+        sw      r0,24(r2)
+        mov     sp,fp
+        pop     r1
+        pop     r2
+        pop     fp
+        jmp     (r1)
+
+; TASK_MEM_PROCESS_INFO(endpoint, result): return status, configured stack,
+; configured state, and live allocated words without expanding PROC_DESC.
+        .globl  _TASK_MEM_PROCESS_INFO
+_TASK_MEM_PROCESS_INFO:
+        push    fp
+        push    r2
+        push    r1
+        mov     fp,sp
+        lw      r0,9(fp)
+        lc      r1,1
+        ceq     r0,r1
+        brt     _task_mem_process_a
+        lc      r1,2
+        ceq     r0,r1
+        brt     _task_mem_process_b
+        la      r2,_proc_c
+        bra     _task_mem_process_selected
+_task_mem_process_a:
+        la      r2,_proc_a
+        bra     _task_mem_process_selected
+_task_mem_process_b:
+        la      r2,_proc_b
+_task_mem_process_selected:
+        lw      r1,12(fp)
+        lw      r0,24(r2)
+        sw      r0,0(r1)
+        ceq     r0,z
+        brt     _task_mem_process_free
+        lw      r2,33(r2)
+        lw      r0,15(r2)
+        sw      r0,3(r1)
+        lw      r2,18(r2)
+        sw      r2,6(r1)
+        add     r0,r2
+        sw      r0,9(r1)
+        bra     _task_mem_process_done
+_task_mem_process_free:
+        lc      r0,0
+        sw      r0,3(r1)
+        sw      r0,6(r1)
+        sw      r0,9(r1)
+_task_mem_process_done:
+        mov     sp,fp
+        pop     r1
+        pop     r2
+        pop     fp
+        jmp     (r1)
+
+; TASK_MEM_RESET(): reset counters that can safely restart while the shell
+; runs. The boot/kernel-stack watermark is intentionally retained.
+        .globl  _TASK_MEM_RESET
+_TASK_MEM_RESET:
+        push    fp
+        push    r2
+        push    r1
+        mov     fp,sp
+        la      r0,0xFEEB00
+        la      r2,_ebr_next
+        lw      r1,0(r2)
+        sub     r0,r1
+        la      r2,_allocation_peak_bytes
+        sw      r0,0(r2)
+        lc      r0,0
+        la      r2,_allocation_failures
+        sw      r0,0(r2)
+        mov     sp,fp
+        pop     r1
+        pop     r2
+        pop     fp
+        jmp     (r1)
+
 ; TASK_CATALOG_FIND(name, result): search generated program descriptors by
 ; name and write either the matching descriptor pointer or zero to result.
         .globl  _TASK_CATALOG_FIND
@@ -2506,6 +2750,22 @@ _spawn_process:
 _zero_remaining:
         .zero   3
 _allocated_base:
+        .zero   3
+_allocation_word_count:
+        .zero   3
+_allocation_bytes:
+        .zero   3
+_allocation_old_high:
+        .zero   3
+_allocation_peak_bytes:
+        .zero   3
+_allocation_failures:
+        .zero   3
+_allocation_failed:
+        .byte   0
+_kernel_stack_peak_bytes:
+        .zero   3
+_kernel_stack_scan_cursor:
         .zero   3
 _active_image_provider:
         .word   _memory_image_provider

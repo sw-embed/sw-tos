@@ -24,7 +24,7 @@ done
 
 for expected in \
     'help ls dir ps run' \
-    'df du stat uname' \
+    'df du mem stat uname' \
     'catalog entries=7 images=2 bytes=81' \
     'embedded-hello 36 bytes' \
     'embedded-ping 45 bytes' \

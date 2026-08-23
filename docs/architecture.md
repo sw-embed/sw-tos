@@ -81,6 +81,15 @@ Child allocations form a LIFO generation. State, loaded image, and stack are
 reclaimed together after the last child in that generation exits. A failed
 load rolls back its tentative allocation and leaves the slot reusable.
 
+The EBR allocator enforces its 938-word installed window and records current
+use, a high-water mark, and allocation failures. Spawn rolls back a generation
+when stack or state allocation fails. The kernel also measures its painted boot
+stack reserve before transferring control to the persistent shell. The shell's
+`mem`, `mem -p`, and `mem -r` commands expose the image boundary, arena and
+boot-stack measurements, per-process configured allocation, process-slot use,
+and resettable counters. Physical capacity and process allocations are reported
+in 24-bit words; packed build artifacts remain byte-sized.
+
 ## IPC
 
 The kernel implements synchronous `send`, `receive`, and `sendrec` with fixed

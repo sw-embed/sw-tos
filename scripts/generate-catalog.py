@@ -214,7 +214,7 @@ def render_scheduled(entries: list[dict], manifest: Path) -> str:
     shell_strings = {
         "SHELL_DF_TEXT": f"catalog entries={len(entries)} images={len(images)} bytes={image_bytes}",
         "SHELL_HELP_1": "help ls dir ps run",
-        "SHELL_HELP_2": "df du stat uname",
+        "SHELL_HELP_2": "df du mem stat uname",
         "SHELL_UNAME_TEXT": "SWTOS COR24 0.1",
         "SHELL_STAT_KIND": " kind=",
         "SHELL_STAT_SOURCE": " source=",
@@ -226,6 +226,20 @@ def render_scheduled(entries: list[dict], manifest: Path) -> str:
         "SHELL_SERVICE_TEXT": "service",
         "SHELL_RESIDENT_TEXT": "resident",
         "SHELL_EMBEDDED_TEXT": "embedded",
+        "SHELL_MEM_TOTAL": "total=",
+        "SHELL_MEM_IMAGE": " image=",
+        "SHELL_MEM_ARENA": " arena=",
+        "SHELL_MEM_PEAK": " peak=",
+        "SHELL_MEM_KSTACK": " kstack=",
+        "SHELL_MEM_FREE": " free=",
+        "SHELL_MEM_FAIL": " failures=",
+        "SHELL_MEM_SLOTS": " slots=",
+        "SHELL_MEM_RESET_TEXT": "mem counters reset",
+        "SHELL_MEM_EP": "ep=",
+        "SHELL_MEM_STATUS": " status=",
+        "SHELL_MEM_PROC_STACK": " stack=",
+        "SHELL_MEM_PROC_STATE": " state=",
+        "SHELL_MEM_PROC_TOTAL": " total=",
     }
     for index, entry in enumerate(images):
         shell_strings[f"SHELL_DU_TEXT_{index}"] = f"{entry['name']} {entry['image_words'] * 3} bytes"
