@@ -38,7 +38,9 @@ Copyright (c) 2026 Michael A Wright
 
 - Hardware-host `shasum -a 256 -c SHA256SUMS`: PASS / FAIL
 - `swtos-resident.bin` SHA-256:
+- `swtos-resident.lgo` SHA-256:
 - `swtos-spi.bin` SHA-256:
+- `swtos-spi.lgo` SHA-256:
 - `swtos-spi-seed.lgo` SHA-256:
 - `swtos-storage.bin` SHA-256:
 - `emulator-acceptance.json` SHA-256:

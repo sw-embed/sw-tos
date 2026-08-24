@@ -352,6 +352,9 @@ artifacts may also use `.lgo` containers.
 Create board artifacts with `just hardware-validation-bundle`. See
 [docs/hw-validation.md](docs/hw-validation.md) for the 921,600-baud RTS/CTS
 procedure and acceptance record.
+Scheduled builds and the validation bundle include complete, zero-preserving
+`.lgo` upload images with explicit entry records. Use those repository-recipe
+outputs instead of manually converting flat binaries.
 
 Run the Rust frontend with:
 

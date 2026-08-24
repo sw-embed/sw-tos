@@ -48,7 +48,11 @@ silently rerun acceptance.
 The resulting `build/hardware-validation/` contains:
 
 - `swtos-resident.bin`: scheduler-integrated resident menu, load address zero.
+- `swtos-resident.lgo`: complete, zero-preserving resident upload image with
+  entry address zero.
 - `swtos-spi.bin`: resident-first/SPI-fallback shell, load address zero.
+- `swtos-spi.lgo`: complete, zero-preserving SPI-shell upload image with entry
+  address zero.
 - `swtos-spi-seed.lgo`: emulator launch seed retained for reference; do not
   assume a board loader needs it.
 - `swtos-storage.bin`: authenticated catalog and nonresident C24IMG payloads
@@ -92,7 +96,10 @@ connecting TX/RX or powering the board.
 
 ## Phase 3: resident image acceptance
 
-1. Load `swtos-resident.bin` at address `0x000000`.
+1. Load the tracked-recipe output `swtos-resident.lgo`. Do not hand-convert the
+   binary or reuse a converter from another repository. The bundle recipe
+   verifies that every byte, including zero-filled records, round-trips and
+   that exactly one `G000000` entry record terminates the image.
 2. Start execution at address `0x000000`.
 3. Capture the complete terminal transcript from reset through exit.
 4. At `Choice:`, run `ls` and require all catalog entries to be listed.

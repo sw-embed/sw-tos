@@ -20,8 +20,12 @@ ACCEPTANCE_REPORT="$ROOT_DIR/build/emulator-acceptance/report.json"
 mkdir -p "$OUT_DIR"
 cp "$ROOT_DIR/build/scheduled-shell/program.bin" \
     "$OUT_DIR/swtos-resident.bin"
+cp "$ROOT_DIR/build/scheduled-shell/program.lgo" \
+    "$OUT_DIR/swtos-resident.lgo"
 cp "$ROOT_DIR/build/scheduled-shell-spi/program.bin" \
     "$OUT_DIR/swtos-spi.bin"
+cp "$ROOT_DIR/build/scheduled-shell-spi/program.lgo" \
+    "$OUT_DIR/swtos-spi.lgo"
 cp "$ROOT_DIR/build/scheduled-shell-spi/seed.lgo" \
     "$OUT_DIR/swtos-spi-seed.lgo"
 cp "$ROOT_DIR/build/catalog-images/swtos-storage.bin" \
@@ -32,7 +36,8 @@ cp "$ROOT_DIR/docs/hw-validation-result-template.md" \
 
 (
     cd "$OUT_DIR"
-    shasum -a 256 swtos-resident.bin swtos-spi.bin \
+    shasum -a 256 swtos-resident.bin swtos-resident.lgo \
+        swtos-spi.bin swtos-spi.lgo \
         swtos-spi-seed.lgo swtos-storage.bin emulator-acceptance.json \
         VALIDATION-RESULT.md \
         > SHA256SUMS

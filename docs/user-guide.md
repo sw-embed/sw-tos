@@ -332,6 +332,15 @@ bundle run:
 just hardware-validation-bundle
 ```
 
+Use repository-owned scripts and `just` recipes whenever generating untracked
+build or hardware artifacts. Do not infer a file format from a similarly named
+tool in another checkout, manually append loader records, or reuse an older
+artifact. `scheduled-shell-build` now creates both `program.bin` and the
+complete `program.lgo`; `hardware-validation-bundle` copies and checksums the
+loadable LGO files. The LGO converter verifies a byte-for-byte round trip,
+preserves all-zero records for warm reloads, and requires exactly one explicit
+entry record.
+
 Then follow `docs/hw-validation.md` and complete the bundled
 `VALIDATION-RESULT.md`. Hardware requires a COR24-TB, a
 921,600-baud UART adapter with RTS/CTS, and a separate `loadngo`-compatible

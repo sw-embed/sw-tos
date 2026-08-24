@@ -14,6 +14,11 @@ Development is emulator-first. Hardware testing begins only after the protocol,
 scheduler behavior, debugger, and terminal restoration have deterministic
 emulator coverage.
 
+Untracked artifacts used during this saga must be produced by documented,
+repository-owned scripts or `just` recipes. If a needed artifact has no tracked
+recipe, add and test that recipe before using the artifact; do not guess a
+format or borrow a similarly named converter from another checkout.
+
 ## Architectural boundary
 
 The COR24 target owns process scheduling, virtual terminals, input blocking,

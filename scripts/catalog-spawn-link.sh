@@ -94,3 +94,6 @@ done
 "$LINK" --entry kernel --dir "$OUT_DIR" \
     --map "$OUT_DIR/program.map" kernel app \
     -o "$OUT_DIR/program.bin"
+"$ROOT_DIR/scripts/cor24-bin-to-lgo.py" \
+    "$OUT_DIR/program.bin" "$OUT_DIR/program.lgo" \
+    --load-address 0 --entry-address 0

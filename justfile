@@ -146,6 +146,10 @@ scheduled-composite-sd-mixed-reverse-smoke: cor24-storage-smoke
 scheduled-shell-build:
     ./scripts/catalog-spawn-link.sh tests/catalog-shell.plsw scheduled-shell
 
+# Verify complete flat-binary LGO generation, including zero records and entry
+complete-lgo-smoke:
+    python3 tests/test-complete-lgo.py
+
 # Build the interactive shell with resident-first/SPI-fallback catalog lookup
 scheduled-shell-spi-build: cor24-storage-smoke
     ./scripts/catalog-spawn-link.sh tests/catalog-shell.plsw scheduled-shell-spi composite-spi

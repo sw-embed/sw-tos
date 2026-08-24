@@ -11,6 +11,7 @@ RECIPES=(
     run
     plsw-smoke-run
     plsw-link-smoke
+    complete-lgo-smoke
     context-switch-smoke
     heartbeat-smoke
     interrupt-context-capability-smoke
