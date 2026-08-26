@@ -184,6 +184,15 @@ matching end record, marks data stale after one second, and clears published
 data on disconnect. This prevents a partial response or reconnect from mixing
 values sampled at different times, and keeps missing data distinct from zero.
 
+Scheduled linking also writes `program.debug.json`. It combines the final map
+and relocated module listings into symbols, generated-assembly source lines,
+instruction/function boundaries, absolute variable locations, a full-image
+SHA-256, and a target-reportable build ID. The build ID is CRC-32 truncated to
+24 bits over immutable executable bytes before `_proc_table`; excluding mutable
+process tables and CRC scratch state makes a running target's report stable.
+The Debugger pane refuses symbolic operations until that identity matches, but
+keeps explicitly raw register and memory inspection available.
+
 The interactive frontend is `scripts/swtos-terminal.py`. It runs the emulator
 behind a pseudo-terminal, forwards ordinary bytes, and recognizes when the
 shell has printed `Choice: `. If a numeric choice is followed by Return, the

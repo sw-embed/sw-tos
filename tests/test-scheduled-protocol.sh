@@ -9,13 +9,14 @@ EMU="$ROOT_DIR/tools/bin/cor24-emu"
 "$ROOT_DIR/scripts/catalog-spawn-link.sh" \
     "$ROOT_DIR/tests/catalog-tty-isolation.plsw" scheduled-protocol
 
-# Initial HELLO, resource request, reconnect HELLO, then channel input.
+# Initial HELLO, debug identity and resource requests, reconnect, then input.
 "$EMU" --load-binary "$OUT_DIR/program.bin@0" --entry 0 \
-    -u '\xA5\x5A\x01\x0C\x00\x04\x00SWT1\x40\xA5\x5A\x01\x08\x00\x00\x00\x09\xA5\x5A\x01\x0C\x00\x04\x00SWT1\x40\xA5\x5A\x01\x08\x00\x00\x00\x09\xA5\x5A\x01\x01\x01\x01\x00X\x5C\xA5\x5A\x01\x01\x02\x01\x00Y\x5E' \
-    --speed 0 -n 1000000 --quiet 2>/dev/null > "$OUT_DIR/output.bin"
+    -u '\xA5\x5A\x01\x0C\x00\x04\x00SWT1\x40\xA5\x5A\x01\x09\x00\x01\x00\x01\x0C\xA5\x5A\x01\x09\x00\x02\x00\x02\x02\x10\xA5\x5A\x01\x09\x00\x05\x00\x03\x00\x00\x00\x04\x16\xA5\x5A\x01\x08\x00\x00\x00\x09\xA5\x5A\x01\x0C\x00\x04\x00SWT1\x40\xA5\x5A\x01\x08\x00\x00\x00\x09\xA5\x5A\x01\x01\x01\x01\x00X\x5C\xA5\x5A\x01\x01\x02\x01\x00Y\x5E' \
+    --speed 0 -n 5000000 --quiet 2>/dev/null > "$OUT_DIR/output.bin"
 
 python3 "$ROOT_DIR/tests/assert-protocol-negotiation.py" \
-    "$OUT_DIR/output.bin" "$OUT_DIR/kernel.lst"
+    "$OUT_DIR/output.bin" "$OUT_DIR/kernel.lst" "$OUT_DIR/program.debug.json" \
+    "$OUT_DIR/program.bin"
 
 TIME_DIR="$ROOT_DIR/build/scheduled-protocol-time"
 "$ROOT_DIR/scripts/catalog-spawn-link.sh" \

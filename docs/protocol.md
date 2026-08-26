@@ -52,4 +52,10 @@ with protocol-error and UART receive/transmit totals. Hosts must discard partial
 or mismatched generations and publish only after kind 5. A target response
 record never exceeds the target decoder's 16-byte payload bound.
 
-Debugger frame identifiers remain reserved until the debugger saga.
+DEBUG_REQUEST and DEBUG_RESPONSE use channel zero. Opcode 1 requests the
+target's build identity and returns the opcode plus a three-byte little-endian
+CRC of the immutable executable range. Opcode 2 takes an endpoint and returns
+its saved registers in two bounded records: `r0`, `r1`, `r2`, `sp`, then `pc`
+and status. Opcode 3 takes a 24-bit address and a length from 1 through 12 and
+returns those bytes with their starting address. These Saga 7 operations are
+read-only; execution-control opcodes are added separately.

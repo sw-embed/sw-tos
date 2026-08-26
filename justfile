@@ -124,6 +124,10 @@ scheduled-protocol-smoke:
 windows-smoke:
     ./tests/test-windows-pty.sh
 
+# Verify deterministic build-matched symbols and generated-source mappings
+debug-info-smoke:
+    ./tests/test-debug-info.sh
+
 # Verify scheduled ls and run <name> command paths
 scheduled-catalog-smoke:
     ./tests/test-scheduled-catalog-commands.sh

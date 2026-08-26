@@ -95,6 +95,10 @@ done
 "$LINK" --entry kernel --dir "$OUT_DIR" \
     --map "$OUT_DIR/program.map" kernel protocol app \
     -o "$OUT_DIR/program.bin"
+python3 "$ROOT_DIR/scripts/generate-debug-info.py" \
+    --binary "$OUT_DIR/program.bin" --map "$OUT_DIR/program.map" \
+    --listing "$OUT_DIR/kernel.lst" --listing "$OUT_DIR/protocol.lst" \
+    --listing "$OUT_DIR/app.lst" --output "$OUT_DIR/program.debug.json"
 "$ROOT_DIR/scripts/cor24-bin-to-lgo.py" \
     "$OUT_DIR/program.bin" "$OUT_DIR/program.lgo" \
     --load-address 0 --entry-address 0

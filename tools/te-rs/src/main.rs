@@ -2,13 +2,14 @@ use std::env;
 use std::fs::{File, OpenOptions};
 use std::io::{self, BufRead, BufReader, Read, Write};
 use std::os::fd::{AsRawFd, RawFd};
-use std::path::Path;
+use std::path::{Path, PathBuf};
 use std::process::ExitCode;
 use std::thread;
 use std::time::{Duration, Instant, SystemTime, UNIX_EPOCH};
+use te_rs::debug::{DebugConsole, DebugMap, identity_request};
 use te_rs::protocol::{ConnectionDecoder, Frame, FrameType, Mode, StreamItem, hello};
 use te_rs::resource::SnapshotAssembler;
-use te_rs::ui::{CommandOutcome, Desktop};
+use te_rs::ui::{CommandOutcome, Desktop, PaneKind};
 
 const DEFAULT_DEVICE: &str = "/dev/ttyUSB0";
 const SYNC_TIMEOUT: Duration = Duration::from_secs(2);
@@ -29,6 +30,7 @@ struct Options {
     framed: bool,
     windows: bool,
     prefix: u8,
+    debug_map: Option<PathBuf>,
     time_mode: Option<TimeMode>,
 }
 
@@ -63,6 +65,7 @@ Options:
       --framed          Negotiate SWTOS multiplexed transport (plain fallback)
       --windows         Open the negotiated fixed four-pane SWTOS desktop
       --prefix <KEY>    Host-command prefix byte or ^X notation [default: ^A]
+      --debug-map PATH  Load matching program.debug.json for inspection
       --uptime-active   Reattach while SWTOS is already inside Uptime
       --clock-active    Reattach while SWTOS is already inside Clock
   -h, --help            Print this help
@@ -91,6 +94,7 @@ where
         framed: false,
         windows: false,
         prefix: 0x01,
+        debug_map: None,
         time_mode: None,
     };
     let mut device_seen = false;
@@ -114,6 +118,12 @@ where
                     .next()
                     .ok_or_else(|| "--prefix requires a value".to_string())?;
                 options.prefix = parse_prefix(&value)?;
+            }
+            "--debug-map" => {
+                options.debug_map = Some(PathBuf::from(
+                    args.next()
+                        .ok_or_else(|| "--debug-map requires a path".to_string())?,
+                ));
             }
             "--uptime-active" => {
                 options.swtos = true;
@@ -564,6 +574,16 @@ fn resource_request_frame() -> Vec<u8> {
     .expect("empty resource request is bounded")
 }
 
+fn debug_request_frame(payload: Vec<u8>) -> Vec<u8> {
+    Frame {
+        kind: FrameType::DebugRequest,
+        channel: 0,
+        payload,
+    }
+    .encode()
+    .expect("debug request payload is bounded")
+}
+
 fn wall_centiseconds() -> u32 {
     let now = SystemTime::now()
         .duration_since(UNIX_EPOCH)
@@ -623,9 +643,23 @@ fn run_windows(options: &Options) -> io::Result<()> {
     let _screen_guard = AlternateScreenGuard::enter(&mut tty)?;
     let mut connection = ConnectionDecoder::default();
     let mut resources = SnapshotAssembler::default();
+    let (debug_map, debug_map_error) = match options.debug_map.as_deref() {
+        Some(path) => match DebugMap::load(path) {
+            Ok(map) => (Some(map), None),
+            Err(error) => (None, Some(error)),
+        },
+        None => (None, None),
+    };
+    let mut debugger = DebugConsole::new(debug_map);
+    let mut debug_input = String::new();
+    let mut debug_identity_sent = false;
     let mut desktop = Desktop::default();
     let mut resource_lines = resources.render(Instant::now());
     desktop.set_resources(&resource_lines);
+    desktop.push_channel(254, b"SWTOS debugger: type help\n");
+    if let Some(error) = debug_map_error {
+        desktop.push_channel(254, format!("{error}\n").as_bytes());
+    }
     let mut prefix_pending = false;
     let mut last_size = repaint_desktop(&mut tty, &mut desktop)?;
     let mut serial_buffer = [0_u8; 1024];
@@ -695,6 +729,11 @@ fn run_windows(options: &Options) -> io::Result<()> {
                             desktop.set_resources(&resource_lines);
                         }
                     }
+                    StreamItem::Frame(frame) if frame.kind == FrameType::DebugResponse => {
+                        for line in debugger.response(&frame.payload) {
+                            desktop.push_channel(254, format!("{line}\n").as_bytes());
+                        }
+                    }
                     StreamItem::Frame(_) => {}
                     StreamItem::Error(error) => desktop.set_error(Some(format!("{error:?}"))),
                 }
@@ -723,6 +762,32 @@ fn run_windows(options: &Options) -> io::Result<()> {
                 if byte == 0x03 {
                     return Ok(());
                 }
+                if desktop.focused_kind() == PaneKind::Debugger {
+                    match byte {
+                        b'\r' | b'\n' => {
+                            desktop.push_channel(254, b"\n");
+                            let result = debugger.command(&debug_input);
+                            debug_input.clear();
+                            for line in result.lines {
+                                desktop.push_channel(254, format!("{line}\n").as_bytes());
+                            }
+                            if let Some(request) = result.request {
+                                serial.write_all(&debug_request_frame(request))?;
+                                serial.flush()?;
+                            }
+                        }
+                        0x08 | 0x7f => {
+                            debug_input.pop();
+                        }
+                        0x20..=0x7e => {
+                            debug_input.push(char::from(byte));
+                            desktop.push_channel(254, &[byte]);
+                        }
+                        _ => {}
+                    }
+                    dirty = true;
+                    continue;
+                }
                 if connection.mode() == Mode::Framed {
                     serial
                         .write_all(&multiplexed_input_frame(desktop.focused_channel(), &[byte]))?;
@@ -749,6 +814,11 @@ fn run_windows(options: &Options) -> io::Result<()> {
             serial.write_all(&resource_request_frame())?;
             serial.flush()?;
             next_resource_request = now + Duration::from_millis(250);
+        }
+        if connection.mode() == Mode::Framed && !debug_identity_sent {
+            serial.write_all(&debug_request_frame(identity_request()))?;
+            serial.flush()?;
+            debug_identity_sent = true;
         }
         if dirty {
             repaint_desktop(&mut tty, &mut desktop)?;
@@ -1033,6 +1103,7 @@ mod tests {
                 framed: false,
                 windows: false,
                 prefix: 0x01,
+                debug_map: None,
                 time_mode: None,
             }
         );
@@ -1077,15 +1148,22 @@ mod tests {
 
     #[test]
     fn windows_mode_and_prefix_are_configurable() {
-        let ParseResult::Run(options) =
-            parse_args(args(&["te-rs", "--windows", "--prefix", "^B"])).unwrap()
-        else {
+        let ParseResult::Run(options) = parse_args(args(&[
+            "te-rs",
+            "--windows",
+            "--prefix",
+            "^B",
+            "--debug-map",
+            "program.debug.json",
+        ]))
+        .unwrap() else {
             panic!("expected runnable options");
         };
         assert!(options.windows);
         assert!(options.framed);
         assert!(options.swtos);
         assert_eq!(options.prefix, 0x02);
+        assert_eq!(options.debug_map, Some(PathBuf::from("program.debug.json")));
         assert_eq!(parse_prefix("x"), Ok(b'x'));
         assert!(parse_prefix("long").is_err());
     }

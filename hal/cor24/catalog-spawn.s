@@ -3345,6 +3345,12 @@ _protocol_frame_check_resource:
         la      r2,_protocol_frame_resource
         jmp     (r2)
 _protocol_frame_check_uptime:
+        lc      r1,9
+        ceq     r0,r1
+        brf     _protocol_frame_check_uptime_type
+        la      r2,_protocol_frame_debug_identity
+        jmp     (r2)
+_protocol_frame_check_uptime_type:
         lc      r1,6
         ceq     r0,r1
         brf     _protocol_frame_check_wallclock
@@ -3699,6 +3705,345 @@ _protocol_emit_resource_checksum:
         pop     r0
         jmp     (r1)
 
+; DEBUG_REQUEST opcode 1 reports the CRC-24 build identity of the exact linked
+; image. This read-only operation does not alter process execution state.
+_protocol_frame_debug_identity:
+        la      r2,_protocol_framed_mode
+        lbu     r0,0(r2)
+        ceq     r0,z
+        brf     _protocol_debug_check_channel
+        la      r2,_protocol_frame_done
+        jmp     (r2)
+_protocol_debug_check_channel:
+        la      r2,_PROTOCOL_RX_CHANNEL
+        lbu     r0,0(r2)
+        ceq     r0,z
+        brt     _protocol_debug_check_length
+        la      r2,_protocol_frame_done
+        jmp     (r2)
+_protocol_debug_check_length:
+        la      r2,_PROTOCOL_RX_LENGTH
+        lw      r0,0(r2)
+        lc      r1,1
+        ceq     r0,r1
+        brt     _protocol_debug_check_opcode
+        la      r2,_PROTOCOL_RX_PAYLOAD
+        lbu     r0,0(r2)
+        lc      r1,2
+        ceq     r0,r1
+        brf     _protocol_debug_check_memory
+        la      r2,_PROTOCOL_RX_LENGTH
+        lw      r0,0(r2)
+        lc      r1,2
+        ceq     r0,r1
+        brf     _protocol_debug_invalid
+        la      r2,_protocol_debug_registers
+        jmp     (r2)
+_protocol_debug_check_memory:
+        lc      r1,3
+        ceq     r0,r1
+        brf     _protocol_debug_invalid
+        la      r2,_PROTOCOL_RX_LENGTH
+        lw      r0,0(r2)
+        lc      r1,5
+        ceq     r0,r1
+        brf     _protocol_debug_invalid
+        la      r2,_protocol_debug_memory
+        jmp     (r2)
+_protocol_debug_invalid:
+        la      r2,_protocol_frame_done
+        jmp     (r2)
+_protocol_debug_check_opcode:
+        la      r2,_PROTOCOL_RX_PAYLOAD
+        lbu     r0,0(r2)
+        lc      r1,1
+        ceq     r0,r1
+        brt     _protocol_debug_identity_valid
+        la      r2,_protocol_frame_done
+        jmp     (r2)
+_protocol_debug_identity_valid:
+        lc      r0,0
+        la      r2,_crc_cursor
+        sw      r0,0(r2)
+        la      r0,_proc_table
+        la      r2,_crc_remaining
+        sw      r0,0(r2)
+        la      r2,_crc32_low24
+        jal     r1,(r2)
+        la      r2,_protocol_debug_build_id
+        sw      r0,0(r2)
+
+        lcu     r0,0xA5
+        la      r2,_protocol_putchar_raw
+        jal     r1,(r2)
+        lc      r0,0x5A
+        la      r2,_protocol_putchar_raw
+        jal     r1,(r2)
+        lc      r0,1
+        la      r2,_protocol_putchar_raw
+        jal     r1,(r2)
+        lc      r0,10
+        la      r2,_protocol_putchar_raw
+        jal     r1,(r2)
+        lc      r0,0
+        la      r2,_protocol_putchar_raw
+        jal     r1,(r2)
+        lc      r0,4
+        la      r2,_protocol_putchar_raw
+        jal     r1,(r2)
+        lc      r0,0
+        la      r2,_protocol_putchar_raw
+        jal     r1,(r2)
+        lc      r0,1
+        la      r2,_protocol_putchar_raw
+        jal     r1,(r2)
+        lc      r0,16
+        la      r2,_protocol_debug_checksum
+        sw      r0,0(r2)
+        lc      r0,0
+        la      r2,_protocol_payload_index
+        sw      r0,0(r2)
+_protocol_debug_id_loop:
+        la      r2,_protocol_payload_index
+        lw      r1,0(r2)
+        lc      r0,3
+        ceq     r0,r1
+        brt     _protocol_debug_checksum_emit
+        la      r2,_protocol_debug_build_id
+        add     r2,r1
+        lbu     r0,0(r2)
+        push    r0
+        la      r2,_protocol_debug_checksum
+        lw      r1,0(r2)
+        add     r1,r0
+        sw      r1,0(r2)
+        pop     r0
+        la      r2,_protocol_putchar_raw
+        jal     r1,(r2)
+        la      r2,_protocol_payload_index
+        lw      r0,0(r2)
+        add     r0,1
+        sw      r0,0(r2)
+        bra     _protocol_debug_id_loop
+_protocol_debug_checksum_emit:
+        la      r2,_protocol_debug_checksum
+        lbu     r0,0(r2)
+        la      r2,_protocol_putchar_raw
+        jal     r1,(r2)
+        la      r2,_protocol_frame_done
+        jmp     (r2)
+
+_protocol_debug_registers:
+        la      r2,_PROTOCOL_RX_PAYLOAD
+        lbu     r0,1(r2)
+        lc      r1,1
+        ceq     r0,r1
+        brt     _protocol_debug_registers_a
+        lc      r1,2
+        ceq     r0,r1
+        brt     _protocol_debug_registers_b
+        lc      r1,3
+        ceq     r0,r1
+        brt     _protocol_debug_registers_c
+        la      r2,_protocol_debug_invalid
+        jmp     (r2)
+_protocol_debug_registers_c:
+        la      r1,_proc_c
+        bra     _protocol_debug_registers_selected
+_protocol_debug_registers_a:
+        la      r1,_proc_a
+        bra     _protocol_debug_registers_selected
+_protocol_debug_registers_b:
+        la      r1,_proc_b
+_protocol_debug_registers_selected:
+        lw      r0,24(r1)
+        ceq     r0,z
+        brf     _protocol_debug_registers_active
+        la      r2,_protocol_debug_invalid
+        jmp     (r2)
+_protocol_debug_registers_active:
+        la      r2,_protocol_debug_proc
+        sw      r1,0(r2)
+        la      r2,_protocol_resource_payload
+        lc      r0,2
+        sb      r0,0(r2)
+        la      r1,_PROTOCOL_RX_PAYLOAD
+        lbu     r0,1(r1)
+        sb      r0,1(r2)
+        lc      r0,0
+        sb      r0,2(r2)
+        la      r1,_protocol_debug_proc
+        lw      r1,0(r1)
+        lw      r0,0(r1)
+        sw      r0,3(r2)
+        lw      r0,3(r1)
+        sw      r0,6(r2)
+        lw      r0,6(r1)
+        sw      r0,9(r2)
+        lw      r0,9(r1)
+        sw      r0,12(r2)
+        lc      r0,15
+        la      r2,_protocol_resource_length
+        sw      r0,0(r2)
+        la      r2,_protocol_emit_debug_record
+        jal     r1,(r2)
+        la      r2,_protocol_resource_payload
+        lc      r0,2
+        sb      r0,0(r2)
+        la      r1,_PROTOCOL_RX_PAYLOAD
+        lbu     r0,1(r1)
+        sb      r0,1(r2)
+        lc      r0,1
+        sb      r0,2(r2)
+        la      r1,_protocol_debug_proc
+        lw      r1,0(r1)
+        lw      r0,12(r1)
+        sw      r0,3(r2)
+        lw      r0,15(r1)
+        sw      r0,6(r2)
+        lc      r0,9
+        la      r2,_protocol_resource_length
+        sw      r0,0(r2)
+        la      r2,_protocol_emit_debug_record
+        jal     r1,(r2)
+        la      r2,_protocol_frame_done
+        jmp     (r2)
+
+_protocol_debug_memory:
+        la      r2,_PROTOCOL_RX_PAYLOAD
+        lw      r0,1(r2)
+        la      r1,_protocol_debug_address
+        sw      r0,0(r1)
+        lbu     r0,4(r2)
+        ceq     r0,z
+        brf     _protocol_debug_memory_nonzero
+        la      r2,_protocol_debug_invalid
+        jmp     (r2)
+_protocol_debug_memory_nonzero:
+        lc      r1,13
+        clu     r0,r1
+        brt     _protocol_debug_memory_length_valid
+        la      r2,_protocol_debug_invalid
+        jmp     (r2)
+_protocol_debug_memory_length_valid:
+        la      r1,_protocol_debug_length
+        sw      r0,0(r1)
+        la      r1,_protocol_debug_address
+        lw      r1,0(r1)
+        add     r0,r1
+        la      r1,0xFEEC00
+        clu     r0,r1
+        brt     _protocol_debug_memory_range_valid
+        la      r2,_protocol_debug_invalid
+        jmp     (r2)
+_protocol_debug_memory_range_valid:
+        la      r2,_protocol_resource_payload
+        lc      r0,3
+        sb      r0,0(r2)
+        la      r1,_protocol_debug_address
+        lw      r0,0(r1)
+        sw      r0,1(r2)
+        lc      r0,0
+        la      r1,_protocol_payload_index
+        sw      r0,0(r1)
+_protocol_debug_memory_copy:
+        la      r1,_protocol_payload_index
+        lw      r0,0(r1)
+        la      r2,_protocol_debug_length
+        lw      r2,0(r2)
+        ceq     r0,r2
+        brt     _protocol_debug_memory_emit
+        la      r2,_protocol_debug_address
+        lw      r2,0(r2)
+        add     r2,r0
+        lbu     r2,0(r2)
+        add     r0,4
+        la      r1,_protocol_resource_payload
+        add     r1,r0
+        sb      r2,0(r1)
+        la      r1,_protocol_payload_index
+        lw      r0,0(r1)
+        add     r0,1
+        sw      r0,0(r1)
+        bra     _protocol_debug_memory_copy
+_protocol_debug_memory_emit:
+        la      r2,_protocol_debug_length
+        lw      r0,0(r2)
+        add     r0,4
+        la      r2,_protocol_resource_length
+        sw      r0,0(r2)
+        la      r2,_protocol_emit_debug_record
+        jal     r1,(r2)
+        la      r2,_protocol_frame_done
+        jmp     (r2)
+
+_protocol_emit_debug_record:
+        push    r0
+        push    r1
+        push    r2
+        lcu     r0,0xA5
+        la      r2,_protocol_putchar_raw
+        jal     r1,(r2)
+        lc      r0,0x5A
+        la      r2,_protocol_putchar_raw
+        jal     r1,(r2)
+        lc      r0,1
+        la      r2,_protocol_putchar_raw
+        jal     r1,(r2)
+        lc      r0,10
+        la      r2,_protocol_putchar_raw
+        jal     r1,(r2)
+        lc      r0,0
+        la      r2,_protocol_putchar_raw
+        jal     r1,(r2)
+        la      r2,_protocol_resource_length
+        lw      r0,0(r2)
+        la      r2,_protocol_putchar_raw
+        jal     r1,(r2)
+        lc      r0,0
+        la      r2,_protocol_putchar_raw
+        jal     r1,(r2)
+        la      r2,_protocol_resource_length
+        lw      r0,0(r2)
+        add     r0,11
+        la      r2,_protocol_resource_checksum
+        sw      r0,0(r2)
+        lc      r0,0
+        la      r2,_protocol_payload_index
+        sw      r0,0(r2)
+_protocol_emit_debug_loop:
+        la      r2,_protocol_payload_index
+        lw      r1,0(r2)
+        la      r2,_protocol_resource_length
+        lw      r0,0(r2)
+        ceq     r0,r1
+        brt     _protocol_emit_debug_checksum
+        la      r2,_protocol_resource_payload
+        add     r2,r1
+        lbu     r0,0(r2)
+        push    r0
+        la      r2,_protocol_resource_checksum
+        lw      r1,0(r2)
+        add     r1,r0
+        sw      r1,0(r2)
+        pop     r0
+        la      r2,_protocol_putchar_raw
+        jal     r1,(r2)
+        la      r2,_protocol_payload_index
+        lw      r0,0(r2)
+        add     r0,1
+        sw      r0,0(r2)
+        bra     _protocol_emit_debug_loop
+_protocol_emit_debug_checksum:
+        la      r2,_protocol_resource_checksum
+        lbu     r0,0(r2)
+        la      r2,_protocol_putchar_raw
+        jal     r1,(r2)
+        pop     r2
+        pop     r1
+        pop     r0
+        jmp     (r1)
+
 _protocol_frame_tty_input:
         la      r2,_protocol_framed_mode
         lbu     r0,0(r2)
@@ -3972,6 +4317,16 @@ _protocol_error_count:
 _protocol_uart_rx_bytes:
         .zero   3
 _protocol_uart_tx_bytes:
+        .zero   3
+_protocol_debug_build_id:
+        .zero   3
+_protocol_debug_checksum:
+        .zero   3
+_protocol_debug_proc:
+        .zero   3
+_protocol_debug_address:
+        .zero   3
+_protocol_debug_length:
         .zero   3
 _protocol_resource_generation:
         .byte   0

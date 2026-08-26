@@ -342,6 +342,18 @@ and TTY totals, UART traffic, and protocol errors. `STALE` means no complete
 snapshot has arrived for one second; `resource data unavailable` means no
 complete generation has been received since connecting.
 
+Pass `--debug-map build/NAME/program.debug.json` with `--windows` to enable
+symbolic inspection in the Debugger pane. Focus it with Ctrl-A then `3` and use
+`sym NAME`, `list NAME|ADDRESS`, or `dis NAME|ADDRESS [COUNT]`. These commands
+remain disabled until the target's reported build ID matches the map. `regs
+[ENDPOINT]` and `x ADDRESS [1..12]` are raw read-only operations and remain
+available after a mismatch. `bl` lists breakpoints; `delete N` reports that
+execution control arrives in the next saga.
+
+Every scheduled build emits `program.debug.json` beside `program.bin` and
+`program.lgo`. Validate deterministic debug metadata with `just
+debug-info-smoke`.
+
 For a checksummed hardware upload, press Ctrl-R and enter the `.lgo` path. The
 uploader always drains the monitor echo to keep RTS/CTS flowing; add `--sync`
 to validate every echoed byte. The validated COR24-TB settings are

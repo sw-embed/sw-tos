@@ -1,6 +1,7 @@
 #!/usr/bin/env python3
 
 import fcntl
+import json
 import os
 import pathlib
 import pty
@@ -14,6 +15,7 @@ import time
 ROOT = pathlib.Path(__file__).resolve().parents[1]
 BINARY = ROOT / "tools/te-rs/target/debug/te-rs"
 SYNC = b"\xA5\x5A"
+DEBUG_ID = 0x123456
 
 
 def frame(kind: int, channel: int, payload: bytes) -> bytes:
@@ -23,6 +25,26 @@ def frame(kind: int, channel: int, payload: bytes) -> bytes:
 
 HELLO = frame(12, 0, b"SWT1")
 ACK = frame(13, 0, b"SWT1")
+
+
+def debug_map_path() -> pathlib.Path:
+    output = ROOT / "build/windows-pty/program.debug.json"
+    output.parent.mkdir(parents=True, exist_ok=True)
+    output.write_text(json.dumps({
+        "format": "swtos-debug-v1",
+        "build_id": f"crc24:{DEBUG_ID:06x}",
+        "build_id_size": 32,
+        "image_sha256": "00" * 32,
+        "image_size": 64,
+        "symbols": [{"name": "counter", "address": 16, "module": "app"}],
+        "functions": [],
+        "instructions": [{
+            "address": 16, "size": 2, "bytes": "4401", "text": "lc r0,1",
+            "source": "app.s", "line": 7,
+        }],
+        "variable_locations": [],
+    }))
+    return output
 
 
 def read_until(fd: int, needle: bytes, timeout: float = 3.0) -> bytes:
@@ -49,7 +71,7 @@ def start_frontend():
         fcntl.ioctl(terminal_slave, termios.TIOCSCTTY, 0)
 
     process = subprocess.Popen(
-        [str(BINARY), "--windows", "--prefix", "^A", os.ttyname(serial_slave)],
+        [str(BINARY), "--windows", "--prefix", "^A", "--debug-map", str(debug_map_path()), os.ttyname(serial_slave)],
         stdin=terminal_slave,
         stdout=terminal_slave,
         stderr=subprocess.PIPE,
@@ -73,6 +95,10 @@ def start_frontend():
             f"frontend did not send HELLO (serial={greeting.hex()}, terminal={terminal.hex()}, status={status}, wchan={wchan}, stderr={diagnostic})"
         )
     os.write(serial_master, ACK)
+    identity_request = frame(9, 0, b"\x01")
+    requests = read_until(serial_master, identity_request)
+    assert identity_request in requests, "debug identity request"
+    os.write(serial_master, frame(10, 0, bytes((1, 0x56, 0x34, 0x12))))
     return process, terminal_master, terminal_slave, serial_master, before
 
 
@@ -88,8 +114,6 @@ def assert_restored(process, terminal_master, terminal_slave, before, expected_s
 
 def normal_path():
     process, tty_master, tty_slave, serial_master, before = start_frontend()
-    request = frame(8, 0, b"")
-    assert request in read_until(serial_master, request), "resource request"
     generation = 3
     records = (
         bytes((1, generation)),
@@ -107,6 +131,21 @@ def normal_path():
     assert b"shell-two" in screen and b"app-one" in screen, "independent pane output missing"
     assert b"mem 10/20B" in screen and b"cntr ep=2" in screen, "resource snapshot missing"
 
+    os.write(tty_master, b"\x013sym counter\n")
+    assert b"counter = 000010" in read_until(tty_master, b"counter = 000010"), "symbol lookup"
+    os.write(tty_master, b"regs 2\n")
+    register_request = frame(9, 0, bytes((2, 2)))
+    assert register_request in read_until(serial_master, register_request), "register request"
+    os.write(serial_master, frame(10, 0, bytes((2, 2, 0)) + bytes.fromhex("010000020000030000040000")))
+    os.write(serial_master, frame(10, 0, bytes((2, 2, 1)) + bytes.fromhex("100000010000")))
+    assert b"pc=000010" in read_until(tty_master, b"pc=000010"), "register display"
+    os.write(tty_master, b"x 0 4\n")
+    memory_request = frame(9, 0, bytes((3, 0, 0, 0, 4)))
+    assert memory_request in read_until(serial_master, memory_request), "memory request"
+    os.write(serial_master, frame(10, 0, bytes((3, 0, 0, 0, 0x29, 0, 0xEC, 0xFE))))
+    assert b"000000: 29 00 ec fe" in read_until(tty_master, b"000000: 29 00 ec fe"), "memory display"
+
+    os.write(tty_master, b"\x011")
     os.write(tty_master, b"a")
     assert frame(1, 0, b"a") in read_until(serial_master, frame(1, 0, b"a")), "shell input route"
     os.write(tty_master, b"\x012b")

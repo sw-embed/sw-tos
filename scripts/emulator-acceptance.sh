@@ -30,6 +30,7 @@ RECIPES=(
     protocol-target-smoke
     scheduled-protocol-smoke
     windows-smoke
+    debug-info-smoke
     scheduled-catalog-smoke
     scheduled-memory-smoke
     scheduled-reclaim-smoke

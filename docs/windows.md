@@ -239,6 +239,8 @@ Commit: `feat(monitor): add tiled process and memory resource monitor`
 
 ## Saga 7 -- Debug artifacts and symbolic inspection
 
+**Status:** Complete on the emulator feature branch.
+
 Generate `program.debug.json` beside `program.bin`. It should contain a build
 ID or image hash, symbols, instruction and function boundaries, source/line
 mappings, and supported variable locations. The running target reports the
