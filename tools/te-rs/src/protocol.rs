@@ -55,6 +55,14 @@ pub fn hello() -> Frame {
     }
 }
 
+pub fn hello_ack() -> Frame {
+    Frame {
+        kind: FrameType::HelloAck,
+        channel: 0,
+        payload: NEGOTIATION_PAYLOAD.to_vec(),
+    }
+}
+
 #[derive(Clone, Copy, Debug, Default, Eq, PartialEq)]
 pub enum Mode {
     #[default]
@@ -196,6 +204,98 @@ impl Decoder {
     }
 }
 
+#[derive(Clone, Debug, Eq, PartialEq)]
+pub enum StreamItem {
+    Plain(Vec<u8>),
+    Frame(Frame),
+    Error(DecodeError),
+}
+
+/// Preserves recovery-terminal output until the target acknowledges framed
+/// mode, then decodes only versioned frames. A possible ACK prefix is retained
+/// across reads so fragmented negotiation cannot leak binary bytes.
+pub struct ConnectionDecoder {
+    mode: Mode,
+    pending: Vec<u8>,
+    framed: Decoder,
+}
+
+impl Default for ConnectionDecoder {
+    fn default() -> Self {
+        Self {
+            mode: Mode::Plain,
+            pending: Vec::new(),
+            framed: Decoder::new(),
+        }
+    }
+}
+
+impl ConnectionDecoder {
+    pub fn mode(&self) -> Mode {
+        self.mode
+    }
+
+    pub fn push(&mut self, input: &[u8]) -> Vec<StreamItem> {
+        if self.mode == Mode::Framed {
+            return self
+                .framed
+                .push(input)
+                .into_iter()
+                .map(|result| match result {
+                    Ok(frame) => StreamItem::Frame(frame),
+                    Err(error) => StreamItem::Error(error),
+                })
+                .collect();
+        }
+
+        self.pending.extend_from_slice(input);
+        let ack = hello_ack().encode().expect("HELLO_ACK payload is bounded");
+        let mut output = Vec::new();
+        if let Some(position) = self
+            .pending
+            .windows(ack.len())
+            .position(|candidate| candidate == ack)
+        {
+            if position != 0 {
+                output.push(StreamItem::Plain(self.pending[..position].to_vec()));
+            }
+            output.push(StreamItem::Frame(hello_ack()));
+            let trailing = self.pending[position + ack.len()..].to_vec();
+            self.pending.clear();
+            self.mode = Mode::Framed;
+            output.extend(self.push(&trailing));
+            return output;
+        }
+
+        let retained = longest_suffix_prefix(&self.pending, &ack);
+        let plain_length = self.pending.len() - retained;
+        if plain_length != 0 {
+            output.push(StreamItem::Plain(self.pending[..plain_length].to_vec()));
+            self.pending.drain(..plain_length);
+        }
+        output
+    }
+
+    pub fn disconnect(&mut self) -> Vec<StreamItem> {
+        let output = if self.pending.is_empty() {
+            Vec::new()
+        } else {
+            vec![StreamItem::Plain(std::mem::take(&mut self.pending))]
+        };
+        self.mode = Mode::Plain;
+        self.framed.clear();
+        output
+    }
+}
+
+fn longest_suffix_prefix(bytes: &[u8], prefix: &[u8]) -> usize {
+    let limit = bytes.len().min(prefix.len().saturating_sub(1));
+    (1..=limit)
+        .rev()
+        .find(|length| bytes[bytes.len() - length..] == prefix[..*length])
+        .unwrap_or(0)
+}
+
 fn checksum(bytes: &[u8]) -> u8 {
     bytes.iter().fold(0_u8, |sum, byte| sum.wrapping_add(*byte))
 }
@@ -273,5 +373,41 @@ mod tests {
         assert_eq!(negotiation.mode(), Mode::Framed);
         negotiation.disconnect();
         assert_eq!(negotiation.mode(), Mode::Plain);
+    }
+
+    #[test]
+    fn connection_preserves_plain_output_and_fragmented_ack() {
+        let ack = hello_ack().encode().unwrap();
+        let output = frame(b"after").encode().unwrap();
+        for split in 0..ack.len() {
+            let mut connection = ConnectionDecoder::default();
+            assert_eq!(
+                connection.push(b"boot\n"),
+                vec![StreamItem::Plain(b"boot\n".to_vec())]
+            );
+            assert!(connection.push(&ack[..split]).is_empty());
+            let mut trailing = ack[split..].to_vec();
+            trailing.extend_from_slice(&output);
+            assert_eq!(
+                connection.push(&trailing),
+                vec![
+                    StreamItem::Frame(hello_ack()),
+                    StreamItem::Frame(frame(b"after"))
+                ]
+            );
+            assert_eq!(connection.mode(), Mode::Framed);
+        }
+    }
+
+    #[test]
+    fn connection_flushes_partial_negotiation_on_disconnect() {
+        let ack = hello_ack().encode().unwrap();
+        let mut connection = ConnectionDecoder::default();
+        assert!(connection.push(&ack[..5]).is_empty());
+        assert_eq!(
+            connection.disconnect(),
+            vec![StreamItem::Plain(ack[..5].to_vec())]
+        );
+        assert_eq!(connection.mode(), Mode::Plain);
     }
 }

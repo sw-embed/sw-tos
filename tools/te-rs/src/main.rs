@@ -6,7 +6,7 @@ use std::path::Path;
 use std::process::ExitCode;
 use std::thread;
 use std::time::{Duration, Instant, SystemTime, UNIX_EPOCH};
-use te_rs::protocol::{Frame, FrameType};
+use te_rs::protocol::{ConnectionDecoder, Frame, FrameType, Mode, StreamItem, hello};
 
 const DEFAULT_DEVICE: &str = "/dev/ttyUSB0";
 const SYNC_TIMEOUT: Duration = Duration::from_secs(2);
@@ -24,6 +24,7 @@ struct Options {
     sync: bool,
     verbose: bool,
     swtos: bool,
+    framed: bool,
     time_mode: Option<TimeMode>,
 }
 
@@ -55,6 +56,7 @@ Options:
   -s, --sync            Validate each line's exact echo before sending the next
   -v, --verbose         Log serial setup and per-line upload details to stderr
       --swtos           Enable SWTOS menu, Uptime, Clock, echo, and Ctrl-]
+      --framed          Negotiate SWTOS multiplexed transport (plain fallback)
       --uptime-active   Reattach while SWTOS is already inside Uptime
       --clock-active    Reattach while SWTOS is already inside Clock
   -h, --help            Print this help
@@ -80,6 +82,7 @@ where
         sync: false,
         verbose: false,
         swtos: false,
+        framed: false,
         time_mode: None,
     };
     let mut device_seen = false;
@@ -89,6 +92,10 @@ where
             "-h" | "--help" => return Ok(ParseResult::Help),
             "-v" | "--verbose" => options.verbose = true,
             "--swtos" => options.swtos = true,
+            "--framed" => {
+                options.swtos = true;
+                options.framed = true;
+            }
             "--uptime-active" => {
                 options.swtos = true;
                 options.time_mode = Some(TimeMode::Uptime);
@@ -463,6 +470,16 @@ fn multiplexed_time_frame(mode: TimeMode, tick: u32) -> Vec<u8> {
     .expect("three-byte time payload is within the protocol limit")
 }
 
+fn multiplexed_input_frame(channel: u8, payload: &[u8]) -> Vec<u8> {
+    Frame {
+        kind: FrameType::TtyInput,
+        channel,
+        payload: payload.to_vec(),
+    }
+    .encode()
+    .expect("terminal input payload is within the protocol limit")
+}
+
 fn wall_centiseconds() -> u32 {
     let now = SystemTime::now()
         .duration_since(UNIX_EPOCH)
@@ -515,6 +532,11 @@ fn run(options: &Options) -> io::Result<()> {
     }
 
     let connected = Instant::now();
+    let mut connection = ConnectionDecoder::default();
+    if options.framed {
+        serial.write_all(&hello().encode().expect("HELLO payload is bounded"))?;
+        serial.flush()?;
+    }
     let mut time_mode = options.time_mode;
     let mut next_frame = connected;
     let mut menu_prompt = options.swtos && time_mode.is_none();
@@ -562,10 +584,33 @@ fn run(options: &Options) -> io::Result<()> {
                     "serial device disconnected",
                 ));
             }
-            tty.write_all(&serial_buffer[..count])?;
+            let mut terminal_bytes = Vec::new();
+            if options.framed {
+                for item in connection.push(&serial_buffer[..count]) {
+                    match item {
+                        StreamItem::Plain(bytes) => terminal_bytes.extend_from_slice(&bytes),
+                        StreamItem::Frame(frame) if frame.kind == FrameType::TtyOutput => {
+                            terminal_bytes.extend_from_slice(&frame.payload);
+                        }
+                        StreamItem::Frame(frame) if frame.kind == FrameType::ProtocolError => {
+                            eprintln!(
+                                "target protocol error: {}",
+                                String::from_utf8_lossy(&frame.payload)
+                            );
+                        }
+                        StreamItem::Frame(_) => {}
+                        StreamItem::Error(error) => {
+                            eprintln!("framed transport decode error: {error:?}")
+                        }
+                    }
+                }
+            } else {
+                terminal_bytes.extend_from_slice(&serial_buffer[..count]);
+            }
+            tty.write_all(&terminal_bytes)?;
             tty.flush()?;
             if options.swtos {
-                prompt_tail.extend_from_slice(&serial_buffer[..count]);
+                prompt_tail.extend_from_slice(&terminal_bytes);
                 if prompt_tail
                     .windows(b"Choice: ".len())
                     .any(|part| part == b"Choice: ")
@@ -613,7 +658,11 @@ fn run(options: &Options) -> io::Result<()> {
                             echo_swtos_key(&mut tty, byte)?;
                         }
                         if options.swtos && time_mode.is_some() && matches!(byte, 0x1b | 0x1d) {
-                            serial.write_all(&[0x1b])?;
+                            if options.framed && connection.mode() == Mode::Framed {
+                                serial.write_all(&multiplexed_input_frame(0, &[0x1b]))?;
+                            } else {
+                                serial.write_all(&[0x1b])?;
+                            }
                             time_mode = None;
                             continue;
                         }
@@ -622,7 +671,11 @@ fn run(options: &Options) -> io::Result<()> {
                         } else {
                             byte
                         };
-                        serial.write_all(&[outgoing])?;
+                        if options.framed && connection.mode() == Mode::Framed {
+                            serial.write_all(&multiplexed_input_frame(0, &[outgoing]))?;
+                        } else {
+                            serial.write_all(&[outgoing])?;
+                        }
                         serial.flush()?;
                         if options.swtos && menu_prompt {
                             if is_numeric_menu_choice(outgoing) && input_line.is_empty() {
@@ -667,7 +720,11 @@ fn run(options: &Options) -> io::Result<()> {
                     TimeMode::Uptime => connected.elapsed().as_millis() as u32 / 10,
                     TimeMode::Clock => wall_centiseconds(),
                 } & 0x00ff_ffff;
-                serial.write_all(&time_frame(mode, tick))?;
+                if options.framed && connection.mode() == Mode::Framed {
+                    serial.write_all(&multiplexed_time_frame(mode, tick))?;
+                } else {
+                    serial.write_all(&time_frame(mode, tick))?;
+                }
                 serial.flush()?;
                 next_frame = now + Duration::from_secs(1);
             }
@@ -720,6 +777,7 @@ mod tests {
                 sync: false,
                 verbose: false,
                 swtos: false,
+                framed: false,
                 time_mode: None,
             }
         );
@@ -746,6 +804,20 @@ mod tests {
         assert!(options.sync);
         assert!(options.verbose);
         assert!(!options.swtos);
+        assert!(!options.framed);
+    }
+
+    #[test]
+    fn framed_mode_enables_swtos_negotiation() {
+        let ParseResult::Run(options) = parse_args(args(&["te-rs", "--framed"])).unwrap() else {
+            panic!("expected runnable options");
+        };
+        assert!(options.framed);
+        assert!(options.swtos);
+        assert_eq!(
+            multiplexed_input_frame(2, b"x"),
+            vec![0xa5, 0x5a, 1, 1, 2, 1, 0, b'x', 125]
+        );
     }
 
     #[test]
