@@ -1,5 +1,6 @@
+use serde::{Deserialize, Serialize};
 use std::env;
-use std::fs::{File, OpenOptions};
+use std::fs::{self, File, OpenOptions};
 use std::io::{self, BufRead, BufReader, Read, Write};
 use std::os::fd::{AsRawFd, RawFd};
 use std::path::{Path, PathBuf};
@@ -31,6 +32,7 @@ struct Options {
     windows: bool,
     prefix: u8,
     debug_map: Option<PathBuf>,
+    session: Option<PathBuf>,
     time_mode: Option<TimeMode>,
 }
 
@@ -38,6 +40,54 @@ struct Options {
 enum TimeMode {
     Uptime,
     Clock,
+}
+
+#[derive(Deserialize, Serialize)]
+struct SavedPane {
+    kind: PaneKind,
+    channel: u8,
+    title: String,
+}
+
+#[derive(Deserialize, Serialize)]
+struct SavedSession {
+    format: String,
+    panes: Vec<SavedPane>,
+}
+
+fn save_session(path: &Path, desktop: &Desktop) -> io::Result<()> {
+    let session = SavedSession {
+        format: "swtos-session-v1".into(),
+        panes: desktop
+            .layout()
+            .into_iter()
+            .map(|(kind, channel, title)| SavedPane {
+                kind,
+                channel,
+                title,
+            })
+            .collect(),
+    };
+    let contents = serde_json::to_string_pretty(&session).map_err(io::Error::other)?;
+    fs::write(path, format!("{contents}\n"))
+}
+
+fn load_session(path: &Path, desktop: &mut Desktop) -> io::Result<()> {
+    let session: SavedSession =
+        serde_json::from_str(&fs::read_to_string(path)?).map_err(io::Error::other)?;
+    if session.format != "swtos-session-v1" {
+        return Err(io::Error::new(
+            io::ErrorKind::InvalidData,
+            "unsupported session format",
+        ));
+    }
+    let panes = session
+        .panes
+        .into_iter()
+        .map(|pane| (pane.kind, pane.channel, pane.title))
+        .collect::<Vec<_>>();
+    desktop.restore_layout(&panes);
+    Ok(())
 }
 
 enum ParseResult {
@@ -63,9 +113,10 @@ Options:
   -v, --verbose         Log serial setup and per-line upload details to stderr
       --swtos           Enable SWTOS menu, Uptime, Clock, echo, and Ctrl-]
       --framed          Negotiate SWTOS multiplexed transport (plain fallback)
-      --windows         Open the negotiated fixed four-pane SWTOS desktop
+      --windows         Open the negotiated dynamic SWTOS desktop
       --prefix <KEY>    Host-command prefix byte or ^X notation [default: ^A]
       --debug-map PATH  Load matching program.debug.json for inspection
+      --session PATH    Restore and save a dynamic window layout
       --uptime-active   Reattach while SWTOS is already inside Uptime
       --clock-active    Reattach while SWTOS is already inside Clock
   -h, --help            Print this help
@@ -95,6 +146,7 @@ where
         windows: false,
         prefix: 0x01,
         debug_map: None,
+        session: None,
         time_mode: None,
     };
     let mut device_seen = false;
@@ -123,6 +175,12 @@ where
                 options.debug_map = Some(PathBuf::from(
                     args.next()
                         .ok_or_else(|| "--debug-map requires a path".to_string())?,
+                ));
+            }
+            "--session" => {
+                options.session = Some(PathBuf::from(
+                    args.next()
+                        .ok_or_else(|| "--session requires a path".to_string())?,
                 ));
             }
             "--uptime-active" => {
@@ -654,6 +712,12 @@ fn run_windows(options: &Options) -> io::Result<()> {
     let mut debug_input = String::new();
     let mut debug_identity_sent = false;
     let mut desktop = Desktop::default();
+    if let Some(path) = options.session.as_deref()
+        && path.exists()
+        && let Err(error) = load_session(path, &mut desktop)
+    {
+        desktop.set_error(Some(format!("session: {error}")));
+    }
     let mut resource_lines = resources.render(Instant::now());
     desktop.set_resources(&resource_lines);
     desktop.push_channel(254, b"SWTOS debugger: type help\n");
@@ -661,6 +725,7 @@ fn run_windows(options: &Options) -> io::Result<()> {
         desktop.push_channel(254, format!("{error}\n").as_bytes());
     }
     let mut prefix_pending = false;
+    let mut shell_input = String::new();
     let mut last_size = repaint_desktop(&mut tty, &mut desktop)?;
     let mut serial_buffer = [0_u8; 1024];
     let mut tty_buffer = [0_u8; 256];
@@ -717,7 +782,31 @@ fn run_windows(options: &Options) -> io::Result<()> {
                 match item {
                     StreamItem::Plain(bytes) => desktop.push_channel(0, &bytes),
                     StreamItem::Frame(frame) if frame.kind == FrameType::TtyOutput => {
+                        if !desktop.has_channel(frame.channel) {
+                            desktop
+                                .add_application(frame.channel, format!("TTY {}", frame.channel));
+                        }
                         desktop.push_channel(frame.channel, &frame.payload);
+                    }
+                    StreamItem::Frame(frame) if frame.kind == FrameType::ChannelOpen => {
+                        let title = String::from_utf8_lossy(&frame.payload);
+                        desktop.add_application(
+                            frame.channel,
+                            if title.is_empty() {
+                                format!("TTY {}", frame.channel)
+                            } else {
+                                title.into_owned()
+                            },
+                        );
+                    }
+                    StreamItem::Frame(frame) if frame.kind == FrameType::ChannelClose => {
+                        desktop.release_channel(frame.channel);
+                    }
+                    StreamItem::Frame(frame) if frame.kind == FrameType::ChannelTitle => {
+                        desktop.set_channel_title(
+                            frame.channel,
+                            String::from_utf8_lossy(&frame.payload),
+                        );
                     }
                     StreamItem::Frame(frame) if frame.kind == FrameType::ProtocolError => {
                         desktop
@@ -749,8 +838,47 @@ fn run_windows(options: &Options) -> io::Result<()> {
             for &byte in &tty_buffer[..count] {
                 if prefix_pending {
                     prefix_pending = false;
-                    if desktop.command(byte) == CommandOutcome::Detach {
-                        return Ok(());
+                    match byte {
+                        b's' => {
+                            let used = desktop
+                                .layout()
+                                .into_iter()
+                                .map(|(_, channel, _)| channel)
+                                .collect::<Vec<_>>();
+                            if let Some(channel) = (2..=253).find(|channel| !used.contains(channel))
+                            {
+                                desktop.add_application(channel, format!("TTY {channel}"));
+                            }
+                        }
+                        b'a' => {
+                            let used = desktop
+                                .layout()
+                                .into_iter()
+                                .map(|(_, channel, _)| channel)
+                                .collect::<Vec<_>>();
+                            if let Some(channel) = (1..=253).find(|channel| !used.contains(channel))
+                            {
+                                desktop.assign_focused(channel, format!("TTY {channel}"));
+                            }
+                        }
+                        b'r' => {
+                            if let Some(path) = options.session.as_deref() {
+                                if let Err(error) = load_session(path, &mut desktop) {
+                                    desktop.set_error(Some(format!("session: {error}")));
+                                }
+                            }
+                        }
+                        _ => match desktop.command(byte) {
+                            CommandOutcome::Detach => return Ok(()),
+                            CommandOutcome::Save => {
+                                if let Some(path) = options.session.as_deref() {
+                                    if let Err(error) = save_session(path, &desktop) {
+                                        desktop.set_error(Some(format!("session: {error}")));
+                                    }
+                                }
+                            }
+                            CommandOutcome::Continue => {}
+                        },
                     }
                     dirty = true;
                     continue;
@@ -789,8 +917,37 @@ fn run_windows(options: &Options) -> io::Result<()> {
                     continue;
                 }
                 if connection.mode() == Mode::Framed {
-                    serial
-                        .write_all(&multiplexed_input_frame(desktop.focused_channel(), &[byte]))?;
+                    if desktop.focused_kind() == PaneKind::Shell {
+                        match byte {
+                            b'\r' | b'\n' => {
+                                let command = shell_input.strip_suffix(" --tty=new");
+                                if let Some(command) = command {
+                                    let used = desktop
+                                        .layout()
+                                        .into_iter()
+                                        .map(|(_, channel, _)| channel)
+                                        .collect::<Vec<_>>();
+                                    if let Some(channel) =
+                                        (2..=253).find(|channel| !used.contains(channel))
+                                    {
+                                        desktop.add_application(
+                                            channel,
+                                            command.strip_prefix("run ").unwrap_or(command),
+                                        );
+                                    }
+                                }
+                                shell_input.clear();
+                            }
+                            0x08 | 0x7f => {
+                                shell_input.pop();
+                            }
+                            0x20..=0x7e => shell_input.push(char::from(byte)),
+                            _ => {}
+                        }
+                    }
+                    for channel in desktop.input_channels() {
+                        serial.write_all(&multiplexed_input_frame(channel, &[byte]))?;
+                    }
                 } else {
                     serial.write_all(&[byte])?;
                 }
@@ -1104,6 +1261,7 @@ mod tests {
                 windows: false,
                 prefix: 0x01,
                 debug_map: None,
+                session: None,
                 time_mode: None,
             }
         );
@@ -1155,6 +1313,8 @@ mod tests {
             "^B",
             "--debug-map",
             "program.debug.json",
+            "--session",
+            "layout.json",
         ]))
         .unwrap() else {
             panic!("expected runnable options");
@@ -1164,6 +1324,7 @@ mod tests {
         assert!(options.swtos);
         assert_eq!(options.prefix, 0x02);
         assert_eq!(options.debug_map, Some(PathBuf::from("program.debug.json")));
+        assert_eq!(options.session, Some(PathBuf::from("layout.json")));
         assert_eq!(parse_prefix("x"), Ok(b'x'));
         assert!(parse_prefix("long").is_err());
     }

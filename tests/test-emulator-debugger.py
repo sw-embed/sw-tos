@@ -101,7 +101,7 @@ def main():
         # Feed one byte at a time so the emulated one-byte UART RX register is
         # consumed between writes, exactly like paced hardware input.
         for byte in b"run counter\r":
-            transport.send(1, bytes((byte,)), 1)
+            transport.send(1, bytes((byte,)), 0)
         while True:
             kind, _, payload = transport.receive(10)
             if kind == 10 and payload[:2] == b"\x04\x01":

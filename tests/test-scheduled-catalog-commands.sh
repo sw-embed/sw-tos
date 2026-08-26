@@ -10,7 +10,7 @@ OUT_DIR="$ROOT_DIR/build/scheduled-shell"
     "$ROOT_DIR/tests/catalog-shell.plsw" scheduled-shell
 
 output=$($EMU --load-binary "$OUT_DIR/program.bin@0" --entry 0 \
-    -u 'help\ndf\ndu\ndir\nuname\nstat hello\nstat embedded-ping\nstat shell\nstat missing\nps\nls\nrun missing\nrun shell\nrun embedded-hello\nrun counter\n' \
+    -u 'help\ndf\ndu\ndir\nuname\nstat hello\nstat embedded-ping\nstat shell\nstat missing\nps\nls\nrun missing\nrun shell\nrun embedded-hello\nrun counter --tty=new\nps\nrun counter\n' \
     --speed 0 -n 2000000 --quiet 2>/dev/null \
     | sed '/^Entry point:/d')
 

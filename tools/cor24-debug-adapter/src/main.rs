@@ -1,3 +1,4 @@
+use cor24_emulator::cpu::state::UartDirection;
 use cor24_emulator::emulator::{EmulatorCore, StopReason};
 use serde_json::Value;
 use std::env;
@@ -11,7 +12,6 @@ const SYNC: [u8; 2] = [0xa5, 0x5a];
 const DEBUG_REQUEST: u8 = 9;
 const DEBUG_RESPONSE: u8 = 10;
 const HELLO: u8 = 12;
-const HELLO_ACK: u8 = 13;
 
 fn main() -> Result<(), String> {
     let mut args = env::args().skip(1);
@@ -49,13 +49,14 @@ fn main() -> Result<(), String> {
             .map_err(err)?
     };
     let mut decoder = Decoder::default();
+    let mut uart_log_seen = 0usize;
     let mut input = [0u8; 4096];
     loop {
         match io.read(&mut input) {
             Ok(0) => return Ok(()),
             Ok(n) => {
                 for frame in decoder.push(&input[..n]) {
-                    handle_frame(&mut emu, build_id, frame, &mut io)?;
+                    handle_frame(&mut emu, build_id, frame, &mut io, &mut uart_log_seen)?;
                 }
             }
             Err(error) if error.kind() == io::ErrorKind::WouldBlock => {}
@@ -63,7 +64,7 @@ fn main() -> Result<(), String> {
         }
         if emu.is_running() {
             let result = emu.run_batch(50_000);
-            flush_uart(&mut emu, &mut io)?;
+            flush_uart(&mut emu, &mut io, &mut uart_log_seen)?;
             if !matches!(result.reason, StopReason::CycleLimit) {
                 write_debug(&mut io, stop_payload(&emu, &result.reason))?;
             }
@@ -77,20 +78,10 @@ fn handle_frame(
     build_id: u32,
     frame: Frame,
     io: &mut File,
+    uart_log_seen: &mut usize,
 ) -> Result<(), String> {
     match (frame.kind, frame.payload.as_slice()) {
-        (HELLO, b"SWT1") => write_frame(io, HELLO_ACK, 0, b"SWT1"),
-        (1, bytes) => {
-            for &byte in bytes {
-                emu.send_uart_byte(byte);
-                emu.resume();
-                let result = emu.run_batch(20_000);
-                if !matches!(result.reason, StopReason::CycleLimit) {
-                    write_debug(io, stop_payload(emu, &result.reason))?;
-                }
-            }
-            flush_uart(emu, io)
-        }
+        (HELLO, b"SWT1") | (1, _) => feed_target_frame(emu, &frame, io, uart_log_seen),
         (DEBUG_REQUEST, [1]) => write_debug(
             io,
             vec![
@@ -192,10 +183,21 @@ fn breakpoint_payload(emu: &EmulatorCore) -> Vec<u8> {
     payload
 }
 
-fn flush_uart(emu: &mut EmulatorCore, io: &mut File) -> Result<(), String> {
-    let bytes = emu.get_uart_output().as_bytes().to_vec();
+fn flush_uart(
+    emu: &mut EmulatorCore,
+    io: &mut File,
+    uart_log_seen: &mut usize,
+) -> Result<(), String> {
+    let entries = emu.uart_log().entries();
+    let bytes = entries[*uart_log_seen..]
+        .iter()
+        .filter(|entry| entry.direction == UartDirection::Output)
+        .map(|entry| entry.byte)
+        .collect::<Vec<_>>();
+    *uart_log_seen = entries.len();
     if !bytes.is_empty() {
-        write_frame(io, 2, 1, &bytes)?;
+        io.write_all(&bytes).map_err(err)?;
+        io.flush().map_err(err)?;
         emu.clear_uart_output();
     }
     Ok(())
@@ -231,6 +233,7 @@ struct Decoder {
 }
 struct Frame {
     kind: u8,
+    channel: u8,
     payload: Vec<u8>,
 }
 impl Decoder {
@@ -257,6 +260,7 @@ impl Decoder {
             if checksum == self.bytes[end - 1] && self.bytes[2] == 1 {
                 frames.push(Frame {
                     kind: self.bytes[3],
+                    channel: self.bytes[4],
                     payload: self.bytes[7..end - 1].to_vec(),
                 });
             }
@@ -264,6 +268,44 @@ impl Decoder {
         }
         frames
     }
+}
+
+fn feed_target_frame(
+    emu: &mut EmulatorCore,
+    frame: &Frame,
+    io: &mut File,
+    uart_log_seen: &mut usize,
+) -> Result<(), String> {
+    let bytes = encoded_frame(frame.kind, frame.channel, &frame.payload);
+    for byte in bytes {
+        emu.send_uart_byte(byte);
+        emu.resume();
+        let result = emu.run_batch(500_000);
+        if !matches!(result.reason, StopReason::CycleLimit) {
+            write_debug(io, stop_payload(emu, &result.reason))?;
+        }
+    }
+    flush_uart(emu, io, uart_log_seen)
+}
+
+fn encoded_frame(kind: u8, channel: u8, payload: &[u8]) -> Vec<u8> {
+    let len = payload.len() as u16;
+    let mut bytes = vec![
+        SYNC[0],
+        SYNC[1],
+        1,
+        kind,
+        channel,
+        len as u8,
+        (len >> 8) as u8,
+    ];
+    bytes.extend(payload);
+    bytes.push(
+        bytes[2..]
+            .iter()
+            .fold(0u8, |sum, byte| sum.wrapping_add(*byte)),
+    );
+    bytes
 }
 
 fn put24(out: &mut Vec<u8>, value: u32) {

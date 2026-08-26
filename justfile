@@ -133,8 +133,9 @@ cor24-debugger-build:
     ./scripts/build-cor24-debugger.sh
 
 # Open the four-pane frontend on an emulator-backed PTY
-cor24-debugger-demo image="build/scheduled-shell/program.bin" map="build/scheduled-shell/program.debug.json": scheduled-shell-build cor24-debugger-build te-rs-release
-    ./scripts/swtos-emulator-debug.py {{image}} {{map}}
+cor24-debugger-demo image="build/scheduled-shell/program.bin" map="build/scheduled-shell/program.debug.json" session="build/sessions/demo.json": scheduled-shell-build cor24-debugger-build te-rs-release
+    mkdir -p build/sessions
+    ./scripts/swtos-emulator-debug.py {{image}} {{map}} --session {{session}}
 
 # Exercise Counter breakpoints, state, stepping, backtrace, and detach
 emulator-debugger-smoke: scheduled-shell-build cor24-debugger-build

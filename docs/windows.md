@@ -283,6 +283,14 @@ Commit: `feat(debugger): add emulator breakpoints step and continue`
 
 ## Saga 9 -- Dynamic windows and sessions
 
+**Status:** Complete on the emulator feature branch.
+
+The host prefix commands are `1` through `9` to focus, `n` to cycle, `s` to
+split, `a` to assign the focused pane, `x` to close, `z` to zoom, `y` for copy
+mode, `w` to save, and `r` to restore. Broadcast requires two consecutive
+prefix-`b` commands and Escape disables it. Pass `--session PATH` to persist a
+layout; `just cor24-debugger-demo` uses `build/sessions/demo.json`.
+
 Generalize the fixed layout to create, close, split, assign, cycle, and zoom
 panes. Add scrollback search, copy mode, saved layouts, background-input alerts,
 and explicit opt-in broadcast input. Allow the shell to launch an application

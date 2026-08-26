@@ -1,11 +1,12 @@
-//! Fixed four-pane terminal desktop used by the SWTOS framed frontend.
+//! Dynamic terminal desktop used by the SWTOS framed frontend.
 
+use serde::{Deserialize, Serialize};
 use std::collections::VecDeque;
 
-pub const PANE_COUNT: usize = 4;
 pub const DEFAULT_SCROLLBACK: usize = 1_000;
 
-#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+#[derive(Clone, Copy, Debug, Deserialize, Eq, PartialEq, Serialize)]
+#[serde(rename_all = "lowercase")]
 pub enum PaneKind {
     Shell,
     Application,
@@ -14,7 +15,7 @@ pub enum PaneKind {
 }
 
 impl PaneKind {
-    pub const ALL: [Self; PANE_COUNT] = [
+    pub const ALL: [Self; 4] = [
         Self::Shell,
         Self::Application,
         Self::Debugger,
@@ -30,7 +31,7 @@ impl PaneKind {
         }
     }
 
-    pub fn channel(self) -> u8 {
+    pub fn default_channel(self) -> u8 {
         match self {
             Self::Shell => 0,
             Self::Application => 1,
@@ -43,18 +44,28 @@ impl PaneKind {
 #[derive(Debug)]
 pub struct Pane {
     pub kind: PaneKind,
+    pub channel: u8,
+    pub title: String,
     lines: VecDeque<String>,
     current: String,
     scrollback_limit: usize,
+    alert: bool,
+    scroll_offset: usize,
+    search: Option<String>,
 }
 
 impl Pane {
-    fn new(kind: PaneKind, scrollback_limit: usize) -> Self {
+    fn new(kind: PaneKind, channel: u8, title: impl Into<String>, scrollback_limit: usize) -> Self {
         Self {
             kind,
+            channel,
+            title: title.into(),
             lines: VecDeque::new(),
             current: String::new(),
             scrollback_limit,
+            alert: false,
+            scroll_offset: 0,
+            search: None,
         }
     }
 
@@ -81,9 +92,10 @@ impl Pane {
 
     fn visible_lines(&self, height: usize) -> Vec<&str> {
         let complete = height.saturating_sub(usize::from(!self.current.is_empty()));
-        let start = self.lines.len().saturating_sub(complete);
-        let mut output: Vec<&str> = self.lines.range(start..).map(String::as_str).collect();
-        if !self.current.is_empty() && output.len() < height {
+        let end = self.lines.len().saturating_sub(self.scroll_offset);
+        let start = end.saturating_sub(complete);
+        let mut output: Vec<&str> = self.lines.range(start..end).map(String::as_str).collect();
+        if self.scroll_offset == 0 && !self.current.is_empty() && output.len() < height {
             output.push(&self.current);
         }
         output
@@ -102,16 +114,20 @@ impl Pane {
 pub enum CommandOutcome {
     Continue,
     Detach,
+    Save,
 }
 
 pub struct Desktop {
-    panes: [Pane; PANE_COUNT],
+    panes: Vec<Pane>,
     focus: usize,
     zoomed: bool,
     help: bool,
     connected: bool,
     clock: String,
     error: Option<String>,
+    copy_mode: bool,
+    broadcast: bool,
+    broadcast_armed: bool,
 }
 
 impl Default for Desktop {
@@ -123,13 +139,19 @@ impl Default for Desktop {
 impl Desktop {
     pub fn new(scrollback_limit: usize) -> Self {
         Self {
-            panes: PaneKind::ALL.map(|kind| Pane::new(kind, scrollback_limit)),
+            panes: PaneKind::ALL
+                .into_iter()
+                .map(|kind| Pane::new(kind, kind.default_channel(), kind.title(), scrollback_limit))
+                .collect(),
             focus: 0,
             zoomed: false,
             help: false,
             connected: true,
             clock: "--:--:--".into(),
             error: None,
+            copy_mode: false,
+            broadcast: false,
+            broadcast_armed: false,
         }
     }
 
@@ -138,17 +160,114 @@ impl Desktop {
     }
 
     pub fn focused_channel(&self) -> u8 {
-        self.focused_kind().channel()
+        self.panes[self.focus].channel
+    }
+
+    pub fn assign_focused(&mut self, channel: u8, title: impl Into<String>) {
+        let pane = &mut self.panes[self.focus];
+        pane.channel = channel;
+        pane.title = title.into();
+        pane.kind = PaneKind::Application;
+    }
+
+    pub fn set_channel_title(&mut self, channel: u8, title: impl Into<String>) {
+        if let Some(pane) = self.panes.iter_mut().find(|pane| pane.channel == channel) {
+            pane.title = title.into();
+        }
+    }
+
+    pub fn pane_count(&self) -> usize {
+        self.panes.len()
+    }
+    pub fn has_channel(&self, channel: u8) -> bool {
+        self.panes.iter().any(|pane| pane.channel == channel)
+    }
+    pub fn broadcast_enabled(&self) -> bool {
+        self.broadcast
+    }
+    pub fn input_channels(&self) -> Vec<u8> {
+        if self.broadcast {
+            self.panes
+                .iter()
+                .filter(|pane| matches!(pane.kind, PaneKind::Shell | PaneKind::Application))
+                .map(|pane| pane.channel)
+                .collect()
+        } else {
+            vec![self.focused_channel()]
+        }
     }
 
     pub fn push_channel(&mut self, channel: u8, bytes: &[u8]) {
-        if let Some(pane) = self
-            .panes
-            .iter_mut()
-            .find(|pane| pane.kind.channel() == channel)
-        {
+        if let Some(index) = self.panes.iter().position(|pane| pane.channel == channel) {
+            let pane = &mut self.panes[index];
             pane.push(bytes);
+            if index != self.focus {
+                pane.alert = true;
+            }
         }
+    }
+
+    pub fn add_application(&mut self, channel: u8, title: impl Into<String>) -> usize {
+        if let Some(index) = self.panes.iter().position(|pane| pane.channel == channel) {
+            self.panes[index].title = title.into();
+            self.focus = index;
+            return index;
+        }
+        self.panes.push(Pane::new(
+            PaneKind::Application,
+            channel,
+            title,
+            DEFAULT_SCROLLBACK,
+        ));
+        self.focus = self.panes.len() - 1;
+        self.focus
+    }
+
+    pub fn close_focused(&mut self) {
+        if self.panes.len() > 1 {
+            self.panes.remove(self.focus);
+            self.focus = self.focus.min(self.panes.len() - 1);
+        }
+    }
+
+    pub fn release_channel(&mut self, channel: u8) {
+        self.panes.retain(|pane| {
+            pane.channel != channel
+                || matches!(
+                    pane.kind,
+                    PaneKind::Shell | PaneKind::Debugger | PaneKind::Resources
+                )
+        });
+        self.focus = self.focus.min(self.panes.len().saturating_sub(1));
+    }
+
+    pub fn search(&mut self, needle: &str) -> bool {
+        let pane = &mut self.panes[self.focus];
+        pane.search = Some(needle.into());
+        if let Some(index) = pane.lines.iter().rposition(|line| line.contains(needle)) {
+            pane.scroll_offset = pane.lines.len().saturating_sub(index + 1);
+            true
+        } else {
+            false
+        }
+    }
+
+    pub fn layout(&self) -> Vec<(PaneKind, u8, String)> {
+        self.panes
+            .iter()
+            .map(|pane| (pane.kind, pane.channel, pane.title.clone()))
+            .collect()
+    }
+
+    pub fn restore_layout(&mut self, layout: &[(PaneKind, u8, String)]) {
+        if layout.is_empty() {
+            return;
+        }
+        self.panes = layout
+            .iter()
+            .map(|(kind, channel, title)| Pane::new(*kind, *channel, title, DEFAULT_SCROLLBACK))
+            .collect();
+        self.focus = 0;
     }
 
     pub fn set_connected(&mut self, connected: bool) {
@@ -174,14 +293,33 @@ impl Desktop {
     }
 
     pub fn command(&mut self, byte: u8) -> CommandOutcome {
+        if byte != b'b' {
+            self.broadcast_armed = false;
+        }
         match byte {
-            b'1'..=b'4' => self.focus = usize::from(byte - b'1'),
-            b'n' | b'\t' => self.focus = (self.focus + 1) % PANE_COUNT,
+            b'1'..=b'9' if usize::from(byte - b'1') < self.panes.len() => {
+                self.focus = usize::from(byte - b'1')
+            }
+            b'n' | b'\t' => self.focus = (self.focus + 1) % self.panes.len(),
             b'z' => self.zoomed = !self.zoomed,
+            b'x' => self.close_focused(),
+            b'y' => self.copy_mode = !self.copy_mode,
+            b'w' => return CommandOutcome::Save,
+            b'b' if self.broadcast_armed => {
+                self.broadcast = !self.broadcast;
+                self.broadcast_armed = false;
+            }
+            b'b' => self.broadcast_armed = true,
+            0x1b => {
+                self.broadcast_armed = false;
+                self.broadcast = false;
+                self.copy_mode = false;
+            }
             b'?' | b'h' => self.help = !self.help,
             b'd' | 0x04 => return CommandOutcome::Detach,
             _ => {}
         }
+        self.panes[self.focus].alert = false;
         CommandOutcome::Continue
     }
 
@@ -200,7 +338,8 @@ impl Desktop {
                 body_height,
                 "Help",
                 &[
-                    "1-4 focus  n next  z zoom",
+                    "1-9 focus  n next  z zoom  s split  x close",
+                    "y copy  b,b broadcast  w save  r restore",
                     "? help  d detach  prefix prefix",
                 ],
                 true,
@@ -208,12 +347,17 @@ impl Desktop {
         } else if self.zoomed {
             self.draw_pane(&mut canvas, self.focus, 0, 0, width, body_height);
         } else {
-            let left = width / 2;
-            let top = body_height / 2;
-            self.draw_pane(&mut canvas, 0, 0, 0, left, top);
-            self.draw_pane(&mut canvas, 1, left, 0, width - left, top);
-            self.draw_pane(&mut canvas, 2, 0, top, left, body_height - top);
-            self.draw_pane(&mut canvas, 3, left, top, width - left, body_height - top);
+            let columns = if self.panes.len() <= 1 { 1 } else { 2 };
+            let rows = self.panes.len().div_ceil(columns);
+            for index in 0..self.panes.len() {
+                let column = index % columns;
+                let row = index / columns;
+                let x = column * width / columns;
+                let next_x = (column + 1) * width / columns;
+                let y = row * body_height / rows;
+                let next_y = (row + 1) * body_height / rows;
+                self.draw_pane(&mut canvas, index, x, y, next_x - x, next_y - y);
+            }
         }
 
         let mut output = String::from("\x1b[H");
@@ -223,8 +367,17 @@ impl Desktop {
         }
         let error = self.error.as_deref().unwrap_or("ok");
         let status = format!(
-            " focus:{}  prefix help  {}  clock:{}  {}",
-            self.focused_kind().title(),
+            " focus:{}  panes:{}{}{}  {}  clock:{}  {}",
+            self.panes[self.focus].title,
+            self.panes.len(),
+            if self.broadcast {
+                " BROADCAST"
+            } else if self.broadcast_armed {
+                " broadcast?"
+            } else {
+                ""
+            },
+            if self.copy_mode { " COPY" } else { "" },
             if self.connected {
                 "connected"
             } else {
@@ -255,7 +408,11 @@ impl Desktop {
             y,
             width,
             height,
-            self.panes[index].kind.title(),
+            &format!(
+                "{}{}",
+                self.panes[index].title,
+                if self.panes[index].alert { " !" } else { "" }
+            ),
             &lines,
             index == self.focus,
         );
@@ -349,6 +506,32 @@ mod tests {
         assert!(!zoomed.contains("Application"));
         desktop.command(b'?');
         let help = desktop.render(60, 16);
-        assert!(help.contains("1-4 focus"));
+        assert!(help.contains("1-9 focus"));
+    }
+
+    #[test]
+    fn dynamic_layout_search_alerts_and_guarded_broadcast() {
+        let mut desktop = Desktop::default();
+        desktop.add_application(7, "Counter");
+        assert_eq!(desktop.pane_count(), 5);
+        desktop.command(b'1');
+        desktop.push_channel(7, b"count 1\ncount 2\n");
+        assert!(desktop.render(80, 24).contains("Counter !"));
+        desktop.command(b'5');
+        assert!(desktop.search("count 1"));
+        assert!(!desktop.broadcast_enabled());
+        desktop.command(b'b');
+        desktop.command(b'1');
+        desktop.command(b'b');
+        assert!(!desktop.broadcast_enabled());
+        desktop.command(b'b');
+        assert!(desktop.broadcast_enabled());
+        assert_eq!(desktop.input_channels(), vec![0, 1, 7]);
+        let saved = desktop.layout();
+        desktop.close_focused();
+        desktop.restore_layout(&saved);
+        assert_eq!(desktop.pane_count(), 5);
+        desktop.release_channel(7);
+        assert_eq!(desktop.pane_count(), 4);
     }
 }

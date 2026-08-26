@@ -60,7 +60,7 @@ def read_until(fd: int, needle: bytes, timeout: float = 3.0) -> bytes:
     return bytes(data)
 
 
-def start_frontend():
+def start_frontend(session=None):
     terminal_master, terminal_slave = pty.openpty()
     serial_master, serial_slave = pty.openpty()
     before = termios.tcgetattr(terminal_slave)
@@ -70,8 +70,12 @@ def start_frontend():
         os.setsid()
         fcntl.ioctl(terminal_slave, termios.TIOCSCTTY, 0)
 
+    command = [str(BINARY), "--windows", "--prefix", "^A", "--debug-map", str(debug_map_path())]
+    if session is not None:
+        command.extend(("--session", str(session)))
+    command.append(os.ttyname(serial_slave))
     process = subprocess.Popen(
-        [str(BINARY), "--windows", "--prefix", "^A", "--debug-map", str(debug_map_path()), os.ttyname(serial_slave)],
+        command,
         stdin=terminal_slave,
         stdout=terminal_slave,
         stderr=subprocess.PIPE,
@@ -113,7 +117,9 @@ def assert_restored(process, terminal_master, terminal_slave, before, expected_s
 
 
 def normal_path():
-    process, tty_master, tty_slave, serial_master, before = start_frontend()
+    session = ROOT / "build/windows-pty/session.json"
+    session.unlink(missing_ok=True)
+    process, tty_master, tty_slave, serial_master, before = start_frontend(session)
     generation = 3
     records = (
         bytes((1, generation)),
@@ -151,6 +157,34 @@ def normal_path():
     os.write(tty_master, b"\x012b")
     assert frame(1, 1, b"b") in read_until(serial_master, frame(1, 1, b"b")), "app input route"
 
+    os.write(serial_master, frame(3, 2, b"Counter"))
+    assert b"Counter *" in read_until(tty_master, b"Counter *"), "dynamic channel open"
+    os.write(tty_master, b"\x011")
+    assert b"Shell *" in read_until(tty_master, b"Shell *"), "focus before background output"
+    os.write(serial_master, frame(2, 2, b"count 1\n"))
+    assert b"Counter !" in read_until(tty_master, b"Counter !"), "background input alert"
+
+    # One broadcast command only arms the dangerous operation. An intervening
+    # focus command cancels it, so ordinary input remains exclusive.
+    os.write(tty_master, b"\x01b\x011q")
+    exclusive = read_until(serial_master, frame(1, 0, b"q"))
+    assert frame(1, 0, b"q") in exclusive
+    assert frame(1, 1, b"q") not in exclusive and frame(1, 2, b"q") not in exclusive
+    os.write(tty_master, b"\x01b\x01bv")
+    broadcast = read_until(serial_master, frame(1, 2, b"v"))
+    assert all(frame(1, channel, b"v") in broadcast for channel in (0, 1, 2)), "confirmed broadcast"
+    os.write(tty_master, b"\x01\x1b")
+
+    os.write(tty_master, b"\x01w")
+    deadline = time.monotonic() + 2
+    while not session.exists() and time.monotonic() < deadline:
+        time.sleep(0.01)
+    assert session.exists() and b'"channel": 2' in session.read_bytes(), "saved dynamic session"
+    os.write(serial_master, frame(4, 2, b""))
+    time.sleep(0.1)
+    os.write(tty_master, b"\x012")
+    read_until(tty_master, b"Application *")
+
     read_until(tty_master, b"never-present", 0.1)
     fcntl.ioctl(tty_slave, termios.TIOCSWINSZ, struct.pack("HHHH", 16, 50, 0, 0))
     resized = read_until(tty_master, b"Application *", 2.0)
@@ -159,6 +193,14 @@ def normal_path():
     time.sleep(0.1)
     os.write(tty_master, b"\x01d")
     assert_restored(process, tty_master, tty_slave, before, 0)
+    os.close(serial_master)
+    os.close(tty_master)
+    os.close(tty_slave)
+
+    restored, tty_master, tty_slave, serial_master, before = start_frontend(session)
+    assert b"Counter" in read_until(tty_master, b"Counter"), "saved session restore"
+    os.write(tty_master, b"\x01d")
+    assert_restored(restored, tty_master, tty_slave, before, 0)
     os.close(serial_master)
     os.close(tty_master)
     os.close(tty_slave)
@@ -175,7 +217,7 @@ def failure_path():
 def main() -> int:
     normal_path()
     failure_path()
-    print("PASS: four-pane PTY frontend routes focus, resizes, and restores terminal state")
+    print("PASS: dynamic PTY frontend routes, restores sessions, alerts, and guards broadcast")
     return 0
 
 
