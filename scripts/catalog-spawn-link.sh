@@ -14,7 +14,7 @@ EMU="$TOOL_DIR/cor24-emu"
 META_GEN="$TOOL_DIR/meta-gen"
 LINK="$TOOL_DIR/link24"
 PLSW="$ROOT_DIR/tools/plsw.lgo"
-MODULES=(kernel app)
+MODULES=(kernel protocol app)
 
 mkdir -p "$OUT_DIR"
 if [ "$CATALOG_MANIFEST" = "$ROOT_DIR/catalog/catalog.toml" ]; then
@@ -56,6 +56,7 @@ printf '%s\n' \
     '_swtos_image_end:' \
     '        .byte   0' >> "$OUT_DIR/app.raw.s"
 cp "$ROOT_DIR/hal/cor24/catalog-spawn.s" "$OUT_DIR/kernel.raw.s"
+cp "$ROOT_DIR/hal/cor24/protocol-v1.s" "$OUT_DIR/protocol.raw.s"
 sed -n 'p' "$ROOT_DIR/hal/cor24/i2c.s" >> "$OUT_DIR/kernel.raw.s"
 sed -n 'p' "$ROOT_DIR/hal/cor24/spi.s" >> "$OUT_DIR/kernel.raw.s"
 sed -n 'p' "$SCHEDULED_CATALOG" >> "$OUT_DIR/kernel.raw.s"
@@ -92,7 +93,7 @@ for i in "${!MODULES[@]}"; do
 done
 
 "$LINK" --entry kernel --dir "$OUT_DIR" \
-    --map "$OUT_DIR/program.map" kernel app \
+    --map "$OUT_DIR/program.map" kernel protocol app \
     -o "$OUT_DIR/program.bin"
 "$ROOT_DIR/scripts/cor24-bin-to-lgo.py" \
     "$OUT_DIR/program.bin" "$OUT_DIR/program.lgo" \

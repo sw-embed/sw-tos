@@ -28,6 +28,7 @@ RECIPES=(
     scheduled-tty-smoke
     protocol-smoke
     protocol-target-smoke
+    scheduled-protocol-smoke
     scheduled-catalog-smoke
     scheduled-memory-smoke
     scheduled-reclaim-smoke

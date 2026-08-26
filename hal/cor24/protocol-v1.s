@@ -1,34 +1,16 @@
-; protocol-v1.s -- target-side SWTOS multiplexed-frame decoder proof
-
-_start:
-        la      r0,0xFEEC00
-        mov     sp,r0
-_main:
-        la      r2,0xFF0101
-        lbu     r0,0(r2)
-        lc      r1,1
-        and     r0,r1
-        ceq     r0,z
-        brt     _main
-        la      r2,0xFF0100
-        lbu     r0,0(r2)
-        la      r2,_protocol_consume
-        jal     r1,(r2)
-        la      r2,_valid_count
-        lbu     r0,0(r2)
-        lc      r1,2
-        ceq     r0,r1
-        brf     _main
-_halt:
-        bra     _halt
+; protocol-v1.s -- reusable target-side SWTOS multiplexed-frame decoder
+;
+; The embedding module supplies _PROTOCOL_FRAME and _PROTOCOL_ERROR callbacks.
+; A valid callback may inspect the exported type, channel, length, and payload.
 
 ; Consume one byte in r0. Valid frames print type-as-A..M and payload length.
-_protocol_consume:
+        .globl  _PROTOCOL_CONSUME
+_PROTOCOL_CONSUME:
         push    r1
         push    r2
         la      r2,_rx_byte
         sb      r0,0(r2)
-        la      r2,_rx_state
+        la      r2,_PROTOCOL_RX_STATE
         lbu     r0,0(r2)
         ceq     r0,z
         brt     _state_sync_a5
@@ -72,7 +54,7 @@ _state_sync_a5:
         ceq     r0,r1
         brf     _sync_a5_done
         lc      r0,1
-        la      r2,_rx_state
+        la      r2,_PROTOCOL_RX_STATE
         sb      r0,0(r2)
 _sync_a5_done:
         la      r2,_protocol_done
@@ -87,14 +69,14 @@ _state_sync_5a:
         ceq     r0,r1
         brt     _sync_5a_done
         lc      r0,0
-        la      r2,_rx_state
+        la      r2,_PROTOCOL_RX_STATE
         sb      r0,0(r2)
 _sync_5a_done:
         la      r2,_protocol_done
         jmp     (r2)
 _sync_complete:
         lc      r0,2
-        la      r2,_rx_state
+        la      r2,_PROTOCOL_RX_STATE
         sb      r0,0(r2)
         la      r2,_protocol_done
         jmp     (r2)
@@ -110,39 +92,43 @@ _version_ok:
         la      r2,_rx_checksum
         sb      r0,0(r2)
         lc      r0,3
-        la      r2,_rx_state
+        la      r2,_PROTOCOL_RX_STATE
         sb      r0,0(r2)
         la      r2,_protocol_done
         jmp     (r2)
 _state_type:
         la      r2,_rx_byte
         lbu     r0,0(r2)
-        la      r2,_rx_type
+        la      r2,_PROTOCOL_RX_TYPE
         sb      r0,0(r2)
         la      r2,_checksum_add
         jal     r1,(r2)
         lc      r0,4
-        la      r2,_rx_state
+        la      r2,_PROTOCOL_RX_STATE
         sb      r0,0(r2)
         la      r2,_protocol_done
         jmp     (r2)
 _state_channel:
+        la      r2,_rx_byte
+        lbu     r0,0(r2)
+        la      r2,_PROTOCOL_RX_CHANNEL
+        sb      r0,0(r2)
         la      r2,_checksum_add
         jal     r1,(r2)
         lc      r0,5
-        la      r2,_rx_state
+        la      r2,_PROTOCOL_RX_STATE
         sb      r0,0(r2)
         la      r2,_protocol_done
         jmp     (r2)
 _state_length_low:
         la      r2,_rx_byte
         lbu     r0,0(r2)
-        la      r2,_rx_length
+        la      r2,_PROTOCOL_RX_LENGTH
         sw      r0,0(r2)
         la      r2,_checksum_add
         jal     r1,(r2)
         lc      r0,6
-        la      r2,_rx_state
+        la      r2,_PROTOCOL_RX_STATE
         sb      r0,0(r2)
         la      r2,_protocol_done
         jmp     (r2)
@@ -156,7 +142,7 @@ _state_length_high:
 _length_high_zero:
         la      r2,_checksum_add
         jal     r1,(r2)
-        la      r2,_rx_length
+        la      r2,_PROTOCOL_RX_LENGTH
         lw      r0,0(r2)
         lc      r1,16
         clu     r1,r0
@@ -167,7 +153,7 @@ _length_in_range:
         la      r2,_rx_remaining
         sw      r0,0(r2)
         lc      r0,7
-        la      r2,_rx_state
+        la      r2,_PROTOCOL_RX_STATE
         sb      r0,0(r2)
         la      r2,_protocol_done
         jmp     (r2)
@@ -176,6 +162,19 @@ _state_payload_or_checksum:
         lw      r0,0(r2)
         ceq     r0,z
         brt     _state_checksum
+        ; Store at payload[length - remaining] before decrementing remaining.
+        la      r2,_PROTOCOL_RX_LENGTH
+        lw      r1,0(r2)
+        la      r2,_rx_remaining
+        lw      r0,0(r2)
+        sub     r1,r0
+        la      r2,_PROTOCOL_RX_PAYLOAD
+        add     r2,r1
+        la      r0,_rx_byte
+        lbu     r0,0(r0)
+        sb      r0,0(r2)
+        la      r2,_rx_remaining
+        lw      r0,0(r2)
         add     r0,-1
         sw      r0,0(r2)
         la      r2,_checksum_add
@@ -192,7 +191,7 @@ _state_checksum:
         la      r2,_protocol_error
         jmp     (r2)
 _checksum_ok:
-        la      r2,_rx_type
+        la      r2,_PROTOCOL_RX_TYPE
         lbu     r0,0(r2)
         ceq     r0,z
         brf     _type_nonzero
@@ -205,27 +204,16 @@ _type_nonzero:
         la      r2,_protocol_error
         jmp     (r2)
 _type_known:
-        add     r0,64
-        la      r2,_putchar
+        la      r2,_PROTOCOL_FRAME
         jal     r1,(r2)
-        la      r2,_rx_length
-        lw      r0,0(r2)
-        add     r0,48
-        la      r2,_putchar
-        jal     r1,(r2)
-        la      r2,_valid_count
-        lbu     r0,0(r2)
-        add     r0,1
-        sb      r0,0(r2)
         la      r2,_protocol_reset
         jmp     (r2)
 _protocol_error:
-        lc      r0,69
-        la      r2,_putchar
+        la      r2,_PROTOCOL_ERROR
         jal     r1,(r2)
 _protocol_reset:
         lc      r0,0
-        la      r2,_rx_state
+        la      r2,_PROTOCOL_RX_STATE
         sb      r0,0(r2)
 _protocol_done:
         pop     r2
@@ -245,33 +233,24 @@ _checksum_add:
         pop     r1
         jmp     (r1)
 
-_putchar:
-        push    r1
-        push    r2
-_putchar_wait:
-        la      r2,0xFF0101
-        lbu     r1,0(r2)
-        lcu     r2,128
-        and     r1,r2
-        ceq     r1,z
-        brf     _putchar_wait
-        la      r2,0xFF0100
-        sb      r0,0(r2)
-        pop     r2
-        pop     r1
-        jmp     (r1)
-
-_rx_state:
+        .globl  _PROTOCOL_RX_STATE
+_PROTOCOL_RX_STATE:
         .byte 0
 _rx_byte:
         .byte 0
 _rx_checksum:
         .byte 0
-_rx_type:
+        .globl  _PROTOCOL_RX_TYPE
+_PROTOCOL_RX_TYPE:
         .byte 0
-_rx_length:
+        .globl  _PROTOCOL_RX_CHANNEL
+_PROTOCOL_RX_CHANNEL:
+        .byte 0
+        .globl  _PROTOCOL_RX_LENGTH
+_PROTOCOL_RX_LENGTH:
         .zero 3
 _rx_remaining:
         .zero 3
-_valid_count:
-        .byte 0
+        .globl  _PROTOCOL_RX_PAYLOAD
+_PROTOCOL_RX_PAYLOAD:
+        .zero 16

@@ -116,6 +116,10 @@ protocol-smoke:
 protocol-target-smoke:
     ./tests/test-protocol-target.sh
 
+# Verify scheduled SWTOS negotiates framing while preserving plain boot output
+scheduled-protocol-smoke:
+    ./tests/test-scheduled-protocol.sh
+
 # Verify scheduled ls and run <name> command paths
 scheduled-catalog-smoke:
     ./tests/test-scheduled-catalog-commands.sh

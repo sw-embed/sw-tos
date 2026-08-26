@@ -2203,10 +2203,6 @@ _task_getchar_wait:
         la      r2,_tty_for_proc
         jal     r1,(r2)
         mov     r2,r0
-        pop     r1              ; foreground PROC_DESC
-        pop     r0              ; received byte
-        push    r1
-        push    r0
         lw      r0,6(r2)
         ceq     r0,z
         brf     _task_getchar_ready
@@ -3092,6 +3088,15 @@ _putchar:
         la      r2,_stats_increment
         jal     r1,(r2)
         pop     r0
+        la      r2,_protocol_framed_mode
+        lbu     r1,0(r2)
+        ceq     r1,z
+        brt     _putchar_wait
+        la      r2,_protocol_putchar_tty
+        jal     r1,(r2)
+        pop     r2
+        pop     r1
+        jmp     (r1)
 _putchar_wait:
         la      r2,0xFF0101
         lbu     r1,0(r2)
@@ -3103,6 +3108,74 @@ _putchar_wait:
         sb      r0,0(r2)
         pop     r2
         pop     r1
+        jmp     (r1)
+
+; Emit one ordered TTY_OUTPUT frame for the current process. Output has no
+; target-side queue: UART hardware flow control supplies backpressure.
+_protocol_putchar_tty:
+        push    r0
+        push    r1
+        push    r2
+        la      r2,_protocol_tx_byte
+        sb      r0,0(r2)
+        lc      r0,0
+        la      r2,_protocol_tx_channel
+        sb      r0,0(r2)
+        la      r2,_current_proc
+        lw      r0,0(r2)
+        la      r1,_proc_b
+        ceq     r0,r1
+        brt     _protocol_tx_channel_b
+        la      r1,_proc_c
+        ceq     r0,r1
+        brf     _protocol_tx_header
+        lc      r0,2
+        bra     _protocol_tx_channel_store
+_protocol_tx_channel_b:
+        lc      r0,1
+_protocol_tx_channel_store:
+        la      r2,_protocol_tx_channel
+        sb      r0,0(r2)
+_protocol_tx_header:
+        lcu     r0,0xA5
+        la      r2,_protocol_putchar_raw
+        jal     r1,(r2)
+        lc      r0,0x5A
+        la      r2,_protocol_putchar_raw
+        jal     r1,(r2)
+        lc      r0,1
+        la      r2,_protocol_putchar_raw
+        jal     r1,(r2)
+        lc      r0,2
+        la      r2,_protocol_putchar_raw
+        jal     r1,(r2)
+        la      r2,_protocol_tx_channel
+        lbu     r0,0(r2)
+        la      r2,_protocol_putchar_raw
+        jal     r1,(r2)
+        lc      r0,1
+        la      r2,_protocol_putchar_raw
+        jal     r1,(r2)
+        lc      r0,0
+        la      r2,_protocol_putchar_raw
+        jal     r1,(r2)
+        la      r2,_protocol_tx_byte
+        lbu     r0,0(r2)
+        la      r2,_protocol_putchar_raw
+        jal     r1,(r2)
+        la      r2,_protocol_tx_byte
+        lbu     r0,0(r2)
+        add     r0,4
+        la      r2,_protocol_tx_channel
+        lbu     r2,0(r2)
+        add     r0,r2
+        lcu     r2,255
+        and     r0,r2
+        la      r2,_protocol_putchar_raw
+        jal     r1,(r2)
+        pop     r2
+        pop     r1
+        pop     r0
         jmp     (r1)
 
 ; Map a process descriptor in r0 to its fixed virtual-TTY input ring.
@@ -3136,38 +3209,81 @@ _tty_poll_uart:
         push    r0
         push    r1
         push    r2
+        la      r2,_protocol_framed_mode
+        lbu     r0,0(r2)
+        ceq     r0,z
+        brf     _tty_poll_status
         la      r2,_tty_foreground_proc
         lw      r2,0(r2)
         lw      r0,24(r2)
         lc      r1,7
         ceq     r0,r1
-        brf     _tty_poll_done
+        brt     _tty_poll_status
+        la      r2,_tty_poll_done
+        jmp     (r2)
+_tty_poll_status:
         la      r2,0xFF0101
         lbu     r0,0(r2)
         lcu     r1,1
         and     r0,r1
         ceq     r0,z
-        brt     _tty_poll_done
+        brf     _tty_poll_read
+        la      r2,_tty_poll_done
+        jmp     (r2)
+_tty_poll_read:
         la      r2,0xFF0100
         lbu     r0,0(r2)
         la      r2,_tty_poll_byte
         sw      r0,0(r2)
+        ; In recovery mode ordinary bytes retain their legacy path. An A5
+        ; candidate and every byte after negotiation use the framed decoder.
+        la      r2,_protocol_framed_mode
+        lbu     r0,0(r2)
+        ceq     r0,z
+        brf     _tty_poll_protocol
+        la      r2,_PROTOCOL_RX_STATE
+        lbu     r0,0(r2)
+        ceq     r0,z
+        brf     _tty_poll_protocol
+        la      r2,_tty_poll_byte
+        lw      r0,0(r2)
+        lcu     r1,0xA5
+        ceq     r0,r1
+        brf     _tty_poll_plain
+_tty_poll_protocol:
+        la      r2,_tty_poll_byte
+        lw      r0,0(r2)
+        la      r2,_PROTOCOL_CONSUME
+        jal     r1,(r2)
+        bra     _tty_poll_done
+_tty_poll_plain:
         la      r2,_tty_foreground_proc
         lw      r0,0(r2)
         la      r2,_tty_poll_proc
         sw      r0,0(r2)
+        la      r2,_tty_enqueue_saved
+        jal     r1,(r2)
+        bra     _tty_poll_done
+
+; Enqueue _tty_poll_byte for _tty_poll_proc and wake a blocked reader.
+_tty_enqueue_saved:
+        push    r0
+        push    r1
+        push    r2
+        la      r2,_tty_poll_proc
+        lw      r0,0(r2)
         la      r2,_tty_for_proc
         jal     r1,(r2)
         mov     r2,r0
         lw      r0,6(r2)
         lc      r1,16
         ceq     r0,r1
-        brf     _tty_poll_store
+        brf     _tty_enqueue_store
         lw      r0,9(r2)
         add     r0,1
         sw      r0,9(r2)
-        bra     _tty_poll_done
-_tty_poll_store:
+        bra     _tty_enqueue_done
+_tty_enqueue_store:
         lw      r1,3(r2)
         add     r2,12
         add     r2,r1
@@ -3188,13 +3304,289 @@ _tty_poll_store:
         lw      r0,24(r2)
         lc      r1,7
         ceq     r0,r1
-        brf     _tty_poll_done
+        brf     _tty_enqueue_done
         lc      r0,1
         sw      r0,24(r2)
+_tty_enqueue_done:
+        pop     r2
+        pop     r1
+        pop     r0
+        jmp     (r1)
 _tty_poll_done:
         pop     r2
         pop     r1
         pop     r0
+        jmp     (r1)
+
+; Decoder callbacks. Only an exact channel-zero SWT1 HELLO enters framed mode.
+; Other valid frame types are routed after negotiation by the handlers below.
+        .globl  _PROTOCOL_FRAME
+_PROTOCOL_FRAME:
+        push    r0
+        push    r1
+        push    r2
+        la      r2,_PROTOCOL_RX_TYPE
+        lbu     r0,0(r2)
+        lc      r1,1
+        ceq     r0,r1
+        brt     _protocol_frame_tty_input
+        lc      r1,6
+        ceq     r0,r1
+        brf     _protocol_frame_check_wallclock
+        la      r2,_protocol_frame_time
+        jmp     (r2)
+_protocol_frame_check_wallclock:
+        lc      r1,7
+        ceq     r0,r1
+        brf     _protocol_frame_check_hello
+        la      r2,_protocol_frame_time
+        jmp     (r2)
+_protocol_frame_check_hello:
+        lc      r1,12
+        ceq     r0,r1
+        brf     _protocol_frame_done
+        la      r2,_PROTOCOL_RX_CHANNEL
+        lbu     r0,0(r2)
+        ceq     r0,z
+        brf     _protocol_frame_done
+        la      r2,_PROTOCOL_RX_LENGTH
+        lw      r0,0(r2)
+        lc      r1,4
+        ceq     r0,r1
+        brf     _protocol_frame_done
+        la      r2,_PROTOCOL_RX_PAYLOAD
+        lbu     r0,0(r2)
+        lc      r1,83
+        ceq     r0,r1
+        brf     _protocol_frame_done
+        lbu     r0,1(r2)
+        lc      r1,87
+        ceq     r0,r1
+        brf     _protocol_frame_done
+        lbu     r0,2(r2)
+        lc      r1,84
+        ceq     r0,r1
+        brf     _protocol_frame_done
+        lbu     r0,3(r2)
+        lc      r1,49
+        ceq     r0,r1
+        brf     _protocol_frame_done
+        lc      r0,1
+        la      r2,_protocol_framed_mode
+        sb      r0,0(r2)
+        ; A5 5A 01 0D 00 04 00 "SWT1" 41
+        la      r2,_protocol_hello_ack
+        lc      r1,12
+_protocol_ack_loop:
+        lbu     r0,0(r2)
+        push    r2
+        push    r1
+        la      r2,_protocol_putchar_raw
+        jal     r1,(r2)
+        pop     r1
+        pop     r2
+        add     r2,1
+        add     r1,-1
+        ceq     r1,z
+        brf     _protocol_ack_loop
+        bra     _protocol_frame_done
+
+_protocol_frame_done:
+        pop     r2
+        pop     r1
+        pop     r0
+        jmp     (r1)
+
+_protocol_frame_tty_input:
+        la      r2,_protocol_framed_mode
+        lbu     r0,0(r2)
+        ceq     r0,z
+        brt     _protocol_tty_done
+        la      r2,_PROTOCOL_RX_CHANNEL
+        lbu     r0,0(r2)
+        ceq     r0,z
+        brt     _protocol_tty_proc_a
+        lc      r1,1
+        ceq     r0,r1
+        brt     _protocol_tty_proc_b
+        lc      r1,2
+        ceq     r0,r1
+        brt     _protocol_tty_proc_c
+        bra     _protocol_tty_done
+_protocol_tty_proc_a:
+        la      r0,_proc_a
+        bra     _protocol_tty_proc_ready
+_protocol_tty_proc_b:
+        la      r0,_proc_b
+        bra     _protocol_tty_proc_ready
+_protocol_tty_proc_c:
+        la      r0,_proc_c
+_protocol_tty_proc_ready:
+        la      r2,_tty_poll_proc
+        sw      r0,0(r2)
+        lc      r0,0
+        la      r2,_protocol_payload_index
+        sw      r0,0(r2)
+_protocol_tty_payload_loop:
+        la      r2,_protocol_payload_index
+        lw      r0,0(r2)
+        la      r2,_PROTOCOL_RX_LENGTH
+        lw      r1,0(r2)
+        ceq     r0,r1
+        brt     _protocol_tty_done
+        la      r2,_PROTOCOL_RX_PAYLOAD
+        add     r2,r0
+        lbu     r0,0(r2)
+        la      r2,_tty_poll_byte
+        sw      r0,0(r2)
+        la      r2,_tty_enqueue_saved
+        jal     r1,(r2)
+        la      r2,_protocol_payload_index
+        lw      r0,0(r2)
+        add     r0,1
+        sw      r0,0(r2)
+        bra     _protocol_tty_payload_loop
+_protocol_tty_done:
+        pop     r2
+        pop     r1
+        pop     r0
+        jmp     (r1)
+
+; Translate typed three-byte time frames into the existing clock task's
+; private input representation. Control traffic never enters another channel.
+_protocol_frame_time:
+        la      r2,_protocol_framed_mode
+        lbu     r0,0(r2)
+        ceq     r0,z
+        brf     _protocol_time_check_channel
+        la      r2,_protocol_time_done
+        jmp     (r2)
+_protocol_time_check_channel:
+        la      r2,_PROTOCOL_RX_CHANNEL
+        lbu     r0,0(r2)
+        ceq     r0,z
+        brt     _protocol_time_check_length
+        la      r2,_protocol_time_done
+        jmp     (r2)
+_protocol_time_check_length:
+        la      r2,_PROTOCOL_RX_LENGTH
+        lw      r0,0(r2)
+        lc      r1,3
+        ceq     r0,r1
+        brt     _protocol_time_valid
+        la      r2,_protocol_time_done
+        jmp     (r2)
+_protocol_time_valid:
+        la      r2,_tty_foreground_proc
+        lw      r0,0(r2)
+        la      r2,_tty_poll_proc
+        sw      r0,0(r2)
+        ; A blocked time consumer has an empty queue. Canonicalize its ring
+        ; indices before atomically appending the complete control message.
+        la      r2,_tty_for_proc
+        jal     r1,(r2)
+        mov     r2,r0
+        lw      r0,6(r2)
+        ceq     r0,z
+        brf     _protocol_time_ring_ready
+        sw      r0,0(r2)
+        sw      r0,3(r2)
+_protocol_time_ring_ready:
+        lcu     r0,255
+        la      r2,_protocol_enqueue_value
+        jal     r1,(r2)
+        la      r2,_PROTOCOL_RX_TYPE
+        lbu     r0,0(r2)
+        add     r0,-5          ; uptime type 6 -> 1, wall clock 7 -> 2
+        la      r2,_protocol_enqueue_value
+        jal     r1,(r2)
+        lc      r0,0
+        la      r2,_protocol_payload_index
+        sw      r0,0(r2)
+_protocol_time_payload_loop:
+        la      r2,_protocol_payload_index
+        lw      r1,0(r2)
+        mov     r0,r1
+        lc      r1,3
+        ceq     r0,r1
+        brt     _protocol_time_done
+        la      r2,_protocol_payload_index
+        lw      r1,0(r2)
+        la      r2,_PROTOCOL_RX_PAYLOAD
+        add     r2,r1
+        lbu     r0,0(r2)
+        lcu     r1,255
+        ceq     r0,r1
+        brt     _protocol_time_escape_ff
+        lc      r1,29
+        ceq     r0,r1
+        brt     _protocol_time_escape_1d
+        la      r2,_protocol_enqueue_value
+        jal     r1,(r2)
+        bra     _protocol_time_payload_next
+_protocol_time_escape_ff:
+        lcu     r0,255
+        la      r2,_protocol_enqueue_value
+        jal     r1,(r2)
+        lc      r0,0
+        bra     _protocol_time_escape_code
+_protocol_time_escape_1d:
+        lcu     r0,255
+        la      r2,_protocol_enqueue_value
+        jal     r1,(r2)
+        lc      r0,3
+_protocol_time_escape_code:
+        la      r2,_protocol_enqueue_value
+        jal     r1,(r2)
+_protocol_time_payload_next:
+        la      r2,_protocol_payload_index
+        lw      r0,0(r2)
+        add     r0,1
+        sw      r0,0(r2)
+        bra     _protocol_time_payload_loop
+_protocol_time_done:
+        pop     r2
+        pop     r1
+        pop     r0
+        jmp     (r1)
+
+_protocol_enqueue_value:
+        push    r1
+        push    r2
+        la      r2,_tty_poll_byte
+        sw      r0,0(r2)
+        la      r2,_tty_enqueue_saved
+        jal     r1,(r2)
+        pop     r2
+        pop     r1
+        jmp     (r1)
+
+        .globl  _PROTOCOL_ERROR
+_PROTOCOL_ERROR:
+        push    r0
+        push    r2
+        la      r2,_protocol_error_count
+        lw      r0,0(r2)
+        add     r0,1
+        sw      r0,0(r2)
+        pop     r2
+        pop     r0
+        jmp     (r1)
+
+_protocol_putchar_raw:
+        push    r1
+        push    r2
+_protocol_putchar_wait:
+        la      r2,0xFF0101
+        lbu     r1,0(r2)
+        lcu     r2,128
+        and     r1,r2
+        ceq     r1,z
+        brf     _protocol_putchar_wait
+        la      r2,0xFF0100
+        sb      r0,0(r2)
+        pop     r2
+        pop     r1
         jmp     (r1)
 
 ; Map a process descriptor in r0 to its ABI-independent statistics sidecar.
@@ -3267,6 +3659,18 @@ _tty_poll_proc:
         .zero   3
 _tty_poll_byte:
         .zero   3
+_protocol_framed_mode:
+        .byte   0
+_protocol_error_count:
+        .zero   3
+_protocol_payload_index:
+        .zero   3
+_protocol_tx_byte:
+        .byte   0
+_protocol_tx_channel:
+        .byte   0
+_protocol_hello_ack:
+        .byte   0xA5,0x5A,0x01,0x0D,0x00,0x04,0x00,0x53,0x57,0x54,0x31,0x41
 _proc_b_image_descriptor:
         .zero   24
 _proc_b_image_provider:

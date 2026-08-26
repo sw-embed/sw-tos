@@ -162,8 +162,11 @@ not contain media-specific branches.
 
 The multiplexed transport wire format and decoder recovery rules are specified
 in `docs/protocol.md`. Its reusable Rust implementation lives in
-`tools/te-rs/src/protocol.rs`; the legacy `0xFF` time frames remain active until
-target-side framed-mode negotiation is complete.
+`tools/te-rs/src/protocol.rs`, and the same incremental COR24 decoder is linked
+as a separate module into each scheduled image. `te-rs --framed` sends HELLO;
+an exact ACK switches TTY input, per-process output, uptime, and wall clock to
+typed frames. Without that option, plain recovery and legacy time frames remain
+unchanged.
 
 The interactive frontend is `scripts/swtos-terminal.py`. It runs the emulator
 behind a pseudo-terminal, forwards ordinary bytes, and recognizes when the
