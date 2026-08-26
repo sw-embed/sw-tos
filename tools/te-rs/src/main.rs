@@ -6,6 +6,7 @@ use std::path::Path;
 use std::process::ExitCode;
 use std::thread;
 use std::time::{Duration, Instant, SystemTime, UNIX_EPOCH};
+use te_rs::protocol::{Frame, FrameType};
 
 const DEFAULT_DEVICE: &str = "/dev/ttyUSB0";
 const SYNC_TIMEOUT: Duration = Duration::from_secs(2);
@@ -449,6 +450,19 @@ fn time_frame(mode: TimeMode, tick: u32) -> Vec<u8> {
     frame
 }
 
+fn multiplexed_time_frame(mode: TimeMode, tick: u32) -> Vec<u8> {
+    Frame {
+        kind: match mode {
+            TimeMode::Uptime => FrameType::Uptime,
+            TimeMode::Clock => FrameType::WallClock,
+        },
+        channel: 0,
+        payload: vec![tick as u8, (tick >> 8) as u8, (tick >> 16) as u8],
+    }
+    .encode()
+    .expect("three-byte time payload is within the protocol limit")
+}
+
 fn wall_centiseconds() -> u32 {
     let now = SystemTime::now()
         .duration_since(UNIX_EPOCH)
@@ -788,5 +802,9 @@ mod tests {
             vec![0xff, 1, 0xff, 0, 0xff, 3, 0]
         );
         assert_eq!(time_frame(TimeMode::Clock, 1), vec![0xff, 2, 1, 0, 0]);
+        assert_eq!(
+            multiplexed_time_frame(TimeMode::Clock, 1),
+            vec![0xa5, 0x5a, 1, 7, 0, 3, 0, 1, 0, 0, 12]
+        );
     }
 }

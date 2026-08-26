@@ -160,6 +160,11 @@ not contain media-specific branches.
 
 ## UART and virtual time
 
+The multiplexed transport wire format and decoder recovery rules are specified
+in `docs/protocol.md`. Its reusable Rust implementation lives in
+`tools/te-rs/src/protocol.rs`; the legacy `0xFF` time frames remain active until
+target-side framed-mode negotiation is complete.
+
 The interactive frontend is `scripts/swtos-terminal.py`. It runs the emulator
 behind a pseudo-terminal, forwards ordinary bytes, and recognizes when the
 shell has printed `Choice: `. If a numeric choice is followed by Return, the

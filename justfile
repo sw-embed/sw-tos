@@ -108,6 +108,14 @@ scheduled-stats-smoke:
 scheduled-tty-smoke:
     ./tests/test-scheduled-tty.sh
 
+# Verify framed transport round trips, fragmentation, corruption, and reconnect
+protocol-smoke:
+    cargo test --manifest-path tools/te-rs/Cargo.toml
+
+# Verify the COR24-side incremental framed decoder
+protocol-target-smoke:
+    ./tests/test-protocol-target.sh
+
 # Verify scheduled ls and run <name> command paths
 scheduled-catalog-smoke:
     ./tests/test-scheduled-catalog-commands.sh
