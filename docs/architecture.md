@@ -168,6 +168,15 @@ an exact ACK switches TTY input, per-process output, uptime, and wall clock to
 typed frames. Without that option, plain recovery and legacy time frames remain
 unchanged.
 
+`te-rs --windows` owns the local terminal's alternate screen and renders a
+fixed two-by-two desktop from a dependency-free UI model. Each pane retains
+bounded scrollback independently. A configurable command prefix changes focus,
+cycles, zooms, displays help, or detaches; all non-prefix input is framed for
+only the focused channel. A scoped screen guard and the existing termios guards
+restore the cursor, alternate screen, serial settings, and local terminal on
+normal exit, detach, transport loss, and errors. The PTY acceptance recipe
+exercises both successful and failing teardown paths.
+
 The interactive frontend is `scripts/swtos-terminal.py`. It runs the emulator
 behind a pseudo-terminal, forwards ordinary bytes, and recognizes when the
 shell has printed `Choice: `. If a numeric choice is followed by Return, the

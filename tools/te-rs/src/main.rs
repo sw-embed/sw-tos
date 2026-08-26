@@ -7,6 +7,7 @@ use std::process::ExitCode;
 use std::thread;
 use std::time::{Duration, Instant, SystemTime, UNIX_EPOCH};
 use te_rs::protocol::{ConnectionDecoder, Frame, FrameType, Mode, StreamItem, hello};
+use te_rs::ui::{CommandOutcome, Desktop};
 
 const DEFAULT_DEVICE: &str = "/dev/ttyUSB0";
 const SYNC_TIMEOUT: Duration = Duration::from_secs(2);
@@ -25,6 +26,8 @@ struct Options {
     verbose: bool,
     swtos: bool,
     framed: bool,
+    windows: bool,
+    prefix: u8,
     time_mode: Option<TimeMode>,
 }
 
@@ -57,6 +60,8 @@ Options:
   -v, --verbose         Log serial setup and per-line upload details to stderr
       --swtos           Enable SWTOS menu, Uptime, Clock, echo, and Ctrl-]
       --framed          Negotiate SWTOS multiplexed transport (plain fallback)
+      --windows         Open the negotiated fixed four-pane SWTOS desktop
+      --prefix <KEY>    Host-command prefix byte or ^X notation [default: ^A]
       --uptime-active   Reattach while SWTOS is already inside Uptime
       --clock-active    Reattach while SWTOS is already inside Clock
   -h, --help            Print this help
@@ -83,6 +88,8 @@ where
         verbose: false,
         swtos: false,
         framed: false,
+        windows: false,
+        prefix: 0x01,
         time_mode: None,
     };
     let mut device_seen = false;
@@ -95,6 +102,17 @@ where
             "--framed" => {
                 options.swtos = true;
                 options.framed = true;
+            }
+            "--windows" => {
+                options.swtos = true;
+                options.framed = true;
+                options.windows = true;
+            }
+            "--prefix" => {
+                let value = args
+                    .next()
+                    .ok_or_else(|| "--prefix requires a value".to_string())?;
+                options.prefix = parse_prefix(&value)?;
             }
             "--uptime-active" => {
                 options.swtos = true;
@@ -145,6 +163,15 @@ where
     Ok(ParseResult::Run(options))
 }
 
+fn parse_prefix(value: &str) -> Result<u8, String> {
+    let bytes = value.as_bytes();
+    match bytes {
+        [byte] => Ok(*byte),
+        [b'^', letter @ b'@'..=b'_'] => Ok(*letter & 0x1f),
+        _ => Err(format!("invalid prefix '{value}': expected one byte or ^X")),
+    }
+}
+
 struct TermiosGuard {
     fd: RawFd,
     original: libc::termios,
@@ -172,7 +199,15 @@ impl TermiosGuard {
         // Match the proven Python terminal: explicitly assert the FTDI RTS
         // output after enabling hardware flow control.
         if unsafe { libc::ioctl(fd, libc::TIOCMBIS, &modem_bits) } == -1 {
-            return Err(io::Error::last_os_error());
+            let error = io::Error::last_os_error();
+            // PTYs used by the acceptance harness have termios but no modem
+            // control lines. Real serial-device ioctl failures remain fatal.
+            if !matches!(
+                error.raw_os_error(),
+                Some(libc::ENOTTY) | Some(libc::EINVAL)
+            ) {
+                return Err(error);
+            }
         }
         Ok(Self { fd, original })
     }
@@ -202,6 +237,31 @@ impl Drop for TermiosGuard {
     }
 }
 
+struct AlternateScreenGuard {
+    fd: RawFd,
+}
+
+impl AlternateScreenGuard {
+    fn enter(tty: &mut File) -> io::Result<Self> {
+        tty.write_all(b"\x1b[?1049h\x1b[?25l\x1b[2J\x1b[H")?;
+        tty.flush()?;
+        Ok(Self {
+            fd: tty.as_raw_fd(),
+        })
+    }
+}
+
+impl Drop for AlternateScreenGuard {
+    fn drop(&mut self) {
+        let restore = b"\x1b[?25h\x1b[?1049l";
+        // SAFETY: fd remains owned by the surrounding File until this guard
+        // drops; restoration is best effort during both success and unwind.
+        unsafe {
+            libc::write(self.fd, restore.as_ptr().cast(), restore.len());
+        }
+    }
+}
+
 fn get_termios(fd: RawFd) -> io::Result<libc::termios> {
     // SAFETY: zero is a valid initial bit pattern and tcgetattr initializes it.
     let mut attributes = unsafe { std::mem::zeroed() };
@@ -219,6 +279,19 @@ fn set_termios(fd: RawFd, attributes: &libc::termios) -> io::Result<()> {
         Err(io::Error::last_os_error())
     } else {
         Ok(())
+    }
+}
+
+fn terminal_size(fd: RawFd) -> (usize, usize) {
+    // SAFETY: winsize is initialized before its fields are read and fd is a tty.
+    let mut size: libc::winsize = unsafe { std::mem::zeroed() };
+    if unsafe { libc::ioctl(fd, libc::TIOCGWINSZ, &mut size) } == 0 {
+        (
+            usize::from(size.ws_col).max(24),
+            usize::from(size.ws_row).max(8),
+        )
+    } else {
+        (80, 24)
     }
 }
 
@@ -506,7 +579,154 @@ fn is_numeric_menu_choice(byte: u8) -> bool {
     matches!(byte, b'1'..=b'5')
 }
 
+fn desktop_clock() -> String {
+    let now = SystemTime::now()
+        .duration_since(UNIX_EPOCH)
+        .unwrap_or_default();
+    let raw = now.as_secs() as libc::time_t;
+    // SAFETY: localtime_r initializes local from a valid time_t.
+    let mut local: libc::tm = unsafe { std::mem::zeroed() };
+    unsafe { libc::localtime_r(&raw, &mut local) };
+    format!(
+        "{:02}:{:02}:{:02}",
+        local.tm_hour, local.tm_min, local.tm_sec
+    )
+}
+
+fn repaint_desktop(tty: &mut File, desktop: &mut Desktop) -> io::Result<(usize, usize)> {
+    let size = terminal_size(tty.as_raw_fd());
+    desktop.set_clock(desktop_clock());
+    tty.write_all(desktop.render(size.0, size.1).as_bytes())?;
+    tty.flush()?;
+    Ok(size)
+}
+
+fn run_windows(options: &Options) -> io::Result<()> {
+    let mut serial = OpenOptions::new()
+        .read(true)
+        .write(true)
+        .open(&options.device)?;
+    let mut tty = OpenOptions::new().read(true).write(true).open("/dev/tty")?;
+    let _serial_guard = TermiosGuard::serial(serial.as_raw_fd())?;
+    let _tty_guard = TermiosGuard::terminal(tty.as_raw_fd())?;
+    let _screen_guard = AlternateScreenGuard::enter(&mut tty)?;
+    let mut connection = ConnectionDecoder::default();
+    let mut desktop = Desktop::default();
+    let mut prefix_pending = false;
+    let mut last_size = repaint_desktop(&mut tty, &mut desktop)?;
+    let mut serial_buffer = [0_u8; 1024];
+    let mut tty_buffer = [0_u8; 256];
+
+    serial.write_all(&hello().encode().expect("HELLO payload is bounded"))?;
+    serial.flush()?;
+
+    loop {
+        let mut descriptors = [
+            libc::pollfd {
+                fd: serial.as_raw_fd(),
+                events: libc::POLLIN,
+                revents: 0,
+            },
+            libc::pollfd {
+                fd: tty.as_raw_fd(),
+                events: libc::POLLIN,
+                revents: 0,
+            },
+        ];
+        // A short timeout provides portable resize detection without installing
+        // a process-global signal handler.
+        let ready = unsafe { libc::poll(descriptors.as_mut_ptr(), 2, 100) };
+        if ready == -1 {
+            let error = io::Error::last_os_error();
+            if error.kind() == io::ErrorKind::Interrupted {
+                continue;
+            }
+            return Err(error);
+        }
+        let mut dirty = false;
+
+        if descriptors[0].revents & (libc::POLLHUP | libc::POLLERR) != 0 {
+            desktop.set_connected(false);
+            desktop.set_error(Some("transport lost".into()));
+            repaint_desktop(&mut tty, &mut desktop)?;
+            return Err(io::Error::new(
+                io::ErrorKind::UnexpectedEof,
+                "serial transport lost",
+            ));
+        }
+        if descriptors[0].revents & libc::POLLIN != 0 {
+            let count = serial.read(&mut serial_buffer)?;
+            if count == 0 {
+                desktop.set_connected(false);
+                repaint_desktop(&mut tty, &mut desktop)?;
+                return Err(io::Error::new(
+                    io::ErrorKind::UnexpectedEof,
+                    "serial device disconnected",
+                ));
+            }
+            for item in connection.push(&serial_buffer[..count]) {
+                match item {
+                    StreamItem::Plain(bytes) => desktop.push_channel(0, &bytes),
+                    StreamItem::Frame(frame) if frame.kind == FrameType::TtyOutput => {
+                        desktop.push_channel(frame.channel, &frame.payload);
+                    }
+                    StreamItem::Frame(frame) if frame.kind == FrameType::ProtocolError => {
+                        desktop
+                            .set_error(Some(String::from_utf8_lossy(&frame.payload).into_owned()));
+                    }
+                    StreamItem::Frame(_) => {}
+                    StreamItem::Error(error) => desktop.set_error(Some(format!("{error:?}"))),
+                }
+            }
+            dirty = true;
+        }
+
+        if descriptors[1].revents & libc::POLLIN != 0 {
+            let count = tty.read(&mut tty_buffer)?;
+            if count == 0 {
+                return Ok(());
+            }
+            for &byte in &tty_buffer[..count] {
+                if prefix_pending {
+                    prefix_pending = false;
+                    if desktop.command(byte) == CommandOutcome::Detach {
+                        return Ok(());
+                    }
+                    dirty = true;
+                    continue;
+                }
+                if byte == options.prefix {
+                    prefix_pending = true;
+                    continue;
+                }
+                if byte == 0x03 {
+                    return Ok(());
+                }
+                if connection.mode() == Mode::Framed {
+                    serial
+                        .write_all(&multiplexed_input_frame(desktop.focused_channel(), &[byte]))?;
+                } else {
+                    serial.write_all(&[byte])?;
+                }
+                serial.flush()?;
+            }
+        }
+
+        let size = terminal_size(tty.as_raw_fd());
+        if size != last_size {
+            last_size = size;
+            dirty = true;
+        }
+        if dirty {
+            repaint_desktop(&mut tty, &mut desktop)?;
+        }
+    }
+}
+
 fn run(options: &Options) -> io::Result<()> {
+    if options.windows {
+        return run_windows(options);
+    }
     let mut serial = OpenOptions::new()
         .read(true)
         .write(true)
@@ -778,6 +998,8 @@ mod tests {
                 verbose: false,
                 swtos: false,
                 framed: false,
+                windows: false,
+                prefix: 0x01,
                 time_mode: None,
             }
         );
@@ -818,6 +1040,21 @@ mod tests {
             multiplexed_input_frame(2, b"x"),
             vec![0xa5, 0x5a, 1, 1, 2, 1, 0, b'x', 125]
         );
+    }
+
+    #[test]
+    fn windows_mode_and_prefix_are_configurable() {
+        let ParseResult::Run(options) =
+            parse_args(args(&["te-rs", "--windows", "--prefix", "^B"])).unwrap()
+        else {
+            panic!("expected runnable options");
+        };
+        assert!(options.windows);
+        assert!(options.framed);
+        assert!(options.swtos);
+        assert_eq!(options.prefix, 0x02);
+        assert_eq!(parse_prefix("x"), Ok(b'x'));
+        assert!(parse_prefix("long").is_err());
     }
 
     #[test]

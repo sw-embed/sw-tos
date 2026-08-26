@@ -326,6 +326,16 @@ cargo run --release --manifest-path tools/te-rs/Cargo.toml -- --swtos DEVICE
 Add `--framed` for negotiated checksummed TTY and clock multiplexing. Omit it
 to retain the plain recovery transport; the host does not switch until SWTOS
 returns an exact HELLO acknowledgment.
+
+Use `--windows` for the fixed four-pane desktop. It implies framed mode and
+opens Shell, Application, Debugger, and Resources panes with independent
+scrollback. The focused pane is marked with `*` and exclusively receives
+ordinary keys. The default host prefix is Ctrl-A: follow it with `1` through
+`4` to focus a pane, `n` to cycle, `z` to zoom, `?` for help, or `d` to detach.
+Set another single-byte prefix with `--prefix KEY` or control notation such as
+`--prefix '^B'`. Ctrl-] remains ordinary target input unless selected as the
+host prefix.
+
 For a checksummed hardware upload, press Ctrl-R and enter the `.lgo` path. The
 uploader always drains the monitor echo to keep RTS/CTS flowing; add `--sync`
 to validate every echoed byte. The validated COR24-TB settings are

@@ -120,6 +120,10 @@ protocol-target-smoke:
 scheduled-protocol-smoke:
     ./tests/test-scheduled-protocol.sh
 
+# Verify the four-pane Rust frontend through paired pseudo-terminals
+windows-smoke:
+    ./tests/test-windows-pty.sh
+
 # Verify scheduled ls and run <name> command paths
 scheduled-catalog-smoke:
     ./tests/test-scheduled-catalog-commands.sh
