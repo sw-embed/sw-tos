@@ -3233,6 +3233,12 @@ _tty_poll_status:
 _tty_poll_read:
         la      r2,0xFF0100
         lbu     r0,0(r2)
+        push    r0
+        la      r2,_protocol_uart_rx_bytes
+        lw      r0,0(r2)
+        add     r0,1
+        sw      r0,0(r2)
+        pop     r0
         la      r2,_tty_poll_byte
         sw      r0,0(r2)
         ; In recovery mode ordinary bytes retain their legacy path. An A5
@@ -3329,7 +3335,16 @@ _PROTOCOL_FRAME:
         lbu     r0,0(r2)
         lc      r1,1
         ceq     r0,r1
-        brt     _protocol_frame_tty_input
+        brf     _protocol_frame_check_resource
+        la      r2,_protocol_frame_tty_input
+        jmp     (r2)
+_protocol_frame_check_resource:
+        lc      r1,8
+        ceq     r0,r1
+        brf     _protocol_frame_check_uptime
+        la      r2,_protocol_frame_resource
+        jmp     (r2)
+_protocol_frame_check_uptime:
         lc      r1,6
         ceq     r0,r1
         brf     _protocol_frame_check_wallclock
@@ -3392,6 +3407,293 @@ _protocol_ack_loop:
         bra     _protocol_frame_done
 
 _protocol_frame_done:
+        pop     r2
+        pop     r1
+        pop     r0
+        jmp     (r1)
+
+; An empty channel-zero RESOURCE_SNAPSHOT frame requests a fresh, complete
+; generation. Each response record is at most the decoder's sixteen-byte
+; bound. The host publishes a generation only after its matching end record.
+_protocol_frame_resource:
+        la      r2,_protocol_framed_mode
+        lbu     r0,0(r2)
+        ceq     r0,z
+        brf     _protocol_resource_check_channel
+        la      r2,_protocol_frame_done
+        jmp     (r2)
+_protocol_resource_check_channel:
+        la      r2,_PROTOCOL_RX_CHANNEL
+        lbu     r0,0(r2)
+        ceq     r0,z
+        brt     _protocol_resource_check_length
+        la      r2,_protocol_frame_done
+        jmp     (r2)
+_protocol_resource_check_length:
+        la      r2,_PROTOCOL_RX_LENGTH
+        lw      r0,0(r2)
+        ceq     r0,z
+        brt     _protocol_resource_request_valid
+        la      r2,_protocol_frame_done
+        jmp     (r2)
+_protocol_resource_request_valid:
+        la      r2,_protocol_resource_generation
+        lbu     r0,0(r2)
+        add     r0,1
+        sb      r0,0(r2)
+        la      r2,_protocol_resource_payload
+        lc      r0,1
+        sb      r0,0(r2)
+        la      r1,_protocol_resource_generation
+        lbu     r0,0(r1)
+        sb      r0,1(r2)
+        lc      r0,2
+        la      r2,_protocol_resource_length
+        sw      r0,0(r2)
+        la      r2,_protocol_emit_resource_record
+        jal     r1,(r2)
+
+        la      r2,_protocol_resource_payload
+        lc      r0,2
+        sb      r0,0(r2)
+        la      r1,_protocol_resource_generation
+        lbu     r0,0(r1)
+        sb      r0,1(r2)
+        la      r0,0xFEEB00
+        la      r1,_ebr_next
+        lw      r1,0(r1)
+        sub     r0,r1
+        sw      r0,2(r2)
+        la      r1,_allocation_peak_bytes
+        lw      r0,0(r1)
+        sw      r0,5(r2)
+        la      r1,_kernel_stack_peak_bytes
+        lw      r0,0(r1)
+        sw      r0,8(r2)
+        la      r1,_allocation_failures
+        lw      r0,0(r1)
+        sw      r0,11(r2)
+        la      r1,_child_count
+        lbu     r0,0(r1)
+        add     r0,1
+        sb      r0,14(r2)
+        lc      r0,3
+        sb      r0,15(r2)
+        lc      r0,16
+        la      r2,_protocol_resource_length
+        sw      r0,0(r2)
+        la      r2,_protocol_emit_resource_record
+        jal     r1,(r2)
+
+        lc      r0,1
+        la      r2,_protocol_resource_endpoint
+        sw      r0,0(r2)
+_protocol_resource_process_loop:
+        la      r2,_protocol_resource_endpoint
+        lw      r0,0(r2)
+        lc      r1,1
+        ceq     r0,r1
+        brt     _protocol_resource_process_a
+        lc      r1,2
+        ceq     r0,r1
+        brt     _protocol_resource_process_b
+        la      r2,_proc_c
+        la      r1,_proc_c_stats
+        bra     _protocol_resource_process_selected
+_protocol_resource_process_a:
+        la      r2,_proc_a
+        la      r1,_proc_a_stats
+        bra     _protocol_resource_process_selected
+_protocol_resource_process_b:
+        la      r2,_proc_b
+        la      r1,_proc_b_stats
+_protocol_resource_process_selected:
+        lw      r0,24(r2)
+        ceq     r0,z
+        brf     _protocol_resource_process_active
+        la      r2,_protocol_resource_process_next
+        jmp     (r2)
+_protocol_resource_process_active:
+        la      r0,_protocol_resource_proc
+        sw      r2,0(r0)
+        la      r0,_protocol_resource_stats
+        sw      r1,0(r0)
+        la      r2,_protocol_resource_payload
+        lc      r0,3
+        sb      r0,0(r2)
+        la      r1,_protocol_resource_generation
+        lbu     r0,0(r1)
+        sb      r0,1(r2)
+        la      r1,_protocol_resource_endpoint
+        lbu     r0,0(r1)
+        sb      r0,2(r2)
+        la      r1,_protocol_resource_proc
+        lw      r1,0(r1)
+        lw      r0,24(r1)
+        sb      r0,3(r2)
+        lc      r0,0
+        sb      r0,4(r2)
+        lw      r0,24(r1)
+        lc      r1,7
+        ceq     r0,r1
+        brf     _protocol_resource_not_blocked
+        lc      r0,1
+        sb      r0,4(r2)
+_protocol_resource_not_blocked:
+        la      r1,_protocol_resource_proc
+        lw      r1,0(r1)
+        lw      r1,33(r1)
+        lw      r0,15(r1)
+        sb      r0,5(r2)
+        lbu     r0,16(r1)
+        sb      r0,6(r2)
+        lw      r0,18(r1)
+        sb      r0,7(r2)
+        lbu     r0,19(r1)
+        sb      r0,8(r2)
+        la      r1,_protocol_resource_stats
+        lw      r1,0(r1)
+        lw      r0,3(r1)
+        sw      r0,9(r2)
+        lw      r0,6(r1)
+        sw      r0,12(r2)
+        lc      r0,15
+        la      r2,_protocol_resource_length
+        sw      r0,0(r2)
+        la      r2,_protocol_emit_resource_record
+        jal     r1,(r2)
+
+        la      r2,_protocol_resource_payload
+        lc      r0,4
+        sb      r0,0(r2)
+        la      r1,_protocol_resource_generation
+        lbu     r0,0(r1)
+        sb      r0,1(r2)
+        la      r1,_protocol_resource_endpoint
+        lbu     r0,0(r1)
+        sb      r0,2(r2)
+        la      r1,_protocol_resource_stats
+        lw      r1,0(r1)
+        lw      r0,9(r1)
+        sw      r0,3(r2)
+        lw      r0,18(r1)
+        sw      r0,6(r2)
+        lw      r0,21(r1)
+        sw      r0,9(r2)
+        la      r1,_protocol_resource_proc
+        lw      r1,0(r1)
+        lw      r1,33(r1)
+        lw      r1,0(r1)
+        lbu     r0,0(r1)
+        sb      r0,12(r2)
+        lbu     r0,1(r1)
+        sb      r0,13(r2)
+        lbu     r0,2(r1)
+        sb      r0,14(r2)
+        lbu     r0,3(r1)
+        sb      r0,15(r2)
+        lc      r0,16
+        la      r2,_protocol_resource_length
+        sw      r0,0(r2)
+        la      r2,_protocol_emit_resource_record
+        jal     r1,(r2)
+_protocol_resource_process_next:
+        la      r2,_protocol_resource_endpoint
+        lw      r0,0(r2)
+        add     r0,1
+        sw      r0,0(r2)
+        lc      r1,4
+        ceq     r0,r1
+        brt     _protocol_resource_process_done
+        la      r2,_protocol_resource_process_loop
+        jmp     (r2)
+_protocol_resource_process_done:
+
+        la      r2,_protocol_resource_payload
+        lc      r0,5
+        sb      r0,0(r2)
+        la      r1,_protocol_resource_generation
+        lbu     r0,0(r1)
+        sb      r0,1(r2)
+        la      r1,_protocol_error_count
+        lw      r0,0(r1)
+        sw      r0,2(r2)
+        la      r1,_protocol_uart_rx_bytes
+        lw      r0,0(r1)
+        sw      r0,5(r2)
+        la      r1,_protocol_uart_tx_bytes
+        lw      r0,0(r1)
+        sw      r0,8(r2)
+        lc      r0,11
+        la      r2,_protocol_resource_length
+        sw      r0,0(r2)
+        la      r2,_protocol_emit_resource_record
+        jal     r1,(r2)
+        la      r2,_protocol_frame_done
+        jmp     (r2)
+
+_protocol_emit_resource_record:
+        push    r0
+        push    r1
+        push    r2
+        lcu     r0,0xA5
+        la      r2,_protocol_putchar_raw
+        jal     r1,(r2)
+        lc      r0,0x5A
+        la      r2,_protocol_putchar_raw
+        jal     r1,(r2)
+        lc      r0,1
+        la      r2,_protocol_putchar_raw
+        jal     r1,(r2)
+        lc      r0,8
+        la      r2,_protocol_putchar_raw
+        jal     r1,(r2)
+        lc      r0,0
+        la      r2,_protocol_putchar_raw
+        jal     r1,(r2)
+        la      r2,_protocol_resource_length
+        lw      r0,0(r2)
+        la      r2,_protocol_putchar_raw
+        jal     r1,(r2)
+        lc      r0,0
+        la      r2,_protocol_putchar_raw
+        jal     r1,(r2)
+        la      r2,_protocol_resource_length
+        lw      r0,0(r2)
+        add     r0,9
+        la      r2,_protocol_resource_checksum
+        sw      r0,0(r2)
+        lc      r0,0
+        la      r2,_protocol_payload_index
+        sw      r0,0(r2)
+_protocol_emit_resource_loop:
+        la      r2,_protocol_payload_index
+        lw      r1,0(r2)
+        la      r2,_protocol_resource_length
+        lw      r0,0(r2)
+        ceq     r0,r1
+        brt     _protocol_emit_resource_checksum
+        la      r2,_protocol_resource_payload
+        add     r2,r1
+        lbu     r0,0(r2)
+        push    r0
+        la      r2,_protocol_resource_checksum
+        lw      r1,0(r2)
+        add     r1,r0
+        sw      r1,0(r2)
+        pop     r0
+        la      r2,_protocol_putchar_raw
+        jal     r1,(r2)
+        la      r2,_protocol_payload_index
+        lw      r0,0(r2)
+        add     r0,1
+        sw      r0,0(r2)
+        bra     _protocol_emit_resource_loop
+_protocol_emit_resource_checksum:
+        la      r2,_protocol_resource_checksum
+        lbu     r0,0(r2)
+        la      r2,_protocol_putchar_raw
+        jal     r1,(r2)
         pop     r2
         pop     r1
         pop     r0
@@ -3585,6 +3887,10 @@ _protocol_putchar_wait:
         brf     _protocol_putchar_wait
         la      r2,0xFF0100
         sb      r0,0(r2)
+        la      r2,_protocol_uart_tx_bytes
+        lw      r1,0(r2)
+        add     r1,1
+        sw      r1,0(r2)
         pop     r2
         pop     r1
         jmp     (r1)
@@ -3662,6 +3968,24 @@ _tty_poll_byte:
 _protocol_framed_mode:
         .byte   0
 _protocol_error_count:
+        .zero   3
+_protocol_uart_rx_bytes:
+        .zero   3
+_protocol_uart_tx_bytes:
+        .zero   3
+_protocol_resource_generation:
+        .byte   0
+_protocol_resource_payload:
+        .zero   16
+_protocol_resource_length:
+        .zero   3
+_protocol_resource_checksum:
+        .zero   3
+_protocol_resource_endpoint:
+        .zero   3
+_protocol_resource_proc:
+        .zero   3
+_protocol_resource_stats:
         .zero   3
 _protocol_payload_index:
         .zero   3

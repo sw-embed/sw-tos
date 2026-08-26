@@ -39,6 +39,17 @@ using RTS/CTS as backpressure rather than silently dropping output.
 
 UPTIME and WALL_CLOCK carry a three-byte little-endian centisecond value on
 channel zero. SWTOS delivers them only to the foreground time consumer, outside
-ordinary TTY input. Resource and debugger frame identifiers are reserved by
-version 1; their handlers arrive with their corresponding UI and debugger
-sagas.
+ordinary TTY input.
+
+RESOURCE_SNAPSHOT uses channel zero. An empty host-to-target frame requests a
+fresh generation; the target returns bounded records whose first two bytes are
+record kind and wrapping generation. Kind 1 begins a generation. Kind 2 carries
+24-bit little-endian arena current, arena peak, kernel-stack peak, allocation
+failures, and used/total slots. Kind 3 carries endpoint, state, blocked reason,
+16-bit stack/state sizes, dispatches, and yields. Kind 4 carries endpoint, IPC,
+TTY input/output totals, and a four-byte display name. Kind 5 ends the generation
+with protocol-error and UART receive/transmit totals. Hosts must discard partial
+or mismatched generations and publish only after kind 5. A target response
+record never exceeds the target decoder's 16-byte payload bound.
+
+Debugger frame identifiers remain reserved until the debugger saga.

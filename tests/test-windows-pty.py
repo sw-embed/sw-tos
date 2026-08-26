@@ -88,12 +88,24 @@ def assert_restored(process, terminal_master, terminal_slave, before, expected_s
 
 def normal_path():
     process, tty_master, tty_slave, serial_master, before = start_frontend()
+    request = frame(8, 0, b"")
+    assert request in read_until(serial_master, request), "resource request"
+    generation = 3
+    records = (
+        bytes((1, generation)),
+        bytes((2, generation, 10, 0, 0, 20, 0, 0, 3, 0, 0, 1, 0, 0, 2, 3)),
+        bytes((3, generation, 2, 7, 1, 192, 0, 1, 0, 9, 0, 0, 4, 0, 0)),
+        bytes((4, generation, 2, 3, 0, 0, 5, 0, 0, 6, 0, 0)) + b"cntr",
+        bytes((5, generation, 2, 0, 0, 8, 0, 0, 9, 0, 0)),
+    )
+    os.write(serial_master, b"".join(frame(8, 0, record) for record in records))
     os.write(serial_master, frame(2, 0, b"shell-one\nshell-two\n"))
     os.write(serial_master, frame(2, 1, b"app-one\n"))
-    screen = read_until(tty_master, b"app-one", 2.0)
+    screen = read_until(tty_master, b"cntr ep=2", 2.0)
     assert b"\x1b[?1049h" in screen and b"\x1b[?25l" in screen, "screen entry"
     assert b"Shell *" in screen and b"Application" in screen, "four-pane grid was not rendered"
     assert b"shell-two" in screen and b"app-one" in screen, "independent pane output missing"
+    assert b"mem 10/20B" in screen and b"cntr ep=2" in screen, "resource snapshot missing"
 
     os.write(tty_master, b"a")
     assert frame(1, 0, b"a") in read_until(serial_master, frame(1, 0, b"a")), "shell input route"

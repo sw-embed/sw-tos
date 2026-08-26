@@ -88,6 +88,14 @@ impl Pane {
         }
         output
     }
+
+    fn replace(&mut self, lines: &[String]) {
+        self.lines.clear();
+        self.current.clear();
+        for line in lines {
+            self.lines.push_back(line.clone());
+        }
+    }
 }
 
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
@@ -153,6 +161,16 @@ impl Desktop {
 
     pub fn set_error(&mut self, value: Option<String>) {
         self.error = value;
+    }
+
+    pub fn set_resources(&mut self, lines: &[String]) {
+        if let Some(pane) = self
+            .panes
+            .iter_mut()
+            .find(|pane| pane.kind == PaneKind::Resources)
+        {
+            pane.replace(lines);
+        }
     }
 
     pub fn command(&mut self, byte: u8) -> CommandOutcome {

@@ -18,6 +18,11 @@ def main() -> int:
         print("FAIL: scheduled kernel did not ACK initial and reconnect HELLO", file=sys.stderr)
         print(output.hex(" "), file=sys.stderr)
         return 1
+    resource_prefix = bytes.fromhex("c2 a5 5a 01 08")
+    if output.count(resource_prefix) < 10:
+        print("FAIL: scheduled kernel did not emit fresh resource snapshots after reconnect", file=sys.stderr)
+        print(output.hex(" "), file=sys.stderr)
+        return 1
     tty_x = bytes.fromhex("c2 a5 5a 01 02 01 01 58 5d")
     tty_y = bytes.fromhex("c2 a5 5a 01 02 02 01 59 5f")
     if output.count(tty_x) != 1 or output.count(tty_y) != 1:

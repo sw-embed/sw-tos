@@ -177,6 +177,13 @@ restore the cursor, alternate screen, serial settings, and local terminal on
 normal exit, detach, transport loss, and errors. The PTY acceptance recipe
 exercises both successful and failing teardown paths.
 
+The Resources pane requests a type-8 snapshot four times per second. SWTOS
+serializes allocator, process-sidecar, TTY, UART, and protocol-error counters as
+a bounded record generation. The host replaces the pane only after receiving a
+matching end record, marks data stale after one second, and clears published
+data on disconnect. This prevents a partial response or reconnect from mixing
+values sampled at different times, and keeps missing data distinct from zero.
+
 The interactive frontend is `scripts/swtos-terminal.py`. It runs the emulator
 behind a pseudo-terminal, forwards ordinary bytes, and recognizes when the
 shell has printed `Choice: `. If a numeric choice is followed by Return, the

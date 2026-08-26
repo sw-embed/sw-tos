@@ -220,6 +220,8 @@ Commit: `feat(windows): add four-pane Rust terminal frontend`
 
 ## Saga 6 -- Resource and activity monitor
 
+**Status:** Complete on the emulator feature branch.
+
 Add a host-rendered resource pane fed by low-rate target snapshots plus process
 spawn, exit, block, wake, and allocation events. Display process states,
 dispatch activity, stack/state allocation, memory current/peak values, IPC

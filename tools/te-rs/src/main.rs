@@ -7,6 +7,7 @@ use std::process::ExitCode;
 use std::thread;
 use std::time::{Duration, Instant, SystemTime, UNIX_EPOCH};
 use te_rs::protocol::{ConnectionDecoder, Frame, FrameType, Mode, StreamItem, hello};
+use te_rs::resource::SnapshotAssembler;
 use te_rs::ui::{CommandOutcome, Desktop};
 
 const DEFAULT_DEVICE: &str = "/dev/ttyUSB0";
@@ -553,6 +554,16 @@ fn multiplexed_input_frame(channel: u8, payload: &[u8]) -> Vec<u8> {
     .expect("terminal input payload is within the protocol limit")
 }
 
+fn resource_request_frame() -> Vec<u8> {
+    Frame {
+        kind: FrameType::ResourceSnapshot,
+        channel: 0,
+        payload: Vec::new(),
+    }
+    .encode()
+    .expect("empty resource request is bounded")
+}
+
 fn wall_centiseconds() -> u32 {
     let now = SystemTime::now()
         .duration_since(UNIX_EPOCH)
@@ -611,11 +622,15 @@ fn run_windows(options: &Options) -> io::Result<()> {
     let _tty_guard = TermiosGuard::terminal(tty.as_raw_fd())?;
     let _screen_guard = AlternateScreenGuard::enter(&mut tty)?;
     let mut connection = ConnectionDecoder::default();
+    let mut resources = SnapshotAssembler::default();
     let mut desktop = Desktop::default();
+    let mut resource_lines = resources.render(Instant::now());
+    desktop.set_resources(&resource_lines);
     let mut prefix_pending = false;
     let mut last_size = repaint_desktop(&mut tty, &mut desktop)?;
     let mut serial_buffer = [0_u8; 1024];
     let mut tty_buffer = [0_u8; 256];
+    let mut next_resource_request = Instant::now();
 
     serial.write_all(&hello().encode().expect("HELLO payload is bounded"))?;
     serial.flush()?;
@@ -674,6 +689,12 @@ fn run_windows(options: &Options) -> io::Result<()> {
                         desktop
                             .set_error(Some(String::from_utf8_lossy(&frame.payload).into_owned()));
                     }
+                    StreamItem::Frame(frame) if frame.kind == FrameType::ResourceSnapshot => {
+                        if resources.push(&frame.payload, Instant::now()) {
+                            resource_lines = resources.render(Instant::now());
+                            desktop.set_resources(&resource_lines);
+                        }
+                    }
                     StreamItem::Frame(_) => {}
                     StreamItem::Error(error) => desktop.set_error(Some(format!("{error:?}"))),
                 }
@@ -716,6 +737,18 @@ fn run_windows(options: &Options) -> io::Result<()> {
         if size != last_size {
             last_size = size;
             dirty = true;
+        }
+        let now = Instant::now();
+        let latest_resource_lines = resources.render(now);
+        if latest_resource_lines != resource_lines {
+            resource_lines = latest_resource_lines;
+            desktop.set_resources(&resource_lines);
+            dirty = true;
+        }
+        if connection.mode() == Mode::Framed && now >= next_resource_request {
+            serial.write_all(&resource_request_frame())?;
+            serial.flush()?;
+            next_resource_request = now + Duration::from_millis(250);
         }
         if dirty {
             repaint_desktop(&mut tty, &mut desktop)?;

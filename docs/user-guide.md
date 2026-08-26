@@ -336,6 +336,12 @@ Set another single-byte prefix with `--prefix KEY` or control notation such as
 `--prefix '^B'`. Ctrl-] remains ordinary target input unless selected as the
 host prefix.
 
+The Resources pane refreshes at four Hz and shows memory current/peak use,
+kernel-stack peak, allocation failures, live process state and activity, IPC
+and TTY totals, UART traffic, and protocol errors. `STALE` means no complete
+snapshot has arrived for one second; `resource data unavailable` means no
+complete generation has been received since connecting.
+
 For a checksummed hardware upload, press Ctrl-R and enter the `.lgo` path. The
 uploader always drains the monitor echo to keep RTS/CTS flowing; add `--sync`
 to validate every echoed byte. The validated COR24-TB settings are
