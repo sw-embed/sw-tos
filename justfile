@@ -128,6 +128,22 @@ windows-smoke:
 debug-info-smoke:
     ./tests/test-debug-info.sh
 
+# Build the pinned official stateful COR24 debugger under build/
+cor24-debugger-build:
+    ./scripts/build-cor24-debugger.sh
+
+# Open the four-pane frontend on an emulator-backed PTY
+cor24-debugger-demo image="build/scheduled-shell/program.bin" map="build/scheduled-shell/program.debug.json": scheduled-shell-build cor24-debugger-build te-rs-release
+    ./scripts/swtos-emulator-debug.py {{image}} {{map}}
+
+# Exercise Counter breakpoints, state, stepping, backtrace, and detach
+emulator-debugger-smoke: scheduled-shell-build cor24-debugger-build
+    ./tests/test-emulator-debugger.py
+
+# Build the interactive Rust terminal used by local and hardware demos
+te-rs-release:
+    cargo build --release --manifest-path tools/te-rs/Cargo.toml
+
 # Verify scheduled ls and run <name> command paths
 scheduled-catalog-smoke:
     ./tests/test-scheduled-catalog-commands.sh

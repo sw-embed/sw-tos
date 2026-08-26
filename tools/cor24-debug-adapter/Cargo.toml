@@ -1,0 +1,10 @@
+[package]
+name = "swtos-cor24-debug-adapter"
+version = "0.1.0"
+edition = "2024"
+
+[dependencies]
+cor24-emulator = { path = "../../../sw-cor24-emulator" }
+serde_json = "1"
+
+[workspace]

@@ -98,6 +98,21 @@ impl DebugMap {
             .take(count)
             .collect()
     }
+
+    pub fn source_location(&self, value: &str) -> Option<u32> {
+        let (source, line) = value.rsplit_once(':')?;
+        let line = line.parse::<u32>().ok()?;
+        self.instructions
+            .iter()
+            .find(|item| item.line == line && item.source.ends_with(source))
+            .map(|item| item.address)
+    }
+
+    fn function_at(&self, address: u32) -> Option<&Function> {
+        self.functions
+            .iter()
+            .find(|function| function.address <= address && address < function.end)
+    }
 }
 
 pub fn identity_request() -> Vec<u8> {
@@ -176,6 +191,70 @@ impl DebugConsole {
                         .join(" ")
                 )]
             }
+            [4, reason, a0, a1, a2] => {
+                let pc = u24(&[*a0, *a1, *a2]);
+                let reason = match reason {
+                    1 => "breakpoint",
+                    2 => "paused",
+                    3 => "running",
+                    4 => "halted",
+                    5 => "invalid instruction",
+                    6 => "stack overflow",
+                    7 => "stack underflow",
+                    _ => "unknown",
+                };
+                vec![format!("{reason} at {pc:06x}")]
+            }
+            [8, count, addresses @ ..] if addresses.len() == usize::from(*count) * 3 => {
+                if *count == 0 {
+                    vec!["breakpoints: none".into()]
+                } else {
+                    addresses
+                        .chunks_exact(3)
+                        .enumerate()
+                        .map(|(index, bytes)| {
+                            let address = u24(bytes);
+                            let name = self
+                                .map
+                                .as_ref()
+                                .and_then(|map| map.function_at(address))
+                                .map(|function| format!(" {}", function.name))
+                                .unwrap_or_default();
+                            format!("{}: {address:06x}{name}", index + 1)
+                        })
+                        .collect()
+                }
+            }
+            [11, pc, p1, p2, fp, f1, f2, sp, s1, s2, words @ ..] if words.len() % 3 == 0 => {
+                let pc = u24(&[*pc, *p1, *p2]);
+                let fp = u24(&[*fp, *f1, *f2]);
+                let sp = u24(&[*sp, *s1, *s2]);
+                let mut lines = vec![format!(
+                    "#0 {} pc={pc:06x} fp={fp:06x} sp={sp:06x}",
+                    self.frame_name(pc)
+                )];
+                for address in words.chunks_exact(3).map(u24).filter(|value| *value != 0) {
+                    if let Some(map) = &self.map
+                        && let Some(function) = map.function_at(address)
+                    {
+                        if !lines
+                            .iter()
+                            .any(|line| line.contains(&format!("pc={address:06x}")))
+                        {
+                            lines.push(format!(
+                                "#{} {} pc={address:06x}",
+                                lines.len(),
+                                function.name
+                            ));
+                        }
+                    }
+                }
+                if lines.len() == 1 {
+                    lines.push("best-effort stack scan found no caller".into());
+                }
+                lines
+            }
+            [12] => vec!["detached from emulator".into()],
             _ => vec!["invalid debug response".into()],
         }
     }
@@ -206,12 +285,17 @@ impl DebugConsole {
                 .parse::<u8>()
                 .map_err(|_| "length must be decimal".to_string())
                 .and_then(|length| self.memory_command(address, length)),
-            ["bl"] => Ok(text("breakpoints: none")),
-            ["delete", _] => Ok(text(
-                "no breakpoint exists (execution control arrives in Saga 8)",
-            )),
+            ["pause"] => Ok(request("pausing emulator", vec![4])),
+            ["continue"] | ["c"] => Ok(request("continuing emulator", vec![5])),
+            ["break", location] | ["b", location] => self.breakpoint_command(location, 6),
+            ["bl"] => Ok(request("requesting breakpoints", vec![8])),
+            ["delete", location] => self.breakpoint_command(location, 7),
+            ["step"] | ["s"] => Ok(request("stepping one instruction", vec![9])),
+            ["next"] | ["n"] => Ok(request("stepping over call", vec![10])),
+            ["bt"] => Ok(request("requesting ABI backtrace", vec![11])),
+            ["detach"] => Ok(request("detaching from emulator", vec![12])),
             ["help"] | [] => Ok(text(
-                "sym NAME | list LOC | dis LOC [N] | regs [EP] | x ADDR [N] | bl | delete N",
+                "sym NAME | list LOC | dis LOC [N] | regs [EP] | x ADDR [N] | pause | continue | break LOC | bl | delete LOC | step | next | bt | detach",
             )),
             _ => Err("unknown debugger command; use help".into()),
         };
@@ -239,10 +323,38 @@ impl DebugConsole {
     }
 
     fn address(&self, value: &str) -> Result<u32, String> {
+        if let Ok(address) = parse_address(value) {
+            return Ok(address);
+        }
         if let Some(symbol) = self.matched_map()?.symbol(value) {
             return Ok(symbol.address);
         }
+        if let Some(address) = self.matched_map()?.source_location(value) {
+            return Ok(address);
+        }
         parse_address(value)
+    }
+
+    fn frame_name(&self, address: u32) -> String {
+        self.map
+            .as_ref()
+            .and_then(|map| map.function_at(address))
+            .map(|function| function.name.clone())
+            .unwrap_or_else(|| "??".into())
+    }
+
+    fn breakpoint_command(&self, value: &str, opcode: u8) -> Result<CommandResult, String> {
+        let address = self.address(value)?;
+        let mut payload = vec![opcode];
+        payload.extend([address as u8, (address >> 8) as u8, (address >> 16) as u8]);
+        Ok(request(
+            if opcode == 6 {
+                "setting breakpoint"
+            } else {
+                "deleting breakpoint"
+            },
+            payload,
+        ))
     }
 
     fn list_command(&self, value: &str) -> Result<CommandResult, String> {
@@ -287,6 +399,13 @@ fn text(value: &str) -> CommandResult {
     }
 }
 
+fn request(message: &str, payload: Vec<u8>) -> CommandResult {
+    CommandResult {
+        lines: vec![message.into()],
+        request: Some(payload),
+    }
+}
+
 fn parse_address(value: &str) -> Result<u32, String> {
     let digits = value.strip_prefix("0x").unwrap_or(value);
     u32::from_str_radix(digits, 16)
@@ -315,7 +434,12 @@ mod tests {
                 address: 0x10,
                 module: "app".into(),
             }],
-            functions: Vec::new(),
+            functions: vec![Function {
+                name: "counter".into(),
+                address: 0x10,
+                end: 0x13,
+                module: "app".into(),
+            }],
             instructions: vec![
                 Instruction {
                     address: 0x10,
@@ -375,5 +499,22 @@ mod tests {
             "000010 app.s:7 lc r0,1"
         );
         assert_eq!(console.command("dis counter 2").lines.len(), 2);
+        assert_eq!(
+            console.command("break counter").request,
+            Some(vec![6, 0x10, 0, 0])
+        );
+        assert_eq!(
+            console.command("break app.s:8").request,
+            Some(vec![6, 0x12, 0, 0])
+        );
+        assert_eq!(
+            console.command("delete 0x10").request,
+            Some(vec![7, 0x10, 0, 0])
+        );
+        assert_eq!(console.command("next").request, Some(vec![10]));
+        assert_eq!(
+            console.response(&[8, 1, 0x10, 0, 0]),
+            vec!["1: 000010 counter"]
+        );
     }
 }

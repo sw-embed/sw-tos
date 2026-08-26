@@ -259,6 +259,13 @@ Commit: `feat(debug-info): add build-matched symbolic inspection`
 
 ## Saga 8 -- Emulator breakpoints and execution control
 
+**Status:** Complete on the emulator feature branch.
+
+Build the pinned official debugger core with `just cor24-debugger-build`, run
+the deterministic PTY session with `just emulator-debugger-smoke`, and open an
+interactive four-pane session with `just cor24-debugger-demo`. The generated
+tools and captures stay below ignored `build/` paths.
+
 Implement pause, continue, address/function/source breakpoints, breakpoint
 hit events, instruction step, step-over, register access, memory access, and a
 best-effort ABI-aware backtrace in the emulator. Temporary breakpoints used by

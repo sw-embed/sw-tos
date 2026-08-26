@@ -31,6 +31,7 @@ RECIPES=(
     scheduled-protocol-smoke
     windows-smoke
     debug-info-smoke
+    emulator-debugger-smoke
     scheduled-catalog-smoke
     scheduled-memory-smoke
     scheduled-reclaim-smoke
