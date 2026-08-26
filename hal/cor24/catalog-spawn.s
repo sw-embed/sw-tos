@@ -269,6 +269,13 @@ _TASK_SPAWN:
         push    r2
         push    r1
         mov     fp,sp
+        la      r2,_current_proc
+        lw      r0,0(r2)
+        la      r2,_stats_for_proc
+        jal     r1,(r2)
+        add     r0,9
+        la      r2,_stats_increment
+        jal     r1,(r2)
         lc      r0,0
         la      r2,_spawn_status
         sw      r0,0(r2)
@@ -298,6 +305,19 @@ _spawn_find_slot:
 _spawn_slot_found:
         la      r1,_spawn_process
         sw      r2,0(r1)
+        mov     r0,r2
+        la      r2,_stats_for_proc
+        jal     r1,(r2)
+        mov     r2,r0
+        lc      r0,0
+        sw      r0,0(r2)
+        sw      r0,3(r2)
+        sw      r0,6(r2)
+        sw      r0,9(r2)
+        sw      r0,12(r2)
+        sw      r0,15(r2)
+        sw      r0,18(r2)
+        sw      r0,21(r2)
         lw      r0,9(fp)        ; selected PROGRAM_DESC pointer
         la      r2,_spawn_resident
         jal     r1,(r2)
@@ -2050,6 +2070,13 @@ _yield:
         push    r2
         push    fp
         la      r2,_current_proc
+        lw      r0,0(r2)
+        la      r2,_stats_for_proc
+        jal     r1,(r2)
+        add     r0,6
+        la      r2,_stats_increment
+        jal     r1,(r2)
+        la      r2,_current_proc
         lw      r2,0(r2)
         mov     r0,sp
         sw      r0,9(r2)
@@ -2068,6 +2095,18 @@ _scan_check_state:
 _select_context:
         la      r1,_current_proc
         sw      r2,0(r1)
+        push    r2
+        push    r1
+        push    r0
+        mov     r0,r2
+        la      r2,_stats_for_proc
+        jal     r1,(r2)
+        add     r0,3
+        la      r2,_stats_increment
+        jal     r1,(r2)
+        pop     r0
+        pop     r1
+        pop     r2
         lw      r0,9(r2)
         mov     sp,r0
 _restore_context:
@@ -2160,6 +2199,15 @@ _task_getchar_wait:
         lbu     r0,0(r2)
         lw      r2,9(fp)
         sb      r0,0(r2)
+        push    r0
+        la      r2,_current_proc
+        lw      r0,0(r2)
+        la      r2,_stats_for_proc
+        jal     r1,(r2)
+        add     r0,18
+        la      r2,_stats_increment
+        jal     r1,(r2)
+        pop     r0
         mov     sp,fp
         pop     r1
         pop     r2
@@ -2244,6 +2292,260 @@ _task_process_list_state:
         pop     r1
         pop     r2
         pop     fp
+        jmp     (r1)
+
+; TASK_PROCESS_INFO(endpoint, result): return status, blocked reason,
+; configured stack/state words, dispatches, yields, IPC operations, TTY input
+; and output bytes, and the catalog descriptor pointer. Blocked reason is zero
+; until the virtual-TTY saga introduces blocking process states.
+        .globl  _TASK_PROCESS_INFO
+_TASK_PROCESS_INFO:
+        push    fp
+        push    r2
+        push    r1
+        mov     fp,sp
+        lw      r0,9(fp)
+        lc      r1,1
+        ceq     r0,r1
+        brt     _task_process_info_a
+        lc      r1,2
+        ceq     r0,r1
+        brt     _task_process_info_b
+        lc      r1,3
+        ceq     r0,r1
+        brf     _task_process_info_invalid
+        la      r2,_proc_c
+        la      r0,_proc_c_stats
+        bra     _task_process_info_selected
+_task_process_info_a:
+        la      r2,_proc_a
+        la      r0,_proc_a_stats
+        bra     _task_process_info_selected
+_task_process_info_b:
+        la      r2,_proc_b
+        la      r0,_proc_b_stats
+_task_process_info_selected:
+        push    r0
+        lw      r1,12(fp)
+        lw      r0,24(r2)
+        sw      r0,0(r1)
+        lc      r0,0
+        sw      r0,3(r1)
+        lw      r0,33(r2)
+        sw      r0,27(r1)
+        ceq     r0,z
+        brt     _task_process_info_no_descriptor
+        lw      r2,15(r0)
+        sw      r2,6(r1)
+        lw      r2,18(r0)
+        sw      r2,9(r1)
+        bra     _task_process_info_copy_stats
+_task_process_info_no_descriptor:
+        lc      r0,0
+        sw      r0,6(r1)
+        sw      r0,9(r1)
+_task_process_info_copy_stats:
+        pop     r2
+        lw      r0,3(r2)
+        sw      r0,12(r1)
+        lw      r0,6(r2)
+        sw      r0,15(r1)
+        lw      r0,9(r2)
+        sw      r0,18(r1)
+        lw      r0,18(r2)
+        sw      r0,21(r1)
+        lw      r0,21(r2)
+        sw      r0,24(r1)
+        bra     _task_process_info_done
+_task_process_info_invalid:
+        lw      r1,12(fp)
+        lc      r0,0
+        sw      r0,0(r1)
+        sw      r0,3(r1)
+        sw      r0,6(r1)
+        sw      r0,9(r1)
+        sw      r0,12(r1)
+        sw      r0,15(r1)
+        sw      r0,18(r1)
+        sw      r0,21(r1)
+        sw      r0,24(r1)
+        sw      r0,27(r1)
+_task_process_info_done:
+        mov     sp,fp
+        pop     r1
+        pop     r2
+        pop     fp
+        jmp     (r1)
+
+; TASK_PROCESS_PRINT(endpoint): render one detailed process snapshot. Keeping
+; the repetitive formatting in the kernel avoids inflating the bootstrap PL/SW
+; compiler workload while TASK_PROCESS_INFO remains the structured interface.
+        .globl  _TASK_PROCESS_PRINT
+_TASK_PROCESS_PRINT:
+        push    fp
+        push    r2
+        push    r1
+        mov     fp,sp
+        add     sp,-30
+        mov     r0,sp
+        push    r0
+        lw      r0,9(fp)
+        push    r0
+        la      r2,_TASK_PROCESS_INFO
+        jal     r1,(r2)
+        add     sp,6
+        la      r0,_SHELL_PROC_EP
+        la      r2,_puts
+        jal     r1,(r2)
+        lw      r0,9(fp)
+        la      r2,_print_stat_int
+        jal     r1,(r2)
+        la      r0,_SHELL_PROC_NAME
+        la      r2,_puts
+        jal     r1,(r2)
+        lw      r0,-3(fp)
+        ceq     r0,z
+        brt     _task_process_print_no_name
+        lw      r0,0(r0)
+        bra     _task_process_print_name
+_task_process_print_no_name:
+        la      r0,_SHELL_PROC_NONE
+_task_process_print_name:
+        la      r2,_puts
+        jal     r1,(r2)
+        la      r0,_SHELL_PROC_STATUS
+        la      r2,_puts
+        jal     r1,(r2)
+        lw      r0,-30(fp)
+        la      r2,_print_stat_int
+        jal     r1,(r2)
+        la      r0,_SHELL_PROC_BLOCKED
+        la      r2,_puts
+        jal     r1,(r2)
+        lw      r0,-27(fp)
+        la      r2,_print_stat_int
+        jal     r1,(r2)
+        la      r0,_SHELL_PROC_STACK
+        la      r2,_puts
+        jal     r1,(r2)
+        lw      r0,-24(fp)
+        la      r2,_print_stat_int
+        jal     r1,(r2)
+        la      r0,_SHELL_PROC_STATE_WORDS
+        la      r2,_puts
+        jal     r1,(r2)
+        lw      r0,-21(fp)
+        la      r2,_print_stat_int
+        jal     r1,(r2)
+        la      r0,_SHELL_PROC_DISPATCH
+        la      r2,_puts
+        jal     r1,(r2)
+        lw      r0,-18(fp)
+        la      r2,_print_stat_int
+        jal     r1,(r2)
+        la      r0,_SHELL_PROC_YIELDS
+        la      r2,_puts
+        jal     r1,(r2)
+        lw      r0,-15(fp)
+        la      r2,_print_stat_int
+        jal     r1,(r2)
+        la      r0,_SHELL_PROC_IPC
+        la      r2,_puts
+        jal     r1,(r2)
+        lw      r0,-12(fp)
+        la      r2,_print_stat_int
+        jal     r1,(r2)
+        la      r0,_SHELL_PROC_TTY_IN
+        la      r2,_puts
+        jal     r1,(r2)
+        lw      r0,-9(fp)
+        la      r2,_print_stat_int
+        jal     r1,(r2)
+        la      r0,_SHELL_PROC_TTY_OUT
+        la      r2,_puts
+        jal     r1,(r2)
+        lw      r0,-6(fp)
+        la      r2,_print_stat_int
+        jal     r1,(r2)
+        lc      r0,10
+        la      r2,_putchar
+        jal     r1,(r2)
+        mov     sp,fp
+        pop     r1
+        pop     r2
+        pop     fp
+        jmp     (r1)
+
+_print_stat_int:
+        push    fp
+        push    r2
+        push    r1
+        mov     fp,sp
+        add     sp,-18
+        sw      r0,-3(fp)
+        lc      r0,0
+        sw      r0,-6(fp)
+        lw      r0,-3(fp)
+        ceq     r0,z
+        brf     _print_stat_digits
+        lc      r0,48
+        la      r2,_putchar
+        jal     r1,(r2)
+        bra     _print_stat_done
+_print_stat_digits:
+        lw      r0,-3(fp)
+        la      r2,_stats_div10
+        jal     r1,(r2)
+        sw      r0,-3(fp)
+        add     r2,48
+        push    r2
+        lw      r0,-6(fp)
+        mov     r2,r0
+        add     r2,-18
+        add     r2,fp
+        pop     r0
+        sb      r0,0(r2)
+        lw      r0,-6(fp)
+        add     r0,1
+        sw      r0,-6(fp)
+        lw      r0,-3(fp)
+        ceq     r0,z
+        brf     _print_stat_digits
+_print_stat_emit:
+        lw      r0,-6(fp)
+        add     r0,-1
+        sw      r0,-6(fp)
+        mov     r2,r0
+        add     r2,-18
+        add     r2,fp
+        lbu     r0,0(r2)
+        la      r2,_putchar
+        jal     r1,(r2)
+        lw      r0,-6(fp)
+        ceq     r0,z
+        brf     _print_stat_emit
+_print_stat_done:
+        mov     sp,fp
+        pop     r1
+        pop     r2
+        pop     fp
+        jmp     (r1)
+
+; Divide unsigned r0 by ten, returning quotient in r0 and remainder in r2.
+_stats_div10:
+        push    r1
+        lc      r1,0
+_stats_div10_loop:
+        lc      r2,10
+        clu     r0,r2
+        brt     _stats_div10_done
+        sub     r0,r2
+        add     r1,1
+        bra     _stats_div10_loop
+_stats_div10_done:
+        mov     r2,r0
+        mov     r0,r1
+        pop     r1
         jmp     (r1)
 
 ; TASK_MEM_INFO(result): snapshot fixed and runtime memory accounting.
@@ -2500,6 +2802,13 @@ _TASK_JOIN:
         push    r2
         push    r1
         mov     fp,sp
+        la      r2,_current_proc
+        lw      r0,0(r2)
+        la      r2,_stats_for_proc
+        jal     r1,(r2)
+        add     r0,9
+        la      r2,_stats_increment
+        jal     r1,(r2)
 _task_join_wait:
         la      r2,_child_count
         lbu     r0,0(r2)
@@ -2707,6 +3016,15 @@ _puts_done:
 _putchar:
         push    r1
         push    r2
+        push    r0
+        la      r2,_current_proc
+        lw      r0,0(r2)
+        la      r2,_stats_for_proc
+        jal     r1,(r2)
+        add     r0,21
+        la      r2,_stats_increment
+        jal     r1,(r2)
+        pop     r0
 _putchar_wait:
         la      r2,0xFF0101
         lbu     r1,0(r2)
@@ -2717,6 +3035,40 @@ _putchar_wait:
         la      r2,0xFF0100
         sb      r0,0(r2)
         pop     r2
+        pop     r1
+        jmp     (r1)
+
+; Map a process descriptor in r0 to its ABI-independent statistics sidecar.
+_stats_for_proc:
+        push    r1
+        push    r2
+        la      r1,_proc_a
+        mov     r2,r0
+        mov     r0,r2
+        ceq     r0,r1
+        brf     _stats_for_proc_b
+        la      r0,_proc_a_stats
+        bra     _stats_for_proc_done
+_stats_for_proc_b:
+        la      r1,_proc_b
+        mov     r0,r2
+        ceq     r0,r1
+        brf     _stats_for_proc_c
+        la      r0,_proc_b_stats
+        bra     _stats_for_proc_done
+_stats_for_proc_c:
+        la      r0,_proc_c_stats
+_stats_for_proc_done:
+        pop     r2
+        pop     r1
+        jmp     (r1)
+
+; Increment one 24-bit counter. Natural machine-word wraparound is deliberate.
+_stats_increment:
+        push    r1
+        lw      r1,0(r0)
+        add     r1,1
+        sw      r1,0(r0)
         pop     r1
         jmp     (r1)
 
@@ -2733,6 +3085,14 @@ _proc_b:
 _proc_c:
         .zero   39
 _proc_table_end:
+; Eight words per slot: reserved, dispatches, yields, IPC operations, reserved
+; state transitions, reserved block count, TTY input bytes, TTY output bytes.
+_proc_a_stats:
+        .zero   24
+_proc_b_stats:
+        .zero   24
+_proc_c_stats:
+        .zero   24
 _proc_b_image_descriptor:
         .zero   24
 _proc_b_image_provider:

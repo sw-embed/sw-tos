@@ -90,6 +90,12 @@ boot-stack measurements, per-process configured allocation, process-slot use,
 and resettable counters. Physical capacity and process allocations are reported
 in 24-bit words; packed build artifacts remain byte-sized.
 
+Activity counters live in per-slot sidecars so the stable 39-byte process ABI
+does not change. Detailed process snapshots expose catalog identity, state,
+blocked reason, configured allocation, scheduler dispatches and yields,
+kernel-service/IPC operations, and UART bytes. The counters wrap naturally at
+the unsigned 24-bit word boundary. Dispatch activity is not CPU time.
+
 ## IPC
 
 The kernel implements synchronous `send`, `receive`, and `sendrec` with fixed

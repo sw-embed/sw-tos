@@ -240,6 +240,18 @@ def render_scheduled(entries: list[dict], manifest: Path) -> str:
         "SHELL_MEM_PROC_STACK": " stack=",
         "SHELL_MEM_PROC_STATE": " state=",
         "SHELL_MEM_PROC_TOTAL": " total=",
+        "SHELL_PROC_EP": "ep=",
+        "SHELL_PROC_NAME": " name=",
+        "SHELL_PROC_STATUS": " state=",
+        "SHELL_PROC_BLOCKED": " blocked=",
+        "SHELL_PROC_STACK": " stack=",
+        "SHELL_PROC_STATE_WORDS": " statew=",
+        "SHELL_PROC_DISPATCH": " dispatch=",
+        "SHELL_PROC_YIELDS": " yields=",
+        "SHELL_PROC_IPC": " ipc=",
+        "SHELL_PROC_TTY_IN": " ttyin=",
+        "SHELL_PROC_TTY_OUT": " ttyout=",
+        "SHELL_PROC_NONE": "none",
     }
     for index, entry in enumerate(images):
         shell_strings[f"SHELL_DU_TEXT_{index}"] = f"{entry['name']} {entry['image_words'] * 3} bytes"

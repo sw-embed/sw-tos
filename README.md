@@ -321,13 +321,14 @@ just scheduled-shell-interactive
 Shell commands include:
 
 - `ls` and its CP/M-style alias `dir` list catalog entries.
-- `ps` lists process slots.
+- `ps` lists process slots; `ps -l` shows detailed activity counters.
 - `run <name>` launches a program descriptor.
 - `help` lists commands.
 - `uname` identifies SWTOS and COR24.
 - `df` summarizes generated catalog/image totals.
 - `du` lists generated external-image sizes.
-- `stat <name>` reports kind, source, stack/state words, flags, and image bytes.
+- `stat <name>` reports catalog metadata; `stat <endpoint>` reports process
+  identity, state, allocation, dispatch/yield, IPC, and TTY counters.
 
 Catalog-dependent utility text is generated from `catalog/catalog.toml` and
 the image manifests. Displayed sizes therefore stay tied to build inputs.
@@ -341,6 +342,8 @@ The scheduler scans a three-entry process table. Two child slots can run
 concurrently. `just scheduled-multislot-smoke` verifies their independent
 state and round-robin `B1 C1 B2 C2` output. `ps` walks the same table and prints
 each endpoint as `FREE` or `RUNNABLE`.
+Detailed counters are unsigned 24-bit values and wrap naturally; scheduler
+dispatches describe activity, not CPU utilization.
 
 The heartbeat-aware frontend accepts `--image`, so the same byte stuffing,
 Ctrl-] translation, and line-ending filtering serve both the compatibility and

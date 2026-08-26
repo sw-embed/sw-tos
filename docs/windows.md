@@ -140,6 +140,8 @@ Commit: `feat(mem): add runtime memory accounting and mem command`
 
 ## Saga 2 -- Process activity statistics
 
+**Status:** Complete on the emulator feature branch.
+
 Expose endpoint, catalog identity, process state, blocked reason, configured
 stack/state allocation, scheduler dispatches, yields, IPC operations, and TTY
 byte counts. Extend `ps` with a detailed form and add `stat <endpoint>`.

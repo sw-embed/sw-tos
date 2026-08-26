@@ -24,6 +24,7 @@ RECIPES=(
     catalog-list-smoke
     catalog-spawn-smoke
     scheduled-shell-smoke
+    scheduled-stats-smoke
     scheduled-catalog-smoke
     scheduled-memory-smoke
     scheduled-reclaim-smoke

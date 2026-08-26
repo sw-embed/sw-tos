@@ -59,10 +59,12 @@ system. Wait for `Choice: `, then use:
 | `ls` + Return | List catalog programs and services |
 | `dir` + Return | Use the CP/M-style alias for `ls` |
 | `ps` + Return | Show process slots and their states |
+| `ps -l` + Return | Show detailed activity for every process slot |
 | `help` + Return | List shell commands |
 | `df` + Return | Show generated catalog and image totals |
 | `du` + Return | Show generated external-image sizes |
 | `stat NAME` + Return | Show catalog metadata for one entry |
+| `stat ENDPOINT` + Return | Show detailed activity for endpoint 1, 2, or 3 |
 | `uname` + Return | Print the SWTOS target and version |
 | `run hello` + Return | Spawn a resident program by catalog name |
 | `run counter` + Return | Spawn Counter by catalog name |
@@ -183,6 +185,14 @@ stack and state allocation for each live endpoint. `mem -r` resets the arena
 high-water mark to current use and clears the allocation-failure counter; it
 does not erase the boot-stack measurement. Values are COR24 24-bit words unless
 the field explicitly says bytes.
+
+### Process activity
+
+Use `ps -l` for all slots or `stat 1`, `stat 2`, and `stat 3` for one stable
+endpoint. Each line includes catalog identity, process and blocked states,
+configured stack/state words, scheduler dispatches and yields, IPC/kernel
+service operations, and TTY input/output bytes. These unsigned 24-bit counters
+wrap after `16777215`; dispatch counts are activity indicators, not CPU time.
 
 ## Add an external PL/SW application
 

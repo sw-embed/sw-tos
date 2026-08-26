@@ -100,6 +100,10 @@ catalog-spawn-smoke:
 scheduled-shell-smoke:
     ./tests/test-scheduled-shell.sh
 
+# Verify detailed process statistics and endpoint inspection
+scheduled-stats-smoke:
+    ./tests/test-scheduled-stats.sh
+
 # Verify scheduled ls and run <name> command paths
 scheduled-catalog-smoke:
     ./tests/test-scheduled-catalog-commands.sh
