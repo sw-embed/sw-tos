@@ -20,7 +20,7 @@ if ! grep -q "$counter_line" <<<"$output"; then
     exit 1
 fi
 
-if ! grep -q 'ep=1 name=shell state=1 blocked=0 stack=256 statew=6 dispatch=2 yields=3 ipc=2' <<<"$output"; then
+if ! grep -q 'ep=1 name=shell state=1 blocked=0 stack=256 statew=6 dispatch=16 yields=17 ipc=2' <<<"$output"; then
     echo "FAIL: detailed ps did not report shell scheduling and IPC operations" >&2
     echo "$output" >&2
     exit 1

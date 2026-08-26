@@ -345,6 +345,10 @@ each endpoint as `FREE` or `RUNNABLE`.
 Detailed counters are unsigned 24-bit values and wrap naturally; scheduler
 dispatches describe activity, not CPU utilization.
 
+Scheduled input passes through four kernel virtual-TTY channels. Empty reads
+block and yield, foreground ownership isolates concurrent readers, and child
+exit transfers focus without allowing one process to consume another's input.
+
 The heartbeat-aware frontend accepts `--image`, so the same byte stuffing,
 Ctrl-] translation, and line-ending filtering serve both the compatibility and
 scheduler-integrated images. The latter is ready to become the primary demo.

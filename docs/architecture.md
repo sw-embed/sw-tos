@@ -96,6 +96,14 @@ blocked reason, configured allocation, scheduler dispatches and yields,
 kernel-service/IPC operations, and UART bytes. The counters wrap naturally at
 the unsigned 24-bit word boundary. Dispatch activity is not CPU time.
 
+Four fixed virtual-TTY records provide endpoint-owned input queues without
+expanding `PROC_DESC`. Each queue holds sixteen bytes and counts overflow.
+An empty read sets `PROC_BLOCKED_TTY`; the scheduler polls the recovery UART
+only for the blocked foreground owner, enqueues one byte, and wakes that owner.
+Foreground ownership follows a newly spawned child and falls back to another
+live child before returning to the shell. Output remains serialized through
+the kernel UART path until the framed multiplexed transport is introduced.
+
 ## IPC
 
 The kernel implements synchronous `send`, `receive`, and `sendrec` with fixed

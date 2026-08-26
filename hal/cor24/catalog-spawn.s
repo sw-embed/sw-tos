@@ -55,6 +55,8 @@ _kernel_stack_fill:
         la      r0,_proc_a
         la      r2,_current_proc
         sw      r0,0(r2)
+        la      r2,_tty_foreground_proc
+        sw      r0,0(r2)
         ; Stack grows down from FEEC00. Find the first word changed by boot and
         ; retain the used byte count; later reporting converts it to words.
         la      r0,0xFEEB01
@@ -335,6 +337,8 @@ _spawn_endpoint_three:
         lc      r0,3
 _spawn_set_endpoint:
         sw      r0,18(r2)
+        la      r1,_tty_foreground_proc
+        sw      r2,0(r1)
         la      r2,_child_count
         lbu     r0,0(r2)
         add     r0,1
@@ -2081,6 +2085,10 @@ _yield:
         mov     r0,sp
         sw      r0,9(r2)
 _scan_runnable:
+        push    r2
+        la      r2,_tty_poll_uart
+        jal     r1,(r2)
+        pop     r2
         add     r2,39
         la      r1,_proc_table_end
         mov     r0,r2
@@ -2181,7 +2189,8 @@ _TASK_YIELD:
         pop     fp
         jmp     (r1)
 
-; TASK_GETCHAR(destination): polled UART input for the scheduled shell.
+; TASK_GETCHAR(destination): blocking read from the current process's virtual
+; TTY. The scheduler polls the recovery UART and wakes the foreground owner.
         .globl  _TASK_GETCHAR
 _TASK_GETCHAR:
         push    fp
@@ -2189,13 +2198,47 @@ _TASK_GETCHAR:
         push    r1
         mov     fp,sp
 _task_getchar_wait:
-        la      r2,0xFF0101
-        lbu     r0,0(r2)
-        lcu     r1,1
-        and     r0,r1
+        la      r2,_current_proc
+        lw      r0,0(r2)
+        la      r2,_tty_for_proc
+        jal     r1,(r2)
+        mov     r2,r0
+        pop     r1              ; foreground PROC_DESC
+        pop     r0              ; received byte
+        push    r1
+        push    r0
+        lw      r0,6(r2)
         ceq     r0,z
-        brt     _task_getchar_wait
-        la      r2,0xFF0100
+        brf     _task_getchar_ready
+        la      r2,_current_proc
+        lw      r2,0(r2)
+        lc      r0,7
+        sw      r0,24(r2)       ; PROC_BLOCKED_TTY
+        la      r2,_yield
+        jal     r1,(r2)
+        bra     _task_getchar_wait
+_task_getchar_ready:
+        lw      r0,0(r2)
+        push    r2
+        add     r2,12
+        add     r2,r0
+        lbu     r0,0(r2)
+        pop     r2
+        lw      r1,0(r2)
+        add     r1,1
+        lc      r0,15
+        and     r1,r0
+        sw      r1,0(r2)
+        lw      r1,6(r2)
+        add     r1,-1
+        sw      r1,6(r2)
+        ; Recover the byte at the previous head position.
+        lw      r1,0(r2)
+        add     r1,-1
+        lc      r0,15
+        and     r1,r0
+        add     r2,12
+        add     r2,r1
         lbu     r0,0(r2)
         lw      r2,9(fp)
         sb      r0,0(r2)
@@ -2331,6 +2374,15 @@ _task_process_info_selected:
         sw      r0,0(r1)
         lc      r0,0
         sw      r0,3(r1)
+        lw      r0,24(r2)
+        lc      r1,7
+        ceq     r0,r1
+        brf     _task_process_info_not_tty_blocked
+        lw      r1,12(fp)
+        lc      r0,1
+        sw      r0,3(r1)
+_task_process_info_not_tty_blocked:
+        lw      r1,12(fp)
         lw      r0,33(r2)
         sw      r0,27(r1)
         ceq     r0,z
@@ -2956,6 +3008,21 @@ _task_exit_keep_arena:
         la      r2,_proc_a
         la      r1,_current_proc
         sw      r2,0(r1)
+        ; Keep input focus on a surviving child. This lets two independent
+        ; blocked readers drain their own foreground input in turn.
+        la      r2,_proc_b
+        lw      r0,24(r2)
+        ceq     r0,z
+        brf     _task_exit_set_foreground
+        la      r2,_proc_c
+        lw      r0,24(r2)
+        ceq     r0,z
+        brf     _task_exit_set_foreground
+        la      r2,_proc_a
+_task_exit_set_foreground:
+        la      r1,_tty_foreground_proc
+        sw      r2,0(r1)
+        la      r2,_proc_a
         lw      r0,9(r2)
         mov     sp,r0
         la      r2,_restore_context
@@ -3038,6 +3105,98 @@ _putchar_wait:
         pop     r1
         jmp     (r1)
 
+; Map a process descriptor in r0 to its fixed virtual-TTY input ring.
+_tty_for_proc:
+        push    r1
+        push    r2
+        mov     r2,r0
+        la      r1,_proc_a
+        mov     r0,r2
+        ceq     r0,r1
+        brf     _tty_for_proc_b
+        la      r0,_tty_a
+        bra     _tty_for_proc_done
+_tty_for_proc_b:
+        la      r1,_proc_b
+        mov     r0,r2
+        ceq     r0,r1
+        brf     _tty_for_proc_c
+        la      r0,_tty_b
+        bra     _tty_for_proc_done
+_tty_for_proc_c:
+        la      r0,_tty_c
+_tty_for_proc_done:
+        pop     r2
+        pop     r1
+        jmp     (r1)
+
+; Move at most one recovery-UART byte into the foreground virtual TTY and
+; wake its owner if it is blocked in TASK_GETCHAR.
+_tty_poll_uart:
+        push    r0
+        push    r1
+        push    r2
+        la      r2,_tty_foreground_proc
+        lw      r2,0(r2)
+        lw      r0,24(r2)
+        lc      r1,7
+        ceq     r0,r1
+        brf     _tty_poll_done
+        la      r2,0xFF0101
+        lbu     r0,0(r2)
+        lcu     r1,1
+        and     r0,r1
+        ceq     r0,z
+        brt     _tty_poll_done
+        la      r2,0xFF0100
+        lbu     r0,0(r2)
+        la      r2,_tty_poll_byte
+        sw      r0,0(r2)
+        la      r2,_tty_foreground_proc
+        lw      r0,0(r2)
+        la      r2,_tty_poll_proc
+        sw      r0,0(r2)
+        la      r2,_tty_for_proc
+        jal     r1,(r2)
+        mov     r2,r0
+        lw      r0,6(r2)
+        lc      r1,16
+        ceq     r0,r1
+        brf     _tty_poll_store
+        lw      r0,9(r2)
+        add     r0,1
+        sw      r0,9(r2)
+        bra     _tty_poll_done
+_tty_poll_store:
+        lw      r1,3(r2)
+        add     r2,12
+        add     r2,r1
+        la      r0,_tty_poll_byte
+        lw      r0,0(r0)
+        sb      r0,0(r2)
+        add     r2,-12
+        sub     r2,r1
+        add     r1,1
+        lc      r0,15
+        and     r1,r0
+        sw      r1,3(r2)
+        lw      r0,6(r2)
+        add     r0,1
+        sw      r0,6(r2)
+        la      r2,_tty_poll_proc
+        lw      r2,0(r2)
+        lw      r0,24(r2)
+        lc      r1,7
+        ceq     r0,r1
+        brf     _tty_poll_done
+        lc      r0,1
+        sw      r0,24(r2)
+_tty_poll_done:
+        pop     r2
+        pop     r1
+        pop     r0
+        jmp     (r1)
+
 ; Map a process descriptor in r0 to its ABI-independent statistics sidecar.
 _stats_for_proc:
         push    r1
@@ -3093,6 +3252,21 @@ _proc_b_stats:
         .zero   24
 _proc_c_stats:
         .zero   24
+; head, tail, count, overflow, then sixteen input bytes.
+_tty_a:
+        .zero   28
+_tty_b:
+        .zero   28
+_tty_c:
+        .zero   28
+_tty_d:
+        .zero   28
+_tty_foreground_proc:
+        .zero   3
+_tty_poll_proc:
+        .zero   3
+_tty_poll_byte:
+        .zero   3
 _proc_b_image_descriptor:
         .zero   24
 _proc_b_image_provider:

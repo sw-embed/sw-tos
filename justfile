@@ -104,6 +104,10 @@ scheduled-shell-smoke:
 scheduled-stats-smoke:
     ./tests/test-scheduled-stats.sh
 
+# Verify isolated virtual-TTY input and blocking reader wakeup
+scheduled-tty-smoke:
+    ./tests/test-scheduled-tty.sh
+
 # Verify scheduled ls and run <name> command paths
 scheduled-catalog-smoke:
     ./tests/test-scheduled-catalog-commands.sh

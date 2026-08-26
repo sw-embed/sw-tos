@@ -194,6 +194,14 @@ configured stack/state words, scheduler dispatches and yields, IPC/kernel
 service operations, and TTY input/output bytes. These unsigned 24-bit counters
 wrap after `16777215`; dispatch counts are activity indicators, not CPU time.
 
+### Virtual terminals
+
+The scheduled kernel owns four fixed virtual-TTY channels with sixteen-byte
+input queues. Only the foreground process receives recovery-terminal input.
+Readers with empty queues enter `BLOCKED_TTY` and stop accumulating scheduler
+dispatches until input wakes them. When a foreground child exits, input focus
+moves to another live child before returning to the shell.
+
 ## Add an external PL/SW application
 
 External apps use a C24IMG manifest under `catalog/images/` and a catalog

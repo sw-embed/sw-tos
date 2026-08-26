@@ -157,6 +157,8 @@ Commit: `feat(stats): expose per-process resource and activity counters`
 
 ## Saga 3 -- Kernel virtual terminals
 
+**Status:** Complete on the emulator feature branch.
+
 Introduce a fixed, small virtual-TTY table with per-channel input buffering,
 serialized output, owner endpoint, foreground state, mode flags, dimensions,
 and overflow counters. Route shell and applications through TTY services rather
