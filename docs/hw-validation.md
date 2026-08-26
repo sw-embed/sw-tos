@@ -174,3 +174,47 @@ A hardware validation is complete only when:
 
 Until then, project status remains “emulator accepted; physical validation
 pending.”
+# Logic-analyzer session files
+
+Sigrok `.sr` files are session archives containing the sampled digital waveforms
+and capture metadata. Open one graphically with PulseView:
+
+```sh
+pulseview capture.sr
+```
+
+For the COR24 UART wiring used during validation, generate a terminal report with
+the tracked project recipe:
+
+```sh
+just logic-report capture.sr
+just logic-report capture.sr rx-hex
+```
+
+Capture all eight channels from the FX2/Saleae-compatible analyzer at 24 MHz
+into the ignored persistent capture directory. The duration argument is in
+milliseconds, and the script refuses to overwrite an existing session:
+
+```sh
+just logic-capture build/captures/uart-pattern-20260825.sr 3000 24m
+```
+
+At 921600 baud, 24 MHz provides about 26 samples per bit. Some inexpensive
+FX2 clones stop near 12 million samples; use `4m` for a three-second overview
+(about 4.3 samples per bit), then make a shorter 24 MHz capture for detailed
+edge inspection.
+
+The report assumes 921600 baud, 8-N-1 and the established mapping: D0 is board
+RTS, D1 is host RTS, D2 is host TX, and D3 is board TX. The default report turns
+D3 into timestamped text lines; `rx-hex` and `tx-hex` expose individual bytes.
+
+## Scope-buffer capture and offline review
+
+Preserve a Siglent C1 acquisition as a ZIP archive containing `metadata.json`,
+the 346-byte `WAVEDESC`, and the raw `DAT2` sample block:
+
+```sh
+just scope-waveform-capture build/captures/siglent-c1.zip 192.168.1.53 1
+```
+
+Use the associated VCD export and screen capture for offline pan/zoom and review.

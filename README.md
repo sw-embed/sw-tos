@@ -300,13 +300,15 @@ yield.
 
 ### Scheduled shell
 
-The persistent PL/SW menu provides five demos:
+The persistent PL/SW menu provides six demos:
 
 - `1`: Hello waits for a key in its own process.
 - `2`: Counter prints `B1` and `B2`.
 - `3`: Uptime prints terminal-connection elapsed time.
 - `4`: Clock prints host-local wall time.
 - `5`: Multitask prints `B1 C1 B2 C2` from two cooperative workers.
+- `6`: UART Test continuously transmits `A-Z` then `0-9` through the
+  hardware-flow-controlled UART. Reset the board to leave this saturation test.
 
 Each app releases its process slot and returns to the preserved menu context.
 Run the smoke test or start an interactive session with:

@@ -8,6 +8,7 @@ COR24EMU := TOOLSDIR + "/cor24-emu"
 COR24DBG := TOOLSDIR + "/cor24-dbg"
 PLSWLGO := "tools/plsw.lgo"
 PIPELINE := "./scripts/plsw-pipeline.sh"
+SPCI_SCRIPTS := env_var_or_default("SPCI_SCRIPTS", "/disk1/github/hardwarewrighter/spci-scripts")
 
 # Default: compile and run PL/SW smoke test
 default: plsw-smoke-run
@@ -167,6 +168,26 @@ scheduled-composite-sd-smoke: cor24-storage-smoke
 # Package checksummed resident, SPI, and flash artifacts for COR24-TB testing
 hardware-validation-bundle:
     ./scripts/prepare-hardware-validation.sh
+
+# Summarize a saved COR24 sigrok session; pass mode=text,rx-hex,tx-hex,info
+logic-report session mode="text":
+    cargo run --quiet --release --manifest-path tools/te-rs/Cargo.toml --bin sr-report -- "{{session}}" "{{mode}}"
+
+# Capture all eight analyzer channels; duration is milliseconds
+logic-capture session milliseconds="3000" samplerate="24m":
+    {{SPCI_SCRIPTS}}/fx2-logic-analyzer/capture-sigrok.sh "{{session}}" "{{milliseconds}}" "{{samplerate}}"
+
+# Preserve a Siglent C1 waveform descriptor and sample block over VXI-11
+scope-waveform-capture session host="192.168.1.53" channel="1":
+    {{SPCI_SCRIPTS}}/siglent-sds800x-hd/.venv/bin/python {{SPCI_SCRIPTS}}/siglent-sds800x-hd/capture-waveform.py "{{session}}" --host "{{host}}" --channel "{{channel}}"
+
+# Export the acquired scope samples to a PulseView-compatible digital waveform
+scope-waveform-vcd capture output:
+    python3 {{SPCI_SCRIPTS}}/siglent-sds800x-hd/waveform-to-vcd.py "{{capture}}" "{{output}}"
+
+# Download the current Siglent display, including UART decode overlays
+scope-screen-capture output host="192.168.1.53":
+    {{SPCI_SCRIPTS}}/siglent-sds800x-hd/.venv/bin/python {{SPCI_SCRIPTS}}/siglent-sds800x-hd/capture-screen.py "{{output}}" --host "{{host}}"
 
 # Interactively exercise scheduled Hello and Counter choices
 scheduled-shell-interactive: plsw-system-interactive
