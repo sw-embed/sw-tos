@@ -121,6 +121,15 @@ impl SnapshotAssembler {
         self.updated = None;
     }
 
+    pub fn has_process_named(&self, prefix: &str) -> bool {
+        self.current.as_ref().is_some_and(|snapshot| {
+            snapshot
+                .processes
+                .values()
+                .any(|process| process.name.starts_with(prefix))
+        })
+    }
+
     pub fn render(&self, now: Instant) -> Vec<String> {
         let Some(snapshot) = &self.current else {
             return vec!["resource data unavailable".into()];

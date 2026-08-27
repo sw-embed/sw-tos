@@ -137,6 +137,20 @@ def normal_path():
     assert b"shell-two" in screen and b"app-one" in screen, "independent pane output missing"
     assert b"mem 10/20B" in screen and b"cntr ep=2" in screen, "resource snapshot missing"
 
+    time_generation = 4
+    time_records = (
+        bytes((1, time_generation)),
+        bytes((2, time_generation, 10, 0, 0, 20, 0, 0, 3, 0, 0, 1, 0, 0, 2, 3)),
+        bytes((3, time_generation, 2, 7, 1, 192, 0, 1, 0, 9, 0, 0, 4, 0, 0)),
+        bytes((4, time_generation, 2, 3, 0, 0, 5, 0, 0, 6, 0, 0)) + b"upti",
+        bytes((5, time_generation, 2, 0, 0, 8, 0, 0, 9, 0, 0)),
+    )
+    os.write(serial_master, b"".join(frame(8, 0, record) for record in time_records))
+    uptime_frame_prefix = SYNC + bytes((1, 6, 0, 3, 0))
+    time_traffic = read_until(serial_master, uptime_frame_prefix, 2.0)
+    assert uptime_frame_prefix in time_traffic, "live Uptime did not enable host time frames"
+    assert SYNC + bytes((1, 7, 0, 3, 0)) not in time_traffic, "Uptime received wall-clock frames"
+
     os.write(tty_master, b"\x013sym counter\n")
     assert b"counter = 000010" in read_until(tty_master, b"counter = 000010"), "symbol lookup"
     os.write(tty_master, b"regs 2\n")
@@ -154,8 +168,19 @@ def normal_path():
     os.write(tty_master, b"\x011")
     os.write(tty_master, b"a")
     assert frame(1, 0, b"a") in read_until(serial_master, frame(1, 0, b"a")), "shell input route"
+    os.write(tty_master, b"ps\r")
+    assert b"ps" in read_until(tty_master, b"ps"), "shell local input echo"
+    shell_command = read_until(serial_master, frame(1, 0, b"\n"))
+    assert frame(1, 0, b"p") in shell_command
+    assert frame(1, 0, b"s") in shell_command
+    assert frame(1, 0, b"\n") in shell_command, "shell Enter was not normalized"
+    assert frame(1, 0, b"\r") not in shell_command, "shell received carriage return"
     os.write(tty_master, b"\x012b")
     assert frame(1, 1, b"b") in read_until(serial_master, frame(1, 1, b"b")), "app input route"
+    os.write(tty_master, b"\x01y\x01e")
+    target_escape = frame(1, 1, b"\x1b")
+    assert target_escape in read_until(serial_master, target_escape), "target Escape from copy mode"
+    os.write(tty_master, b"\x01y")
 
     os.write(serial_master, frame(3, 2, b"Counter"))
     assert b"Counter *" in read_until(tty_master, b"Counter *"), "dynamic channel open"
@@ -214,9 +239,19 @@ def failure_path():
     os.close(tty_slave)
 
 
+def copy_mode_interrupt_path():
+    process, tty_master, tty_slave, serial_master, before = start_frontend()
+    os.write(tty_master, b"\x01y\x03")
+    assert_restored(process, tty_master, tty_slave, before, 0)
+    os.close(serial_master)
+    os.close(tty_master)
+    os.close(tty_slave)
+
+
 def main() -> int:
     normal_path()
     failure_path()
+    copy_mode_interrupt_path()
     print("PASS: dynamic PTY frontend routes, restores sessions, alerts, and guards broadcast")
     return 0
 

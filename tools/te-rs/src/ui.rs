@@ -51,6 +51,7 @@ pub struct Pane {
     scrollback_limit: usize,
     alert: bool,
     scroll_offset: usize,
+    horizontal_offset: usize,
     search: Option<String>,
 }
 
@@ -65,6 +66,7 @@ impl Pane {
             scrollback_limit,
             alert: false,
             scroll_offset: 0,
+            horizontal_offset: 0,
             search: None,
         }
     }
@@ -184,6 +186,30 @@ impl Desktop {
     }
     pub fn broadcast_enabled(&self) -> bool {
         self.broadcast
+    }
+    pub fn copy_mode_enabled(&self) -> bool {
+        self.copy_mode
+    }
+
+    pub fn copy_move(&mut self, vertical: isize, horizontal: isize) {
+        let pane = &mut self.panes[self.focus];
+        pane.scroll_offset = pane
+            .scroll_offset
+            .saturating_add_signed(vertical)
+            .min(pane.lines.len());
+        pane.horizontal_offset = pane.horizontal_offset.saturating_add_signed(horizontal);
+    }
+
+    pub fn copy_home(&mut self) {
+        let pane = &mut self.panes[self.focus];
+        pane.scroll_offset = pane.lines.len();
+        pane.horizontal_offset = 0;
+    }
+
+    pub fn copy_end(&mut self) {
+        let pane = &mut self.panes[self.focus];
+        pane.scroll_offset = 0;
+        pane.horizontal_offset = 0;
     }
     pub fn input_channels(&self) -> Vec<u8> {
         if self.broadcast {
@@ -340,8 +366,10 @@ impl Desktop {
                 &[
                     "1-9 focus  n next  z zoom  s split  x close",
                     "y copy  b,b broadcast  w save  r restore",
-                    "? help  d detach  prefix prefix",
+                    "copy: arrows/hjkl  PgUp/PgDn  g/G  q exit",
+                    "e target-Escape  ? help  d detach  prefix prefix",
                 ],
+                0,
                 true,
             );
         } else if self.zoomed {
@@ -402,6 +430,7 @@ impl Desktop {
     ) {
         let content_height = height.saturating_sub(2);
         let lines = self.panes[index].visible_lines(content_height);
+        let horizontal_offset = self.panes[index].horizontal_offset;
         draw_box(
             canvas,
             x,
@@ -414,6 +443,7 @@ impl Desktop {
                 if self.panes[index].alert { " !" } else { "" }
             ),
             &lines,
+            horizontal_offset,
             index == self.focus,
         );
     }
@@ -427,6 +457,7 @@ fn draw_box(
     height: usize,
     title: &str,
     lines: &[&str],
+    horizontal_offset: usize,
     focused: bool,
 ) {
     if width < 2 || height < 2 || y >= canvas.len() {
@@ -455,7 +486,12 @@ fn draw_box(
         canvas[y][x + 1 + offset] = character;
     }
     for (row, line) in lines.iter().take(bottom.saturating_sub(y + 1)).enumerate() {
-        for (column, character) in line.chars().take(width.saturating_sub(2)).enumerate() {
+        for (column, character) in line
+            .chars()
+            .skip(horizontal_offset)
+            .take(width.saturating_sub(2))
+            .enumerate()
+        {
             canvas[y + 1 + row][x + 1 + column] = character;
         }
     }
@@ -533,5 +569,24 @@ mod tests {
         assert_eq!(desktop.pane_count(), 5);
         desktop.release_channel(7);
         assert_eq!(desktop.pane_count(), 4);
+    }
+
+    #[test]
+    fn copy_mode_scrolls_vertically_and_horizontally() {
+        let mut desktop = Desktop::new(10);
+        desktop.push_channel(0, b"zero\none\ntwo\n0123456789abcdef\n");
+        desktop.command(b'y');
+        assert!(desktop.copy_mode_enabled());
+        desktop.command(b'z');
+        desktop.copy_move(0, 5);
+        assert_eq!(desktop.panes[0].horizontal_offset, 5);
+        assert!(desktop.render(24, 8).contains("56789abcdef"));
+        desktop.copy_move(1, 0);
+        assert_eq!(desktop.panes[0].scroll_offset, 1);
+        desktop.copy_home();
+        assert_eq!(desktop.panes[0].scroll_offset, 4);
+        assert_eq!(desktop.panes[0].horizontal_offset, 0);
+        desktop.copy_end();
+        assert_eq!(desktop.panes[0].scroll_offset, 0);
     }
 }

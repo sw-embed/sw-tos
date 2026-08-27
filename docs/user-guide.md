@@ -336,6 +336,17 @@ Set another single-byte prefix with `--prefix KEY` or control notation such as
 `--prefix '^B'`. Ctrl-] remains ordinary target input unless selected as the
 host prefix.
 
+Enter pane scrollback with Ctrl-A then `y`. Arrow keys or `h`/`j`/`k`/`l`
+scroll left/down/up/right, Page Up and Page Down (or `u`/`d`) move ten lines,
+`g` jumps to the oldest retained output, `G` returns to live output, and `q`
+leaves copy mode. These navigation keys are consumed by the frontend and are
+not sent to the target.
+
+Use Ctrl-A then `e` to send an unambiguous Escape byte to the focused Shell or
+Application pane, including while copy mode is active. This stops interactive
+applications such as Uptime without conflicting with arrow-key escape
+sequences.
+
 The Resources pane refreshes at four Hz and shows memory current/peak use,
 kernel-stack peak, allocation failures, live process state and activity, IPC
 and TTY totals, UART traffic, and protocol errors. `STALE` means no complete

@@ -690,7 +690,53 @@ fn repaint_desktop(tty: &mut File, desktop: &mut Desktop) -> io::Result<(usize, 
     Ok(size)
 }
 
+fn handle_copy_input(desktop: &mut Desktop, byte: u8, escape_state: &mut u8) {
+    match (*escape_state, byte) {
+        (0, 0x1b) => *escape_state = 1,
+        (1, b'[') => *escape_state = 2,
+        (2, b'A') => {
+            desktop.copy_move(1, 0);
+            *escape_state = 0;
+        }
+        (2, b'B') => {
+            desktop.copy_move(-1, 0);
+            *escape_state = 0;
+        }
+        (2, b'C') => {
+            desktop.copy_move(0, 1);
+            *escape_state = 0;
+        }
+        (2, b'D') => {
+            desktop.copy_move(0, -1);
+            *escape_state = 0;
+        }
+        (2, b'5') => *escape_state = 5,
+        (2, b'6') => *escape_state = 6,
+        (5, b'~') => {
+            desktop.copy_move(10, 0);
+            *escape_state = 0;
+        }
+        (6, b'~') => {
+            desktop.copy_move(-10, 0);
+            *escape_state = 0;
+        }
+        (0, b'k') => desktop.copy_move(1, 0),
+        (0, b'j') => desktop.copy_move(-1, 0),
+        (0, b'h') => desktop.copy_move(0, -1),
+        (0, b'l') => desktop.copy_move(0, 1),
+        (0, b'u') => desktop.copy_move(10, 0),
+        (0, b'd') => desktop.copy_move(-10, 0),
+        (0, b'g') => desktop.copy_home(),
+        (0, b'G') => desktop.copy_end(),
+        (0, b'q') => {
+            desktop.command(b'y');
+        }
+        _ => *escape_state = 0,
+    }
+}
+
 fn run_windows(options: &Options) -> io::Result<()> {
+    let connected = Instant::now();
     let mut serial = OpenOptions::new()
         .read(true)
         .write(true)
@@ -725,11 +771,14 @@ fn run_windows(options: &Options) -> io::Result<()> {
         desktop.push_channel(254, format!("{error}\n").as_bytes());
     }
     let mut prefix_pending = false;
+    let mut copy_escape_state = 0;
     let mut shell_input = String::new();
     let mut last_size = repaint_desktop(&mut tty, &mut desktop)?;
     let mut serial_buffer = [0_u8; 1024];
     let mut tty_buffer = [0_u8; 256];
     let mut next_resource_request = Instant::now();
+    let mut next_time_frames = Instant::now();
+    let mut time_mode = None;
 
     serial.write_all(&hello().encode().expect("HELLO payload is bounded"))?;
     serial.flush()?;
@@ -814,6 +863,13 @@ fn run_windows(options: &Options) -> io::Result<()> {
                     }
                     StreamItem::Frame(frame) if frame.kind == FrameType::ResourceSnapshot => {
                         if resources.push(&frame.payload, Instant::now()) {
+                            time_mode = if resources.has_process_named("upti") {
+                                Some(TimeMode::Uptime)
+                            } else if resources.has_process_named("cloc") {
+                                Some(TimeMode::Clock)
+                            } else {
+                                None
+                            };
                             resource_lines = resources.render(Instant::now());
                             desktop.set_resources(&resource_lines);
                         }
@@ -868,6 +924,16 @@ fn run_windows(options: &Options) -> io::Result<()> {
                                 }
                             }
                         }
+                        b'e' => {
+                            let channel = desktop.focused_channel();
+                            if matches!(
+                                desktop.focused_kind(),
+                                PaneKind::Shell | PaneKind::Application
+                            ) {
+                                serial.write_all(&multiplexed_input_frame(channel, &[0x1b]))?;
+                                serial.flush()?;
+                            }
+                        }
                         _ => match desktop.command(byte) {
                             CommandOutcome::Detach => return Ok(()),
                             CommandOutcome::Save => {
@@ -889,6 +955,11 @@ fn run_windows(options: &Options) -> io::Result<()> {
                 }
                 if byte == 0x03 {
                     return Ok(());
+                }
+                if desktop.copy_mode_enabled() {
+                    handle_copy_input(&mut desktop, byte, &mut copy_escape_state);
+                    dirty = true;
+                    continue;
                 }
                 if desktop.focused_kind() == PaneKind::Debugger {
                     match byte {
@@ -945,8 +1016,19 @@ fn run_windows(options: &Options) -> io::Result<()> {
                             _ => {}
                         }
                     }
-                    for channel in desktop.input_channels() {
-                        serial.write_all(&multiplexed_input_frame(channel, &[byte]))?;
+                    // SWTOS command lines are newline-terminated, while a raw
+                    // host terminal normally reports Enter as carriage return.
+                    // Numeric menu choices hid this mismatch because they are
+                    // dispatched before the command-line parser runs.
+                    let outgoing = if byte == b'\r' { b'\n' } else { byte };
+                    let input_channels = desktop.input_channels();
+                    if matches!(outgoing, b'\n' | 0x08 | 0x7f | 0x20..=0x7e) {
+                        for &channel in &input_channels {
+                            desktop.push_channel(channel, &[outgoing]);
+                        }
+                    }
+                    for channel in input_channels {
+                        serial.write_all(&multiplexed_input_frame(channel, &[outgoing]))?;
                     }
                 } else {
                     serial.write_all(&[byte])?;
@@ -971,6 +1053,16 @@ fn run_windows(options: &Options) -> io::Result<()> {
             serial.write_all(&resource_request_frame())?;
             serial.flush()?;
             next_resource_request = now + Duration::from_millis(250);
+        }
+        if connection.mode() == Mode::Framed && time_mode.is_some() && now >= next_time_frames {
+            let mode = time_mode.expect("checked active time mode");
+            let tick = match mode {
+                TimeMode::Uptime => connected.elapsed().as_millis() as u32 / 10,
+                TimeMode::Clock => wall_centiseconds(),
+            } & 0x00ff_ffff;
+            serial.write_all(&multiplexed_time_frame(mode, tick))?;
+            serial.flush()?;
+            next_time_frames = now + Duration::from_secs(1);
         }
         if connection.mode() == Mode::Framed && !debug_identity_sent {
             serial.write_all(&debug_request_frame(identity_request()))?;
@@ -1327,6 +1419,20 @@ mod tests {
         assert_eq!(options.session, Some(PathBuf::from("layout.json")));
         assert_eq!(parse_prefix("x"), Ok(b'x'));
         assert!(parse_prefix("long").is_err());
+    }
+
+    #[test]
+    fn copy_mode_consumes_arrow_sequences_for_local_scrolling() {
+        let mut desktop = Desktop::default();
+        desktop.command(b'y');
+        let mut escape_state = 0;
+        for byte in b"\x1b[A\x1b[C" {
+            handle_copy_input(&mut desktop, *byte, &mut escape_state);
+        }
+        assert_eq!(escape_state, 0);
+        assert!(desktop.copy_mode_enabled());
+        handle_copy_input(&mut desktop, b'q', &mut escape_state);
+        assert!(!desktop.copy_mode_enabled());
     }
 
     #[test]
