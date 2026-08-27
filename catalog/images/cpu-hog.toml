@@ -1,0 +1,8 @@
+name = "cpu-hog"
+version = 1
+text_words = 3
+data_words = 0
+bss_words = 0
+entry_offset = 0
+relocation_count = 0
+payload_hex = "440045 010113 fb0000"

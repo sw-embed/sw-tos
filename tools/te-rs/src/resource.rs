@@ -8,6 +8,7 @@ const MEMORY: u8 = 2;
 const PROCESS: u8 = 3;
 const PROCESS_IO: u8 = 4;
 const END: u8 = 5;
+const PREEMPTION: u8 = 6;
 
 #[derive(Clone, Debug, Default, Eq, PartialEq)]
 pub struct MemorySnapshot {
@@ -28,6 +29,8 @@ pub struct ProcessSnapshot {
     pub state_words: u16,
     pub dispatches: u32,
     pub yields: u32,
+    pub forced_preemptions: u32,
+    pub cpu_progress: u32,
     pub ipc: u32,
     pub tty_in: u32,
     pub tty_out: u32,
@@ -102,6 +105,13 @@ impl SnapshotAssembler {
                     .trim_end_matches('\0')
                     .to_string();
             }
+            PREEMPTION if body.len() == 7 => {
+                let endpoint = body[0];
+                let process = snapshot.processes.entry(endpoint).or_default();
+                process.endpoint = endpoint;
+                process.forced_preemptions = u24(&body[1..4]);
+                process.cpu_progress = u24(&body[4..7]);
+            }
             END if body.len() == 9 => {
                 snapshot.protocol_errors = u24(&body[0..3]);
                 snapshot.uart_rx = u24(&body[3..6]);
@@ -149,7 +159,7 @@ impl SnapshotAssembler {
         )];
         for process in snapshot.processes.values() {
             lines.push(format!(
-                "{} ep={} s={} b={} alloc={}/{}w d={} y={} ipc={} io={}/{}",
+                "{} ep={} s={} b={} alloc={}/{}w d={} y={} fp={} cpu={} ipc={} io={}/{}",
                 if process.name.is_empty() {
                     "-"
                 } else {
@@ -162,6 +172,8 @@ impl SnapshotAssembler {
                 process.state_words,
                 process.dispatches,
                 process.yields,
+                process.forced_preemptions,
+                process.cpu_progress,
                 process.ipc,
                 process.tty_in,
                 process.tty_out
@@ -192,6 +204,7 @@ mod tests {
             &[MEMORY, 7, 10, 0, 0, 20, 0, 0, 3, 0, 0, 1, 0, 0, 2, 3],
             now,
         );
+        assembler.push(&[PREEMPTION, 7, 2, 11, 0, 0, 42, 0, 0], now);
         assembler.push(&[PROCESS, 7, 2, 7, 1, 192, 0, 1, 0, 9, 0, 0, 4, 0, 0], now);
         assembler.push(
             &[
@@ -208,6 +221,8 @@ mod tests {
                 .iter()
                 .any(|line| line.contains("cntr ep=2 s=7 b=1 alloc=192/1w d=9"))
         );
+        assert!(lines.iter().any(|line| line.contains("fp=11")));
+        assert!(lines.iter().any(|line| line.contains("cpu=42")));
     }
 
     #[test]

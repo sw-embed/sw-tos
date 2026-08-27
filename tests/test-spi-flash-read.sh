@@ -9,6 +9,15 @@ MEDIA="$ROOT_DIR/build/catalog-images/swtos-storage.bin"
 mkdir -p "$OUT_DIR"
 "$ROOT_DIR/scripts/cor24-storage.py" build "$MEDIA"
 cp "$ROOT_DIR/tests/spi-flash-read.s" "$OUT_DIR/program.s"
+catalog_count=$(od -An -tu1 -N1 "$MEDIA" | tr -d ' ')
+read -r image_block image_length < <(
+    "$ROOT_DIR/scripts/cor24-storage.py" extent "$MEDIA" embedded-hello
+)
+test "$image_length" -gt 0
+sed -i \
+    -e "s/@CATALOG_COUNT@/$catalog_count/" \
+    -e "s/@IMAGE_BLOCK@/$image_block/" \
+    "$OUT_DIR/program.s"
 sed -n 'p' "$ROOT_DIR/hal/cor24/spi.s" >> "$OUT_DIR/program.s"
 "$ROOT_DIR/tools/bin/cor24-asm" "$OUT_DIR/program.s" \
     -o "$OUT_DIR/program.lgo" --listing "$OUT_DIR/program.lst"

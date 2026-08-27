@@ -121,6 +121,12 @@ use and peak, kernel-stack peak, allocation failures, process slots and state,
 scheduler activity, IPC and TTY counts, UART traffic, and protocol errors.
 Zoom or use copy mode to inspect values wider than a tiled pane.
 
+Each process row also shows `fp=` (forced preemptions) and `cpu=` (the most
+recent interrupted `r0` sample). A non-yielding `cpu-hog` should show both
+values changing while Shell, Debugger, and Resources remain responsive. The
+sample is a deliberately simple acceptance-test indicator, not general CPU
+usage accounting.
+
 `STALE` means no complete snapshot arrived for one second. `resource data
 unavailable` means the frontend has not yet received a complete generation.
 

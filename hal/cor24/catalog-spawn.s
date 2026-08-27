@@ -87,6 +87,8 @@ _kernel_stack_found:
         mov     r2,r0
         lw      r0,9(r2)
         mov     sp,r0
+        la      r2,_preemption_init
+        jal     r1,(r2)
         la      r2,_restore_context
         jmp     (r2)
 
@@ -1740,8 +1742,15 @@ _embedded_metadata_ok:
         jmp     (r2)
 _embedded_layout_ok:
 
-        ; The zeroing allocator reserves text + data + BSS in this process's
-        ; reclaimable child generation.
+        ; Reserve a recoverable private layout in this child generation:
+        ;
+        ;   live text+data+BSS | 2-word landing slot | live-size shadow
+        ;
+        ; Forced preemption temporarily carpets the whole live region because
+        ; execution must reach a landing address immediately beyond it.  The
+        ; equally sized shadow therefore protects mutable data/BSS as well as
+        ; text.  Two words keep the landing allocation word-aligned while
+        ; providing room for a four-byte C7 absolute jump.
         la      r2,_embedded_text_words
         lw      r0,0(r2)
         la      r2,_embedded_data_words
@@ -1750,6 +1759,11 @@ _embedded_layout_ok:
         la      r2,_embedded_bss_words
         lw      r1,0(r2)
         add     r0,r1
+        la      r2,_embedded_live_words
+        sw      r0,0(r2)
+        mov     r1,r0
+        add     r0,r1
+        add     r0,2
         la      r2,_alloc_state_words
         jal     r1,(r2)
         ceq     r0,z
@@ -1760,6 +1774,29 @@ _embedded_allocation_ok:
         la      r2,_spawn_process
         lw      r2,0(r2)
         sw      r0,27(r2)       ; private executable allocation base
+
+        ; Retain runway allocation bounds outside the stable PROC_DESC ABI.
+        push    r0
+        mov     r0,r2
+        la      r2,_preempt_for_proc
+        jal     r1,(r2)
+        mov     r2,r0
+        pop     r0
+        sw      r0,0(r2)        ; live image base
+        la      r1,_embedded_live_words
+        lw      r1,0(r1)
+        sw      r1,3(r2)        ; live image words
+        mov     r0,r1
+        add     r0,r1
+        add     r0,r1           ; live image bytes
+        lw      r1,0(r2)
+        add     r0,r1
+        sw      r0,6(r2)        ; landing slot base
+        add     r0,6
+        sw      r0,9(r2)        ; live shadow base
+        lc      r0,1
+        sw      r0,21(r2)       ; eligible for forced preemption
+        lw      r0,0(r2)        ; preserve loader's allocation-base result
 
         ; Copy text + initialized data; the remaining allocation stays zero.
         la      r2,_embedded_text_words
@@ -2115,8 +2152,18 @@ _select_context:
         pop     r0
         pop     r1
         pop     r2
+        push    r2
+        la      r1,_preemption_prepare_dispatch
+        jal     r1,(r1)
+        pop     r2
+        ceq     r0,z
+        brf     _select_interrupt_context
         lw      r0,9(r2)
         mov     sp,r0
+        bra     _restore_context
+_select_interrupt_context:
+        la      r1,_preemption_restore_interrupt
+        jmp     (r1)
 _restore_context:
         pop     fp
         pop     r2
@@ -3222,25 +3269,13 @@ _tty_poll_uart:
         la      r2,_tty_poll_done
         jmp     (r2)
 _tty_poll_status:
-        la      r2,0xFF0101
-        lbu     r0,0(r2)
-        lcu     r1,1
-        and     r0,r1
+        la      r2,_preemption_rx_dequeue
+        jal     r1,(r2)
         ceq     r0,z
         brf     _tty_poll_read
         la      r2,_tty_poll_done
         jmp     (r2)
 _tty_poll_read:
-        la      r2,0xFF0100
-        lbu     r0,0(r2)
-        push    r0
-        la      r2,_protocol_uart_rx_bytes
-        lw      r0,0(r2)
-        add     r0,1
-        sw      r0,0(r2)
-        pop     r0
-        la      r2,_tty_poll_byte
-        sw      r0,0(r2)
         ; In recovery mode ordinary bytes retain their legacy path. An A5
         ; candidate and every byte after negotiation use the framed decoder.
         la      r2,_protocol_framed_mode
@@ -3599,6 +3634,37 @@ _protocol_resource_not_blocked:
         lbu     r0,3(r1)
         sb      r0,15(r2)
         lc      r0,16
+        la      r2,_protocol_resource_length
+        sw      r0,0(r2)
+        la      r2,_protocol_emit_resource_record
+        jal     r1,(r2)
+
+        ; A separate bounded record keeps the version-1 process records within
+        ; the sixteen-byte decoder limit while exposing forced preemption.
+        la      r2,_protocol_resource_payload
+        lc      r0,6
+        sb      r0,0(r2)
+        la      r1,_protocol_resource_generation
+        lbu     r0,0(r1)
+        sb      r0,1(r2)
+        la      r1,_protocol_resource_endpoint
+        lbu     r0,0(r1)
+        sb      r0,2(r2)
+        la      r1,_protocol_resource_proc
+        lw      r0,0(r1)
+        la      r2,_preempt_for_proc
+        jal     r1,(r2)
+        lw      r0,18(r0)
+        la      r2,_protocol_resource_payload
+        sw      r0,3(r2)
+        la      r1,_protocol_resource_proc
+        lw      r0,0(r1)
+        la      r2,_preempt_for_proc
+        jal     r1,(r2)
+        lw      r0,27(r0)
+        la      r2,_protocol_resource_payload
+        sw      r0,6(r2)
+        lc      r0,9
         la      r2,_protocol_resource_length
         sw      r0,0(r2)
         la      r2,_protocol_emit_resource_record
@@ -4265,6 +4331,30 @@ _stats_for_proc_done:
         pop     r1
         jmp     (r1)
 
+; Map PROC_DESC pointer r0 to its private preemption sidecar.
+_preempt_for_proc:
+        push    r1
+        push    r2
+        mov     r2,r0
+        la      r1,_proc_a
+        ceq     r0,r1
+        brf     _preempt_for_proc_b
+        la      r0,_proc_a_preempt
+        bra     _preempt_for_proc_done
+_preempt_for_proc_b:
+        la      r1,_proc_b
+        mov     r0,r2
+        ceq     r0,r1
+        brf     _preempt_for_proc_c
+        la      r0,_proc_b_preempt
+        bra     _preempt_for_proc_done
+_preempt_for_proc_c:
+        la      r0,_proc_c_preempt
+_preempt_for_proc_done:
+        pop     r2
+        pop     r1
+        jmp     (r1)
+
 ; Increment one 24-bit counter. Natural machine-word wraparound is deliberate.
 _stats_increment:
         push    r1
@@ -4295,6 +4385,15 @@ _proc_b_stats:
         .zero   24
 _proc_c_stats:
         .zero   24
+; Ten words per slot: live base/words, landing, shadow, quantum, pending,
+; forced count, eligibility, IRQ-context flag, and interrupted-r0 sample. This
+; preserves the 39-byte process ABI while making recovery policy observable.
+_proc_a_preempt:
+        .zero   30
+_proc_b_preempt:
+        .zero   30
+_proc_c_preempt:
+        .zero   30
 ; head, tail, count, overflow, then sixteen input bytes.
 _tty_a:
         .zero   28
@@ -4465,8 +4564,6 @@ _block_buffer:
         .zero   8
 _block_header_buffer:
         .zero   8
-_block_catalog_buffer:
-        .zero   120
 _block_catalog_crc:
         .zero   3
 _block_name_buffer:
@@ -4500,6 +4597,8 @@ _embedded_descriptor:
 _embedded_image_base:
         .zero   3
 _embedded_text_words:
+        .zero   3
+_embedded_live_words:
         .zero   3
 _embedded_data_words:
         .zero   3

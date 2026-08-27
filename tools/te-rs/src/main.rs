@@ -599,6 +599,10 @@ fn time_frame(mode: TimeMode, tick: u32) -> Vec<u8> {
     frame
 }
 
+fn scheduler_heartbeat(tick: u32) -> [u8; 5] {
+    [0xff, 1, tick as u8, (tick >> 8) as u8, (tick >> 16) as u8]
+}
+
 fn multiplexed_time_frame(mode: TimeMode, tick: u32) -> Vec<u8> {
     Frame {
         kind: match mode {
@@ -777,6 +781,7 @@ fn run_windows(options: &Options) -> io::Result<()> {
     let mut serial_buffer = [0_u8; 1024];
     let mut tty_buffer = [0_u8; 256];
     let mut next_resource_request = Instant::now();
+    let mut next_scheduler_heartbeat = Instant::now();
     let mut next_time_frames = Instant::now();
     let mut time_mode = None;
 
@@ -798,7 +803,7 @@ fn run_windows(options: &Options) -> io::Result<()> {
         ];
         // A short timeout provides portable resize detection without installing
         // a process-global signal handler.
-        let ready = unsafe { libc::poll(descriptors.as_mut_ptr(), 2, 100) };
+        let ready = unsafe { libc::poll(descriptors.as_mut_ptr(), 2, 10) };
         if ready == -1 {
             let error = io::Error::last_os_error();
             if error.kind() == io::ErrorKind::Interrupted {
@@ -1053,6 +1058,15 @@ fn run_windows(options: &Options) -> io::Result<()> {
             serial.write_all(&resource_request_frame())?;
             serial.flush()?;
             next_resource_request = now + Duration::from_millis(250);
+        }
+        if connection.mode() == Mode::Framed && now >= next_scheduler_heartbeat {
+            let tick = (connected.elapsed().as_millis() as u32 / 10) & 0x00ff_ffff;
+            serial.write_all(&scheduler_heartbeat(tick))?;
+            serial.flush()?;
+            next_scheduler_heartbeat += Duration::from_millis(10);
+            if next_scheduler_heartbeat < now {
+                next_scheduler_heartbeat = now + Duration::from_millis(10);
+            }
         }
         if connection.mode() == Mode::Framed && time_mode.is_some() && now >= next_time_frames {
             let mode = time_mode.expect("checked active time mode");
@@ -1493,5 +1507,10 @@ mod tests {
             multiplexed_time_frame(TimeMode::Clock, 1),
             vec![0xa5, 0x5a, 1, 7, 0, 3, 0, 1, 0, 0, 12]
         );
+    }
+
+    #[test]
+    fn scheduler_heartbeat_is_a_fixed_unescaped_five_byte_irq_frame() {
+        assert_eq!(scheduler_heartbeat(0x1dff01), [0xff, 1, 1, 0xff, 0x1d]);
     }
 }

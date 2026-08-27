@@ -8,6 +8,7 @@ _scheduled_catalog_table:
         .word   _scheduled_uptime_descriptor
         .word   _scheduled_embedded_hello_descriptor
         .word   _scheduled_embedded_ping_descriptor
+        .word   _scheduled_cpu_hog_descriptor
         .word   _scheduled_shell_descriptor
         .word   0
 
@@ -83,6 +84,18 @@ _scheduled_embedded_ping_descriptor:
 _scheduled_embedded_ping_name:
         .byte   101,109,98,101,100,100,101,100,45,112,105,110,103,0
 
+_scheduled_cpu_hog_descriptor:
+        .word   _scheduled_cpu_hog_name
+        .word   1
+        .word   _embedded_loader_trampoline
+        .word   _embedded_cpu_hog_image
+        .word   12
+        .word   128
+        .word   0
+        .word   2
+_scheduled_cpu_hog_name:
+        .byte   99,112,117,45,104,111,103,0
+
 _scheduled_shell_descriptor:
         .word   _scheduled_shell_name
         .word   2
@@ -96,18 +109,22 @@ _scheduled_shell_name:
         .byte   115,104,101,108,108,0
 
 _block_catalog_index:
-        .byte   7,1,83,87,84,120,104,179
+        .byte   8,1,83,87,84,253,152,50
         .byte   104,101,108,108,111,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0
         .byte   99,111,117,110,116,101,114,0,0,0,0,0,0,0,0,0,1,0,0,0,0,0,0,0
         .byte   99,108,111,99,107,0,0,0,0,0,0,0,0,0,0,0,2,0,0,0,0,0,0,0
         .byte   117,112,116,105,109,101,0,0,0,0,0,0,0,0,0,0,3,0,0,0,0,0,0,0
         .byte   101,109,98,101,100,100,101,100,45,104,101,108,108,111,0,0,4,0,0,0,0,0,0,0
         .byte   101,109,98,101,100,100,101,100,45,112,105,110,103,0,0,0,5,0,0,0,0,0,0,0
-        .byte   115,104,101,108,108,0,0,0,0,0,0,0,0,0,0,0,6,0,0,0,0,0,0,0
+        .byte   99,112,117,45,104,111,103,0,0,0,0,0,0,0,0,0,6,0,0,0,0,0,0,0
+        .byte   115,104,101,108,108,0,0,0,0,0,0,0,0,0,0,0,7,0,0,0,0,0,0,0
 _block_catalog_index_end:
+; Mutable authentication workspace sized to the complete generated record region.
+_block_catalog_buffer:
+        .zero   192
 
 _SHELL_DF_TEXT:
-        .byte   99,97,116,97,108,111,103,32,101,110,116,114,105,101,115,61,55,32,105,109,97,103,101,115,61,50,32,98,121,116,101,115,61,56,49,0
+        .byte   99,97,116,97,108,111,103,32,101,110,116,114,105,101,115,61,56,32,105,109,97,103,101,115,61,51,32,98,121,116,101,115,61,49,49,55,0
 _SHELL_HELP_1:
         .byte   104,101,108,112,32,108,115,32,100,105,114,32,112,115,32,114,117,110,0
 _SHELL_HELP_2:
@@ -190,3 +207,5 @@ _SHELL_DU_TEXT_0:
         .byte   101,109,98,101,100,100,101,100,45,104,101,108,108,111,32,51,54,32,98,121,116,101,115,0
 _SHELL_DU_TEXT_1:
         .byte   101,109,98,101,100,100,101,100,45,112,105,110,103,32,52,53,32,98,121,116,101,115,0
+_SHELL_DU_TEXT_2:
+        .byte   99,112,117,45,104,111,103,32,51,54,32,98,121,116,101,115,0

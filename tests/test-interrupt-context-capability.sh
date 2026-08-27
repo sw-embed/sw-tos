@@ -12,6 +12,18 @@ mkdir -p "$OUT_DIR"
 "$ASM" "$ROOT_DIR/hal/cor24/heartbeat.s" \
     -o "$OUT_DIR/heartbeat.lgo" >/dev/null
 
+# Opcode C7 is a hardware-derived absolute immediate jump.  It supplies the
+# final-register-safe resume path after an IR runway has recovered the PC.
+"$ASM" "$ROOT_DIR/tests/absolute-jump-resume.s" \
+    -o "$OUT_DIR/absolute-jump-resume.lgo" >/dev/null
+output=$("$ROOT_DIR/tools/bin/cor24-emu" \
+    --lgo "$OUT_DIR/absolute-jump-resume.lgo" \
+    --speed 0 -n 200000 --quiet 2>/dev/null)
+if [ "$output" != "J1" ]; then
+    echo "FAIL: patched absolute jump did not preserve task state: $output" >&2
+    exit 1
+fi
+
 # A preemptive switch needs software to save one interrupted PC and restore
 # another. The current assembler/ISA exposes no legal transfer path for IR.
 for fixture in ir-move-from ir-move-to ir-store ir-load; do
@@ -22,4 +34,4 @@ for fixture in ir-move-from ir-move-to ir-store ir-load; do
     fi
 done
 
-echo "PASS: COR24 can return through IR but cannot save or restore it"
+echo "PASS: IR is indirect-only; patched absolute jump preserves restored task state"

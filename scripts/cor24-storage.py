@@ -125,6 +125,24 @@ def validate_storage(data: bytes) -> dict:
     return {"entries": count, "images": image_count, "blocks": len(data) // BLOCK_BYTES}
 
 
+def catalog_entry(data: bytes, requested_name: str) -> tuple[int, int, int]:
+    """Return a validated entry's ordinal, image offset, and length."""
+    validate_storage(data)
+    for ordinal in range(data[0]):
+        start = HEADER_BYTES + ordinal * RECORD_BYTES
+        record = data[start : start + RECORD_BYTES]
+        name = record[:NAME_BYTES].split(b"\0", 1)[0].decode("ascii")
+        if name == requested_name:
+            if not record[23] & FLAG_HAS_IMAGE:
+                raise ValueError(f"catalog entry {requested_name!r} has no image")
+            return (
+                ordinal,
+                int.from_bytes(record[17:20], "big"),
+                int.from_bytes(record[20:23], "big"),
+            )
+    raise ValueError(f"catalog entry {requested_name!r} was not found")
+
+
 def main() -> int:
     parser = argparse.ArgumentParser()
     subparsers = parser.add_subparsers(dest="command", required=True)
@@ -135,6 +153,12 @@ def main() -> int:
     build_parser.add_argument("--check", action="store_true")
     validate_parser = subparsers.add_parser("validate")
     validate_parser.add_argument("image", type=Path)
+    extent_parser = subparsers.add_parser("extent")
+    extent_parser.add_argument("image", type=Path)
+    extent_parser.add_argument("name")
+    entry_parser = subparsers.add_parser("entry")
+    entry_parser.add_argument("image", type=Path)
+    entry_parser.add_argument("name")
     args = parser.parse_args()
     try:
         if args.command == "build":
@@ -150,12 +174,19 @@ def main() -> int:
                 args.output.parent.mkdir(parents=True, exist_ok=True)
                 args.output.write_bytes(expected)
                 print(f"Built storage: {len(expected) // BLOCK_BYTES} blocks -> {args.output}")
-        else:
+        elif args.command == "validate":
             result = validate_storage(args.image.read_bytes())
             print(
                 f"PASS: storage image valid ({result['entries']} entries, "
                 f"{result['images']} images, {result['blocks']} blocks)"
             )
+        else:
+            data = args.image.read_bytes()
+            ordinal, offset, length = catalog_entry(data, args.name)
+            if args.command == "extent":
+                print(f"{offset // BLOCK_BYTES} {length}")
+            else:
+                print(f"{ordinal} {HEADER_BYTES + ordinal * RECORD_BYTES} {offset} {length}")
     except (OSError, UnicodeError, tomllib.TOMLDecodeError, ValueError) as error:
         print(f"COR24 storage error: {error}", file=sys.stderr)
         return 1

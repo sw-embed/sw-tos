@@ -44,6 +44,18 @@ if ! cmp -s "$OUT_DIR/embedded-ping-padded.bin" "$OUT_DIR/embedded-ping-payload.
     exit 1
 fi
 
+"$ASM" "$ROOT_DIR/catalog/images/cpu-hog.s" \
+    --bin "$OUT_DIR/cpu-hog.bin" -o "$OUT_DIR/cpu-hog.lgo"
+"$TOOL" build "$ROOT_DIR/catalog/images/cpu-hog.toml" \
+    "$OUT_DIR/cpu-hog.c24"
+tail -c +28 "$OUT_DIR/cpu-hog.c24" > "$OUT_DIR/cpu-hog-payload.bin"
+cp "$OUT_DIR/cpu-hog.bin" "$OUT_DIR/cpu-hog-padded.bin"
+printf '\000\000' >> "$OUT_DIR/cpu-hog-padded.bin"
+if ! cmp -s "$OUT_DIR/cpu-hog-padded.bin" "$OUT_DIR/cpu-hog-payload.bin"; then
+    echo "FAIL: cpu-hog manifest payload differs from assembled source" >&2
+    exit 1
+fi
+
 cp "$IMAGE" "$OUT_DIR/bad-magic.c24"
 printf 'X' | dd of="$OUT_DIR/bad-magic.c24" bs=1 seek=0 conv=notrunc 2>/dev/null
 if "$TOOL" validate "$OUT_DIR/bad-magic.c24" 2>/dev/null; then

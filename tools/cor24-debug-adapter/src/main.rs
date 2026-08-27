@@ -16,6 +16,10 @@ const TTY_INPUT: u8 = 1;
 const UPTIME: u8 = 6;
 const WALL_CLOCK: u8 = 7;
 const RESOURCE_SNAPSHOT: u8 = 8;
+// Emulator-test transport command: inject payload bytes directly into the
+// modeled UART. This is intentionally outside protocol v1's target kinds and
+// is required for the out-of-band FF 01 scheduler heartbeat used on hardware.
+const RAW_UART: u8 = 0xfe;
 
 fn main() -> Result<(), String> {
     let mut args = env::args().skip(1);
@@ -85,6 +89,7 @@ fn handle_frame(
     uart_log_seen: &mut usize,
 ) -> Result<(), String> {
     match (frame.kind, frame.payload.as_slice()) {
+        (RAW_UART, bytes) => feed_uart_bytes(emu, bytes, io, uart_log_seen),
         (HELLO, b"SWT1") => feed_target_frame(emu, &frame, io, uart_log_seen),
         (kind, _) if target_frame(kind) => feed_target_frame(emu, &frame, io, uart_log_seen),
         (DEBUG_REQUEST, [1]) => write_debug(
@@ -286,7 +291,16 @@ fn feed_target_frame(
     uart_log_seen: &mut usize,
 ) -> Result<(), String> {
     let bytes = encoded_frame(frame.kind, frame.channel, &frame.payload);
-    for byte in bytes {
+    feed_uart_bytes(emu, &bytes, io, uart_log_seen)
+}
+
+fn feed_uart_bytes(
+    emu: &mut EmulatorCore,
+    bytes: &[u8],
+    io: &mut File,
+    uart_log_seen: &mut usize,
+) -> Result<(), String> {
+    for &byte in bytes {
         emu.send_uart_byte(byte);
         emu.resume();
         let result = emu.run_batch(500_000);

@@ -56,6 +56,7 @@ printf '%s\n' \
     '_swtos_image_end:' \
     '        .byte   0' >> "$OUT_DIR/app.raw.s"
 cp "$ROOT_DIR/hal/cor24/catalog-spawn.s" "$OUT_DIR/kernel.raw.s"
+sed -n 'p' "$ROOT_DIR/hal/cor24/preemption.s" >> "$OUT_DIR/kernel.raw.s"
 cp "$ROOT_DIR/hal/cor24/protocol-v1.s" "$OUT_DIR/protocol.raw.s"
 sed -n 'p' "$ROOT_DIR/hal/cor24/i2c.s" >> "$OUT_DIR/kernel.raw.s"
 sed -n 'p' "$ROOT_DIR/hal/cor24/spi.s" >> "$OUT_DIR/kernel.raw.s"

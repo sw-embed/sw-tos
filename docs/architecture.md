@@ -72,10 +72,22 @@ shell slot and two child slots. Each 39-byte `PROC_DESC` contains thirteen
 allocation. No process-descriptor word is spare; offset 21 is `PD_SENDER`.
 
 Spawn allocates descriptor-sized state and stack storage from an EBR arena,
-initializes a context, and marks the child runnable. Context switching is
-cooperative: tasks yield or block in kernel services. Current COR24 interrupt
-state cannot be saved and restored for a different process, so heartbeat
-interrupts update time but do not provide full preemption.
+initializes a context, and marks the child runnable. Tasks still switch cheaply
+when they yield or block in kernel services. Private loaded processes also use
+UART-clock-enforced time slicing: after a five-tick quantum and one-tick grace
+period, a process that has not reached a normal scheduling point is forcibly
+preempted.
+
+COR24 cannot directly read the interrupt-return register. The forced path
+therefore snapshots every live byte that it will overwrite, installs a private
+landing jump after the live image, and temporarily replaces that image with
+one-byte `add r0,r1` instructions. Returning through `ir` walks to the landing
+slot while converting runway distance into the exact interrupted PC. The
+kernel restores the live snapshot and later resumes through a patched `C7`
+absolute-immediate jump after restoring all registers and condition state.
+Mutable data should live outside the runway region in future image layouts;
+with the current contiguous text/data/BSS layout the full live region is
+snapshotted, so its runtime contents survive forced preemption.
 
 Child allocations form a LIFO generation. State, loaded image, and stack are
 reclaimed together after the last child in that generation exits. A failed
@@ -90,10 +102,11 @@ boot-stack measurements, per-process configured allocation, process-slot use,
 and resettable counters. Physical capacity and process allocations are reported
 in 24-bit words; packed build artifacts remain byte-sized.
 
-Activity counters live in per-slot sidecars so the stable 39-byte process ABI
-does not change. Detailed process snapshots expose catalog identity, state,
+Activity and preemption counters live in per-slot sidecars so the stable
+39-byte process ABI does not change. Detailed process snapshots expose catalog identity, state,
 blocked reason, configured allocation, scheduler dispatches and yields,
-kernel-service/IPC operations, and UART bytes. The counters wrap naturally at
+kernel-service/IPC operations, UART bytes, forced-preemption count, and the
+last interrupted `r0` progress sample. The counters wrap naturally at
 the unsigned 24-bit word boundary. Dispatch activity is not CPU time.
 
 Four fixed virtual-TTY records provide endpoint-owned input queues without

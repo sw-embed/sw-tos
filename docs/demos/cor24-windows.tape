@@ -66,12 +66,30 @@ Type "x 0 8"
 Enter
 Sleep 5s
 
-# Return to Shell, launch Counter, and detach cleanly.
+# Return to Shell and launch the hostile non-yielding CPU hog.
 Ctrl+A
 Type "1"
-Type "run counter"
+Type "run cpu-hog"
 Enter
 Sleep 3s
+
+# Resources continues refreshing and shows forced-preemption/counter progress.
+Ctrl+A
+Type "4"
+Ctrl+A
+Type "z"
+Sleep 4s
+Ctrl+A
+Type "z"
+
+# The debugger remains responsive even though cpu-hog never cooperates.
+Ctrl+A
+Type "3"
+Type "regs 2"
+Enter
+Sleep 3s
+
+# Detach cleanly while the hostile process is still running.
 Ctrl+A
 Type "d"
 Sleep 1s

@@ -311,6 +311,14 @@ heartbeat-smoke:
 interrupt-context-capability-smoke:
     ./tests/test-interrupt-context-capability.sh
 
+# Recover an IRQ PC through a one-byte ADD runway and resume without clobbers
+preemption-runway-smoke:
+    ./tests/test-preemption-runway.sh
+
+# Prove a hostile private CPU loop cannot starve Resources or the debugger
+preemption-acceptance: scheduled-shell-build cor24-debugger-build
+    python3 tests/test-preemption-acceptance.py
+
 # Read a configured DS1307 RTC through the COR24 I2C HAL from PL/SW
 i2c-ds1307-smoke:
     ./tests/test-i2c-ds1307.sh

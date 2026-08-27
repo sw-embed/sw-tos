@@ -47,8 +47,9 @@ record kind and wrapping generation. Kind 1 begins a generation. Kind 2 carries
 24-bit little-endian arena current, arena peak, kernel-stack peak, allocation
 failures, and used/total slots. Kind 3 carries endpoint, state, blocked reason,
 16-bit stack/state sizes, dispatches, and yields. Kind 4 carries endpoint, IPC,
-TTY input/output totals, and a four-byte display name. Kind 5 ends the generation
-with protocol-error and UART receive/transmit totals. Hosts must discard partial
+TTY input/output totals, and a four-byte display name. Kind 6 carries endpoint,
+forced-preemption count, and the last interrupted `r0` CPU-progress sample.
+Kind 5 ends the generation with protocol-error and UART receive/transmit totals. Hosts must discard partial
 or mismatched generations and publish only after kind 5. A target response
 record never exceeds the target decoder's 16-byte payload bound.
 

@@ -25,9 +25,10 @@ done
 for expected in \
     'help ls dir ps run' \
     'df du mem stat uname' \
-    'catalog entries=7 images=2 bytes=81' \
+    'catalog entries=8 images=3 bytes=117' \
     'embedded-hello 36 bytes' \
     'embedded-ping 45 bytes' \
+    'cpu-hog 36 bytes' \
     'SWTOS COR24 0.1' \
     'hello kind=program source=resident stack=128 state=0 flags=1 image=0' \
     'embedded-ping kind=program source=embedded stack=128 state=0 flags=0 image=45' \

@@ -349,7 +349,10 @@ sequences.
 
 The Resources pane refreshes at four Hz and shows memory current/peak use,
 kernel-stack peak, allocation failures, live process state and activity, IPC
-and TTY totals, UART traffic, and protocol errors. `STALE` means no complete
+and TTY totals, UART traffic, and protocol errors. Per-process `fp=` counts
+forced quantum recoveries and `cpu=` shows the last interrupted `r0` sample.
+Run `cpu-hog` to see both change while verifying that the Debugger and Shell
+remain responsive. `STALE` means no complete
 snapshot has arrived for one second; `resource data unavailable` means no
 complete generation has been received since connecting.
 

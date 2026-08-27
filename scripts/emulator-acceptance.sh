@@ -15,6 +15,8 @@ RECIPES=(
     context-switch-smoke
     heartbeat-smoke
     interrupt-context-capability-smoke
+    preemption-runway-smoke
+    preemption-acceptance
     acceptance-report-smoke
     provider-config-smoke
     proc-desc-abi-smoke

@@ -126,16 +126,22 @@ def normal_path():
         bytes((2, generation, 10, 0, 0, 20, 0, 0, 3, 0, 0, 1, 0, 0, 2, 3)),
         bytes((3, generation, 2, 7, 1, 192, 0, 1, 0, 9, 0, 0, 4, 0, 0)),
         bytes((4, generation, 2, 3, 0, 0, 5, 0, 0, 6, 0, 0)) + b"cntr",
+        bytes((6, generation, 2, 11, 0, 0, 42, 0, 0)),
         bytes((5, generation, 2, 0, 0, 8, 0, 0, 9, 0, 0)),
     )
     os.write(serial_master, b"".join(frame(8, 0, record) for record in records))
     os.write(serial_master, frame(2, 0, b"shell-one\nshell-two\n"))
     os.write(serial_master, frame(2, 1, b"app-one\n"))
     screen = read_until(tty_master, b"cntr ep=2", 2.0)
+    screen += read_until(tty_master, b"app-one", 2.0)
     assert b"\x1b[?1049h" in screen and b"\x1b[?25l" in screen, "screen entry"
     assert b"Shell *" in screen and b"Application" in screen, "four-pane grid was not rendered"
     assert b"shell-two" in screen and b"app-one" in screen, "independent pane output missing"
     assert b"mem 10/20B" in screen and b"cntr ep=2" in screen, "resource snapshot missing"
+    os.write(tty_master, b"\x014\x01z")
+    resource_zoom = read_until(tty_master, b"cpu=42", 2.0)
+    assert b"fp=11" in resource_zoom and b"cpu=42" in resource_zoom, "preemption activity missing"
+    os.write(tty_master, b"\x01z\x011")
 
     time_generation = 4
     time_records = (
@@ -143,6 +149,7 @@ def normal_path():
         bytes((2, time_generation, 10, 0, 0, 20, 0, 0, 3, 0, 0, 1, 0, 0, 2, 3)),
         bytes((3, time_generation, 2, 7, 1, 192, 0, 1, 0, 9, 0, 0, 4, 0, 0)),
         bytes((4, time_generation, 2, 3, 0, 0, 5, 0, 0, 6, 0, 0)) + b"upti",
+        bytes((6, time_generation, 2, 0, 0, 0, 0, 0, 0)),
         bytes((5, time_generation, 2, 0, 0, 8, 0, 0, 9, 0, 0)),
     )
     os.write(serial_master, b"".join(frame(8, 0, record) for record in time_records))

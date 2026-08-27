@@ -7,6 +7,10 @@ OUT_DIR="$ROOT_DIR/build/scheduled-sd-provider"
 MEDIA="$ROOT_DIR/build/catalog-images/swtos-storage.bin"
 
 "$ROOT_DIR/scripts/cor24-storage.py" build "$MEDIA"
+read -r _ _ image_offset image_length < <(
+    "$ROOT_DIR/scripts/cor24-storage.py" entry "$MEDIA" embedded-hello
+)
+test "$image_length" -gt 0
 "$ROOT_DIR/scripts/catalog-spawn-link.sh" \
     "$ROOT_DIR/tests/catalog-sd.plsw" scheduled-sd-provider
 "$ROOT_DIR/tools/bin/cor24-asm" "$ROOT_DIR/tests/spi-launch-seed.s" \
@@ -32,7 +36,7 @@ echo "PASS: catalog lookup and executable load used cached SD sectors"
 
 CORRUPT_MEDIA="$OUT_DIR/corrupt-storage.bin"
 cp "$MEDIA" "$CORRUPT_MEDIA"
-printf 'X' | dd of="$CORRUPT_MEDIA" bs=1 seek=179 conv=notrunc status=none
+printf 'X' | dd of="$CORRUPT_MEDIA" bs=1 seek="$((image_offset + 3))" conv=notrunc status=none
 corrupt_output=$("$ROOT_DIR/tools/bin/cor24-emu" \
     --lgo "$OUT_DIR/seed.lgo" \
     --load-binary "$OUT_DIR/program.bin@0" --entry 0 \
@@ -70,6 +74,10 @@ CROSS_IMAGE_MEDIA="$OUT_DIR/cross-sector-image-storage.bin"
 "$ROOT_DIR/scripts/cor24-storage.py" build "$CROSS_IMAGE_MEDIA" \
     --manifest "$ROOT_DIR/tests/catalog-sd-cross-image.toml" \
     --image-alignment 512
+read -r _ _ cross_image_offset cross_image_length < <(
+    "$ROOT_DIR/scripts/cor24-storage.py" entry "$CROSS_IMAGE_MEDIA" embedded-hello
+)
+test "$cross_image_length" -gt 33
 "$ROOT_DIR/scripts/catalog-spawn-link.sh" \
     "$ROOT_DIR/tests/catalog-sd-cross-image.plsw" scheduled-sd-cross-image memory \
     "$ROOT_DIR/tests/catalog-sd-cross-image.toml"
@@ -104,7 +112,7 @@ echo "PASS: missing SD sector two rejected the partial image before execution"
 
 RECOVERY_MEDIA="$OUT_DIR/corrupt-first-image-storage.bin"
 cp "$CROSS_IMAGE_MEDIA" "$RECOVERY_MEDIA"
-printf '\000' | dd of="$RECOVERY_MEDIA" bs=1 seek=1057 conv=notrunc status=none
+printf '\000' | dd of="$RECOVERY_MEDIA" bs=1 seek="$((cross_image_offset + 33))" conv=notrunc status=none
 "$ROOT_DIR/scripts/catalog-spawn-link.sh" \
     "$ROOT_DIR/tests/catalog-sd-recovery.plsw" scheduled-sd-recovery memory \
     "$ROOT_DIR/tests/catalog-sd-cross-image.toml"

@@ -26,6 +26,12 @@ a PL/I-inspired systems programming language for the COR24 ISA.
 [Windows usage guide](docs/windows-usage.md) ·
 [Reproducible Windows VHS tape](docs/demos/cor24-windows.tape)
 
+The Resources pane exposes `fp=` forced-preemption counts and the latest
+interrupted `r0` sample as `cpu=`. The `cpu-hog` catalog image deliberately
+contains no yield, syscall, I/O, IPC, sleep, or blocking operation; continued
+Resources and Debugger response while those values advance is the acceptance
+proof for preemptive time slicing.
+
 ### Key Features
 
 - **Synchronous message-passing IPC** -- `send`, `receive`, `sendrec`
@@ -211,7 +217,8 @@ mode 0 and MSB-first byte exchange. `just spi-flash-read-smoke` attaches the
 generated media to the emulator's W25Q32 model and proves the target HAL reads
 its catalog header over the emulated wire protocol. The same HAL exposes an
 eight-byte block read that issues a W25Q32 `03h` transaction with a 24-bit
-address; the proof also reads the block-aligned `C24IMG` magic at block 16.
+address; the proof resolves the first embedded image's current extent from the
+validated generated media and reads its block-aligned `C24IMG` magic.
 
 `just scheduled-spi-provider-smoke` exercises the complete storage path. The
 scheduled catalog manager finds `embedded-hello` by reading flash catalog
@@ -451,10 +458,22 @@ control frames, then verifies a three-tick delta across the 24-bit wrap from
 two and three and verifies that both become runnable at monotonic tick three.
 UART bytes are parsed one per interrupt, and a foreground-work sentinel proves
 that `jmp (ir)` resumes interrupted execution.
-`just interrupt-context-capability-smoke` also records the current preemption
-boundary: interrupt return through `ir` assembles, but the ISA/toolchain rejects
-all tested register and memory transfers needed to save or restore `ir` for a
-different process. SWTOS therefore remains cooperative on current COR24.
+`just interrupt-context-capability-smoke` verifies that `ir` remains
+indirect-only and that COR24's `C7` absolute-immediate jump resumes without
+clobbering restored registers. `just preemption-runway-smoke` proves exact PC
+recovery through the software ADD runway. The definitive integrated test is:
+
+```
+just preemption-acceptance
+```
+
+It runs a private `cpu-hog` containing no yield, syscall, UART, IPC, sleep, or
+blocking operation. UART heartbeats expire its quantum, the kernel snapshots
+every live byte overwritten by the runway, recovers and restores its IRQ
+context, and schedules other work. The test requires forced-preemption and CPU
+progress samples to advance and a debugger request to complete while the hog
+continues running. Normal yield/block switches remain the inexpensive path;
+forced preemption is the bounded trust-but-verify backstop.
 
 The first I2C client reuses the proven COR24 DS1307 transaction: a reusable
 bit-banged HAL at `0xFF0020`/`0xFF0021` sets register zero, performs a repeated

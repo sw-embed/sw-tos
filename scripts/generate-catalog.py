@@ -208,7 +208,15 @@ def render_scheduled(entries: list[dict], manifest: Path) -> str:
     for record in records:
         values = ",".join(str(value) for value in record)
         lines.append(f"        .byte   {values}")
-    lines.extend(["_block_catalog_index_end:", ""])
+    lines.extend(
+        [
+            "_block_catalog_index_end:",
+            "; Mutable authentication workspace sized to the complete generated record region.",
+            "_block_catalog_buffer:",
+            f"        .zero   {len(record_bytes)}",
+            "",
+        ]
+    )
     images = [entry for entry in entries if entry["image_manifest"] is not None]
     image_bytes = sum(entry["image_words"] * 3 for entry in images)
     shell_strings = {
