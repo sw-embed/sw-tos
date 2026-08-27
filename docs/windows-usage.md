@@ -127,6 +127,13 @@ values changing while Shell, Debugger, and Resources remain responsive. The
 sample is a deliberately simple acceptance-test indicator, not general CPU
 usage accounting.
 
+For a runway-saved process, `regs EP` returns its coherent interrupted frame
+and saved PC; requesting registers does not itself preempt the process. Run it
+twice with heartbeats between requests to verify that the saved `r0` counter
+changes across resume/preemption cycles. `kill EP` queues safe termination of
+a certified hostile process. SWTOS reclaims only a complete parked context via
+the ordinary task-exit path, after which Resources omits the endpoint.
+
 `STALE` means no complete snapshot arrived for one second. `resource data
 unavailable` means the frontend has not yet received a complete generation.
 
@@ -141,10 +148,12 @@ list NAME|ADDRESS
 dis NAME|ADDRESS [COUNT]
 regs [ENDPOINT]
 x ADDRESS [1..12]
+kill ENDPOINT
 ```
 
 Symbolic commands require the target build ID to match the selected debug map.
-Registers and memory are read-only hardware-safe operations. Breakpoints,
+Registers and memory are read-only hardware-safe operations. `kill` is limited
+to a certified hostile process parked at a safe interrupt context. Breakpoints,
 continue, step, next, and backtrace use the emulator-backed debugger; arbitrary
 instruction breakpoints are not supported on the physical COR24-TB.
 
@@ -157,8 +166,12 @@ symbolic debugging, zoom, and scrollback against the emulator:
 just windows-demo-record
 ```
 
-Recording requires `vhs` and `ffmpeg` on `PATH`. The tape is validated before
-the image and pinned emulator adapter are built.
+Recording requires `vhs`, Cargo, and FFmpeg. `just windows-demo-tools` resolves
+and prints the exact tools first. The tracked wrapper adds the conventional
+Go, Cargo, and user-local binary directories (`$GOPATH/bin`,
+`$CARGO_HOME/bin`, and `$HOME/.local/bin`) to the inherited system `PATH`, so
+the recording does not depend on login-shell initialization. The tape is
+validated before the image and pinned emulator adapter are built.
 
 The recipe writes the master recording under ignored `build/captures/` and
 encodes the checked-in VP9 README asset at `videos/cor24-windows-demo.webm`.

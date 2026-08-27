@@ -89,7 +89,20 @@ Type "regs 2"
 Enter
 Sleep 3s
 
-# Detach cleanly while the hostile process is still running.
+# A later parked frame must contain a different hostile-loop r0 value.
+Type "regs 2"
+Enter
+Sleep 3s
+
+# Queue safe termination, then show that Resources removes the endpoint.
+Type "kill 2"
+Enter
+Sleep 3s
+Ctrl+A
+Type "4"
+Sleep 4s
+
+# Detach cleanly after debugger-controlled termination.
 Ctrl+A
 Type "d"
 Sleep 1s

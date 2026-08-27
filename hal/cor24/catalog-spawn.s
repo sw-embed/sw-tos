@@ -1794,8 +1794,26 @@ _embedded_allocation_ok:
         sw      r0,6(r2)        ; landing slot base
         add     r0,6
         sw      r0,9(r2)        ; live shadow base
+        ; Private allocation alone is insufficient: an IRQ continuation could
+        ; be inside shared code. Only an explicitly certified leaf image with
+        ; no external control transfers may enter the ADD runway.
+        la      r0,_embedded_descriptor
+        lw      r0,0(r0)
+        lw      r0,21(r0)
+        lc      r1,64
+        and     r0,r1
+        ceq     r0,r1
+        brf     _embedded_not_runway_eligible
         lc      r0,1
-        sw      r0,21(r2)       ; eligible for forced preemption
+        bra     _embedded_store_runway_eligible
+_embedded_not_runway_eligible:
+        lc      r0,0
+_embedded_store_runway_eligible:
+        sw      r0,21(r2)       ; structurally certified forced-preemption leaf
+        lc      r0,0
+        sw      r0,24(r2)       ; no saved IRQ context yet
+        sw      r0,27(r2)       ; no interrupted-r0 sample yet
+        sw      r0,30(r2)       ; no asynchronous kill request
         lw      r0,0(r2)        ; preserve loader's allocation-base result
 
         ; Copy text + initialized data; the remaining allocation stays zero.
@@ -3808,13 +3826,24 @@ _protocol_debug_check_length:
 _protocol_debug_check_memory:
         lc      r1,3
         ceq     r0,r1
-        brf     _protocol_debug_invalid
+        brf     _protocol_debug_check_kill
         la      r2,_PROTOCOL_RX_LENGTH
         lw      r0,0(r2)
         lc      r1,5
         ceq     r0,r1
         brf     _protocol_debug_invalid
         la      r2,_protocol_debug_memory
+        jmp     (r2)
+_protocol_debug_check_kill:
+        lc      r1,13
+        ceq     r0,r1
+        brf     _protocol_debug_invalid
+        la      r2,_PROTOCOL_RX_LENGTH
+        lw      r0,0(r2)
+        lc      r1,2
+        ceq     r0,r1
+        brf     _protocol_debug_invalid
+        la      r2,_protocol_debug_kill
         jmp     (r2)
 _protocol_debug_invalid:
         la      r2,_protocol_frame_done
@@ -3940,6 +3969,15 @@ _protocol_debug_registers_active:
         sb      r0,2(r2)
         la      r1,_protocol_debug_proc
         lw      r1,0(r1)
+        mov     r0,r1
+        la      r2,_preempt_for_proc
+        jal     r1,(r2)
+        lw      r0,24(r0)      ; interrupt-originated context is stack-backed
+        ceq     r0,z
+        brf     _protocol_debug_registers_irq
+        la      r2,_protocol_resource_payload
+        la      r1,_protocol_debug_proc
+        lw      r1,0(r1)
         lw      r0,0(r1)
         sw      r0,3(r2)
         lw      r0,3(r1)
@@ -3948,6 +3986,23 @@ _protocol_debug_registers_active:
         sw      r0,9(r2)
         lw      r0,9(r1)
         sw      r0,12(r2)
+        bra     _protocol_debug_registers_first_ready
+_protocol_debug_registers_irq:
+        la      r2,_protocol_resource_payload
+        la      r1,_protocol_debug_proc
+        lw      r1,0(r1)
+        lw      r1,9(r1)       ; C, fp, r2, r1, r0 ISR frame
+        lw      r0,12(r1)
+        sw      r0,3(r2)
+        lw      r0,9(r1)
+        sw      r0,6(r2)
+        lw      r0,6(r1)
+        sw      r0,9(r2)
+        la      r1,_protocol_debug_proc
+        lw      r1,0(r1)
+        lw      r0,9(r1)
+        sw      r0,12(r2)
+_protocol_debug_registers_first_ready:
         lc      r0,15
         la      r2,_protocol_resource_length
         sw      r0,0(r2)
@@ -3965,9 +4020,100 @@ _protocol_debug_registers_active:
         lw      r1,0(r1)
         lw      r0,12(r1)
         sw      r0,3(r2)
+        mov     r0,r1
+        la      r2,_preempt_for_proc
+        jal     r1,(r2)
+        lw      r0,24(r0)
+        ceq     r0,z
+        brf     _protocol_debug_registers_irq_status
+        la      r2,_protocol_resource_payload
+        la      r1,_protocol_debug_proc
+        lw      r1,0(r1)
         lw      r0,15(r1)
         sw      r0,6(r2)
+        bra     _protocol_debug_registers_second_ready
+_protocol_debug_registers_irq_status:
+        la      r2,_protocol_resource_payload
+        la      r1,_protocol_debug_proc
+        lw      r1,0(r1)
+        lw      r1,9(r1)
+        lw      r0,0(r1)
+        sw      r0,6(r2)
+_protocol_debug_registers_second_ready:
         lc      r0,9
+        la      r2,_protocol_resource_length
+        sw      r0,0(r2)
+        la      r2,_protocol_emit_debug_record
+        jal     r1,(r2)
+        la      r2,_protocol_frame_done
+        jmp     (r2)
+
+; Queue termination for a certified non-current leaf. The clock forces it to
+; a complete interrupt context and the landing handler performs TASK_EXIT only
+; after restoring its live image. Never free a process from this request path.
+_protocol_debug_kill:
+        la      r2,_PROTOCOL_RX_PAYLOAD
+        lbu     r0,1(r2)
+        lc      r1,2
+        ceq     r0,r1
+        brt     _protocol_debug_kill_b
+        lc      r1,3
+        ceq     r0,r1
+        brt     _protocol_debug_kill_c
+        lc      r0,1           ; invalid/protected endpoint
+        la      r2,_protocol_debug_kill_emit
+        jmp     (r2)
+_protocol_debug_kill_b:
+        la      r1,_proc_b
+        bra     _protocol_debug_kill_selected
+_protocol_debug_kill_c:
+        la      r1,_proc_c
+_protocol_debug_kill_selected:
+        lw      r0,24(r1)
+        ceq     r0,z
+        brf     _protocol_debug_kill_check_current
+        lc      r0,2           ; already free
+        bra     _protocol_debug_kill_emit
+_protocol_debug_kill_check_current:
+        la      r2,_current_proc
+        lw      r0,0(r2)
+        ceq     r0,r1
+        brf     _protocol_debug_kill_check_eligible
+        ; current_proc remains the owner while its runway-saved IRQ frame is
+        ; parked in the shared scheduler/protocol path.  That state is safe to
+        ; queue; only reject a genuinely executing current process.
+        mov     r0,r1
+        la      r2,_preempt_for_proc
+        jal     r1,(r2)
+        lw      r2,24(r0)
+        ceq     r2,z
+        brf     _protocol_debug_kill_queue
+        lc      r0,3           ; current process is not quiescent
+        bra     _protocol_debug_kill_emit
+_protocol_debug_kill_check_eligible:
+        la      r2,_protocol_debug_proc
+        sw      r1,0(r2)
+        mov     r0,r1
+        la      r2,_preempt_for_proc
+        jal     r1,(r2)
+        lw      r1,21(r0)
+        ceq     r1,z
+        brf     _protocol_debug_kill_queue
+        lc      r0,4           ; not certified for forced quiescence
+        bra     _protocol_debug_kill_emit
+_protocol_debug_kill_queue:
+        lc      r1,1
+        sw      r1,30(r0)
+        lc      r0,0
+_protocol_debug_kill_emit:
+        la      r2,_protocol_resource_payload
+        lc      r1,13
+        sb      r1,0(r2)
+        la      r1,_PROTOCOL_RX_PAYLOAD
+        lbu     r1,1(r1)
+        sb      r1,1(r2)
+        sb      r0,2(r2)
+        lc      r0,3
         la      r2,_protocol_resource_length
         sw      r0,0(r2)
         la      r2,_protocol_emit_debug_record
@@ -4186,6 +4332,26 @@ _protocol_time_check_length:
         lw      r0,0(r2)
         lc      r1,3
         ceq     r0,r1
+        brt     _protocol_time_check_foreground
+        la      r2,_protocol_time_done
+        jmp     (r2)
+_protocol_time_check_foreground:
+        la      r2,_tty_foreground_proc
+        lw      r2,0(r2)
+        lw      r0,33(r2)
+        la      r2,_PROTOCOL_RX_TYPE
+        lbu     r1,0(r2)
+        lc      r2,6
+        ceq     r1,r2
+        brf     _protocol_time_check_clock_proc
+        la      r2,_scheduled_uptime_descriptor
+        ceq     r0,r2
+        brt     _protocol_time_valid
+        la      r2,_protocol_time_done
+        jmp     (r2)
+_protocol_time_check_clock_proc:
+        la      r2,_scheduled_clock_descriptor
+        ceq     r0,r2
         brt     _protocol_time_valid
         la      r2,_protocol_time_done
         jmp     (r2)
@@ -4385,15 +4551,15 @@ _proc_b_stats:
         .zero   24
 _proc_c_stats:
         .zero   24
-; Ten words per slot: live base/words, landing, shadow, quantum, pending,
-; forced count, eligibility, IRQ-context flag, and interrupted-r0 sample. This
-; preserves the 39-byte process ABI while making recovery policy observable.
+; Eleven words per slot: live base/words, landing, shadow, quantum, pending,
+; forced count, eligibility, IRQ-context flag, interrupted-r0 sample, and an
+; asynchronous kill request. This preserves the 39-byte process ABI.
 _proc_a_preempt:
-        .zero   30
+        .zero   33
 _proc_b_preempt:
-        .zero   30
+        .zero   33
 _proc_c_preempt:
-        .zero   30
+        .zero   33
 ; head, tail, count, overflow, then sixteen input bytes.
 _tty_a:
         .zero   28

@@ -58,5 +58,10 @@ target's build identity and returns the opcode plus a three-byte little-endian
 CRC of the immutable executable range. Opcode 2 takes an endpoint and returns
 its saved registers in two bounded records: `r0`, `r1`, `r2`, `sp`, then `pc`
 and status. Opcode 3 takes a 24-bit address and a length from 1 through 12 and
-returns those bytes with their starting address. These Saga 7 operations are
-read-only; execution-control opcodes are added separately.
+returns those bytes with their starting address. Opcode 13 takes an endpoint
+and queues termination only when the target is a certified runway process with
+a complete parked interrupt context; its three-byte response is opcode,
+endpoint, and status (zero means queued). Register reads do not cause a
+preemption: opcode 2 reports the most recently parked coherent ISR frame.
+Identity, register, and memory operations are read-only; kill is asynchronous
+execution control and descriptor reclamation remains in the task-exit path.

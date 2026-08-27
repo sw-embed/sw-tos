@@ -20,6 +20,11 @@ const RESOURCE_SNAPSHOT: u8 = 8;
 // modeled UART. This is intentionally outside protocol v1's target kinds and
 // is required for the out-of-band FF 01 scheduler heartbeat used on hardware.
 const RAW_UART: u8 = 0xfe;
+const TARGET_BYTE_CYCLES: u64 = 500_000;
+// Heartbeats arrive at 100 Hz. The UART ISR consumes each byte in far fewer
+// cycles; using the full target-frame budget here makes the emulator adapter
+// fall behind real time and starves outbound Resources snapshots.
+const HEARTBEAT_BYTE_CYCLES: u64 = 20_000;
 
 fn main() -> Result<(), String> {
     let mut args = env::args().skip(1);
@@ -83,25 +88,29 @@ fn main() -> Result<(), String> {
 
 fn handle_frame(
     emu: &mut EmulatorCore,
-    build_id: u32,
+    _build_id: u32,
     frame: Frame,
     io: &mut File,
     uart_log_seen: &mut usize,
 ) -> Result<(), String> {
     match (frame.kind, frame.payload.as_slice()) {
-        (RAW_UART, bytes) => feed_uart_bytes(emu, bytes, io, uart_log_seen),
-        (HELLO, b"SWT1") => feed_target_frame(emu, &frame, io, uart_log_seen),
-        (kind, _) if target_frame(kind) => feed_target_frame(emu, &frame, io, uart_log_seen),
-        (DEBUG_REQUEST, [1]) => write_debug(
+        (RAW_UART, bytes) => feed_uart_bytes(
+            emu,
+            bytes,
+            HEARTBEAT_BYTE_CYCLES,
             io,
-            vec![
-                1,
-                build_id as u8,
-                (build_id >> 8) as u8,
-                (build_id >> 16) as u8,
-            ],
+            uart_log_seen,
         ),
-        (DEBUG_REQUEST, [2, endpoint]) => {
+        // These operations are implemented by SWTOS itself so endpoint
+        // register snapshots and process termination use scheduler-owned
+        // saved contexts identically on the emulator and physical board.
+        (DEBUG_REQUEST, [1] | [13, _]) => {
+            feed_target_frame(emu, &frame, io, uart_log_seen)
+        }
+        // While execution is stopped, endpoint 1 is the debugger's raw CPU
+        // context. While running, endpoint requests belong to SWTOS and report
+        // coherent scheduler-owned process contexts on emulator and hardware.
+        (DEBUG_REQUEST, [2, endpoint]) if !emu.is_running() => {
             let snap = emu.snapshot();
             let mut first = vec![2, *endpoint, 0];
             for value in [snap.regs[0], snap.regs[1], snap.regs[2], snap.regs[4]] {
@@ -114,12 +123,16 @@ fn handle_frame(
             }
             write_debug(io, second)
         }
-        (DEBUG_REQUEST, [3, a0, a1, a2, length]) => {
+        (DEBUG_REQUEST, [2, _]) => feed_target_frame(emu, &frame, io, uart_log_seen),
+        (DEBUG_REQUEST, [3, a0, a1, a2, length]) if !emu.is_running() => {
             let address = u24(*a0, *a1, *a2);
             let mut response = vec![3, *a0, *a1, *a2];
             response.extend(emu.read_memory(address, u32::from((*length).min(64))));
             write_debug(io, response)
         }
+        (DEBUG_REQUEST, [3, _, _, _, _]) => feed_target_frame(emu, &frame, io, uart_log_seen),
+        (HELLO, b"SWT1") => feed_target_frame(emu, &frame, io, uart_log_seen),
+        (kind, _) if target_frame(kind) => feed_target_frame(emu, &frame, io, uart_log_seen),
         (DEBUG_REQUEST, [4]) => {
             emu.pause();
             write_debug(io, stop_payload(emu, &StopReason::Paused))
@@ -255,11 +268,38 @@ impl Decoder {
         self.bytes.extend(input);
         let mut frames = Vec::new();
         loop {
-            let Some(pos) = self.bytes.windows(2).position(|v| v == SYNC) else {
-                self.bytes.clear();
-                break;
+            if self.bytes.starts_with(&[0xff, 1]) {
+                if self.bytes.len() < 5 {
+                    break;
+                }
+                frames.push(Frame {
+                    kind: RAW_UART,
+                    channel: 0,
+                    payload: self.bytes[..5].to_vec(),
+                });
+                self.bytes.drain(..5);
+                continue;
+            }
+            let framed = self.bytes.windows(2).position(|v| v == SYNC);
+            let heartbeat = self.bytes.windows(2).position(|v| v == [0xff, 1]);
+            let pos = match (framed, heartbeat) {
+                (Some(a), Some(b)) => a.min(b),
+                (Some(pos), None) | (None, Some(pos)) => pos,
+                (None, None) => {
+                    if self.bytes.last().is_some_and(|byte| [0xa5, 0xff].contains(byte)) {
+                        let last = *self.bytes.last().expect("checked above");
+                        self.bytes.clear();
+                        self.bytes.push(last);
+                    } else {
+                        self.bytes.clear();
+                    }
+                    break;
+                }
             };
             self.bytes.drain(..pos);
+            if self.bytes.starts_with(&[0xff, 1]) {
+                continue;
+            }
             if self.bytes.len() < 8 {
                 break;
             }
@@ -291,19 +331,20 @@ fn feed_target_frame(
     uart_log_seen: &mut usize,
 ) -> Result<(), String> {
     let bytes = encoded_frame(frame.kind, frame.channel, &frame.payload);
-    feed_uart_bytes(emu, &bytes, io, uart_log_seen)
+    feed_uart_bytes(emu, &bytes, TARGET_BYTE_CYCLES, io, uart_log_seen)
 }
 
 fn feed_uart_bytes(
     emu: &mut EmulatorCore,
     bytes: &[u8],
+    cycles_per_byte: u64,
     io: &mut File,
     uart_log_seen: &mut usize,
 ) -> Result<(), String> {
     for &byte in bytes {
         emu.send_uart_byte(byte);
         emu.resume();
-        let result = emu.run_batch(500_000);
+        let result = emu.run_batch(cycles_per_byte);
         if !matches!(result.reason, StopReason::CycleLimit) {
             write_debug(io, stop_payload(emu, &result.reason))?;
         }
@@ -360,5 +401,20 @@ mod tests {
         }
         assert!(!target_frame(DEBUG_REQUEST));
         assert!(!target_frame(HELLO));
+    }
+
+    #[test]
+    fn decoder_preserves_raw_scheduler_heartbeats_between_target_frames() {
+        let mut decoder = Decoder::default();
+        let target = encoded_frame(TTY_INPUT, 0, b"x");
+        let mut stream = target.clone();
+        stream.extend([0xff, 1, 0x34, 0x12, 0]);
+        assert!(decoder.push(&stream[..3]).is_empty());
+        let frames = decoder.push(&stream[3..]);
+        assert_eq!(frames.len(), 2);
+        assert_eq!(frames[0].kind, TTY_INPUT);
+        assert_eq!(frames[0].payload, b"x");
+        assert_eq!(frames[1].kind, RAW_UART);
+        assert_eq!(frames[1].payload, [0xff, 1, 0x34, 0x12, 0]);
     }
 }

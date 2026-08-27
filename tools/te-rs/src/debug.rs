@@ -255,6 +255,11 @@ impl DebugConsole {
                 lines
             }
             [12] => vec!["detached from emulator".into()],
+            [13, endpoint, status] => vec![if *status == 0 {
+                format!("kill requested for endpoint {endpoint}")
+            } else {
+                format!("cannot kill endpoint {endpoint}: status {status}")
+            }],
             _ => vec!["invalid debug response".into()],
         }
     }
@@ -293,9 +298,13 @@ impl DebugConsole {
             ["step"] | ["s"] => Ok(request("stepping one instruction", vec![9])),
             ["next"] | ["n"] => Ok(request("stepping over call", vec![10])),
             ["bt"] => Ok(request("requesting ABI backtrace", vec![11])),
+            ["kill", endpoint] => endpoint
+                .parse::<u8>()
+                .map(|endpoint| request(&format!("killing endpoint {endpoint}"), vec![13, endpoint]))
+                .map_err(|_| "endpoint must be decimal".to_string()),
             ["detach"] => Ok(request("detaching from emulator", vec![12])),
             ["help"] | [] => Ok(text(
-                "sym NAME | list LOC | dis LOC [N] | regs [EP] | x ADDR [N] | pause | continue | break LOC | bl | delete LOC | step | next | bt | detach",
+                "sym NAME | list LOC | dis LOC [N] | regs [EP] | x ADDR [N] | kill EP | pause | continue | break LOC | bl | delete LOC | step | next | bt | detach",
             )),
             _ => Err("unknown debugger command; use help".into()),
         };

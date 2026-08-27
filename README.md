@@ -31,6 +31,9 @@ interrupted `r0` sample as `cpu=`. The `cpu-hog` catalog image deliberately
 contains no yield, syscall, I/O, IPC, sleep, or blocking operation; continued
 Resources and Debugger response while those values advance is the acceptance
 proof for preemptive time slicing.
+The Debugger can read the coherent saved frame with `regs 2` and queue safe
+termination with `kill 2`; the recording demonstrates repeated counter
+progress followed by removal from Resources.
 
 ### Key Features
 
@@ -65,8 +68,10 @@ proof for preemptive time slicing.
 ## Documentation
 
 See [docs/architecture.md](docs/architecture.md) for the implemented system
-architecture, [docs/user-guide.md](docs/user-guide.md) for general operation,
-and [docs/windows-usage.md](docs/windows-usage.md) for the tiled frontend,
+architecture, [docs/preemptive-multitasking.md](docs/preemptive-multitasking.md)
+for the UART-clock scheduling design and ADD-runway implementation,
+[docs/user-guide.md](docs/user-guide.md) for general operation, and
+[docs/windows-usage.md](docs/windows-usage.md) for the tiled frontend,
 scrollback, process monitoring, and debugger workflows.
 
 See [docs/plan.md](docs/plan.md) for the full development plan including

@@ -25,6 +25,10 @@ FLAGS = {
     "autostart": ("IMAGE_AUTOSTART", 8),
     "restartable": ("IMAGE_RESTARTABLE", 16),
     "read_only": ("IMAGE_READ_ONLY", 32),
+    # Explicit certification that every possible continuation remains inside
+    # the private live image. The loader, not mere private allocation, uses
+    # this bit to permit ADD-runway forced preemption.
+    "preemptible_leaf": ("IMAGE_PREEMPTIBLE_LEAF", 64),
 }
 ENTRY_KEYS = {"name", "entry", "scheduled_entry", "stack_words", "state_words", "flags", "image_manifest"}
 
@@ -96,6 +100,8 @@ def load_entries(path: Path) -> list[dict]:
                     fail(f"{label} image_manifest does not exist in repository")
                 with image_path.open("rb") as image_stream:
                     image_document = tomllib.load(image_stream)
+                if "preemptible_leaf" in flags and image_document.get("relocation_count") != 0:
+                    fail(f"{label} preemptible_leaf image must have zero relocations")
                 text_words = image_document.get("text_words")
                 data_words = image_document.get("data_words")
                 if (
@@ -110,6 +116,8 @@ def load_entries(path: Path) -> list[dict]:
                     fail(f"{label} image_manifest has invalid word counts")
                 image_words = 9 + text_words + data_words
             else:
+                if "preemptible_leaf" in flags:
+                    fail(f"{label} preemptible_leaf must use a private image")
                 image_words = 0
 
             entries.append(

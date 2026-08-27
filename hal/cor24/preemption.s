@@ -273,6 +273,18 @@ _preemption_clock_tick:
         la      r2,_preemption_isr_return
         jmp     (r2)
 _preemption_clock_eligible:
+        ; A runway-saved process remains current while the landing handler and
+        ; scheduler poll shared protocol code.  Its complete IRQ frame is
+        ; quiescent: never mistake that shared-code interval for user execution.
+        lw      r0,24(r2)
+        ceq     r0,z
+        brt     _preemption_clock_running
+        la      r2,_preemption_isr_return
+        jmp     (r2)
+_preemption_clock_running:
+        lw      r0,30(r2)      ; asynchronous debugger kill request
+        ceq     r0,z
+        brf     _preemption_force
         lw      r0,12(r2)
         ceq     r0,z
         brt     _preemption_force
@@ -406,6 +418,19 @@ _preemption_restore_loop:
         sw      r0,24(r1)
         lc      r0,0
         sw      r0,15(r1)
+        lw      r0,30(r1)
+        ceq     r0,z
+        brt     _preemption_landing_schedule
+        lc      r0,0
+        sw      r0,30(r1)
+        ; The task is now quiescent with live text restored and a complete ISR
+        ; frame. Re-enable UART before using the ordinary child-exit path.
+        la      r2,0xFF0010
+        lc      r0,1
+        sb      r0,0(r2)
+        la      r2,_TASK_EXIT
+        jmp     (r2)
+_preemption_landing_schedule:
         la      r2,_current_proc
         lw      r2,0(r2)
         la      r1,_scan_runnable

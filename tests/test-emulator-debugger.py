@@ -75,6 +75,11 @@ def main():
     debug_map = json.loads(MAP.read_text())
     counter = next(item["address"] for item in debug_map["symbols"] if item["name"] == "_PLSW_COUNTER")
     loop = next(item["address"] for item in debug_map["instructions"] if item["address"] > counter and " ".join(item["text"].split()) == "lw r0,-3(fp)")
+    increment = next(
+        item["address"]
+        for item in debug_map["instructions"]
+        if item["address"] > loop and " ".join(item["text"].split()) == "add r0,r1"
+    )
 
     master, slave = pty.openpty()
     tty.setraw(slave)
@@ -118,14 +123,25 @@ def main():
         private = transport.debug(b"\x03" + u24((fp - 3) & 0xFFFFFF) + b"\x03")
         assert len(private) == 7 and int.from_bytes(private[4:], "little") != 0
 
-        # Reach and execute the increment, proving r0 changes by one.
-        for _ in range(7):
+        # Reach the generated increment by address rather than a brittle fixed
+        # prologue instruction count, then prove r0 changes by one.
+        visited = []
+        for _ in range(24):
+            parts = transport.registers()
+            pc = int.from_bytes(parts[1][3:6], "little")
+            visited.append(pc)
+            if pc == increment:
+                break
             transport.debug(b"\x09")
+        else:
+            raise AssertionError(f"did not reach Counter increment {increment}: {visited}")
         pre_add = transport.registers()[0]
         transport.debug(b"\x09")
         post_add = transport.registers()[0]
         get_r0 = lambda data: int.from_bytes(data[3:6], "little")
-        assert get_r0(post_add) == (get_r0(pre_add) + 1) & 0xFFFFFF
+        assert get_r0(post_add) == (get_r0(pre_add) + 1) & 0xFFFFFF, (
+            get_r0(pre_add), get_r0(post_add)
+        )
         assert transport.debug(b"\x08") == b"\x08\x01" + u24(counter)
         assert transport.debug(b"\x0b")[0] == 11
 

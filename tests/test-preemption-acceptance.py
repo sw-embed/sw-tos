@@ -112,6 +112,58 @@ def resource_sample(transport: Transport, tick: int):
     )
 
 
+def saved_hog_r0(transport: Transport, tick: int):
+    transport.send(9, b"\x02\x02")
+    first = None
+    second = None
+    deadline = time.monotonic() + 3
+    while time.monotonic() < deadline and (first is None or second is None):
+        heartbeat(transport, tick)
+        tick += 1
+        received = transport.receive(0.05)
+        if received is None or received[0] != 10:
+            continue
+        payload = received[2]
+        if len(payload) == 15 and payload[:3] == b"\x02\x02\x00":
+            first = payload
+        elif len(payload) == 9 and payload[:3] == b"\x02\x02\x01":
+            second = payload
+    assert first is not None and second is not None, "no coherent saved cpu-hog context"
+    return tick, int.from_bytes(first[3:6], "little")
+
+
+def kill_hog(transport: Transport, tick: int):
+    transport.send(9, b"\x0d\x02")
+    deadline = time.monotonic() + 3
+    while time.monotonic() < deadline:
+        heartbeat(transport, tick)
+        tick += 1
+        received = transport.receive(0.05)
+        if received is not None and received[0] == 10 and received[2][:2] == b"\x0d\x02":
+            assert received[2] == b"\x0d\x02\x00", received[2]
+            return tick
+    raise AssertionError("debugger could not kill saved cpu-hog context")
+
+
+def assert_hog_absent(transport: Transport, tick: int):
+    transport.send(8)
+    seen_hog = False
+    deadline = time.monotonic() + 3
+    while time.monotonic() < deadline:
+        heartbeat(transport, tick)
+        tick += 1
+        received = transport.receive(0.05)
+        if received is None or received[0] != 8:
+            continue
+        payload = received[2]
+        if len(payload) >= 3 and payload[0] in (3, 4, 6) and payload[2] == 2:
+            seen_hog = True
+        if payload[:1] == b"\x05":
+            assert not seen_hog, "killed cpu-hog remained in Resources"
+            return tick
+    raise AssertionError("no complete Resources generation after killing cpu-hog")
+
+
 def main():
     for artifact in (IMAGE, MAP, ADAPTER):
         assert artifact.exists(), f"missing {artifact}; run documented build recipes"
@@ -149,6 +201,16 @@ def main():
         assert second[0] > first[0], (first, second)
         assert second[1] != first[1], (first, second)
 
+        # Endpoint-aware debugger reads come from the quiescent ISR stack, not
+        # from the emulator's globally running CPU. Two snapshots must prove
+        # that the same saved r0 resumes and advances between preemptions.
+        tick, debug_r0_first = saved_hog_r0(transport, tick)
+        for _ in range(7):
+            heartbeat(transport, tick)
+            tick += 1
+        tick, debug_r0_second = saved_hog_r0(transport, tick)
+        assert debug_r0_second != debug_r0_first, (debug_r0_first, debug_r0_second)
+
         # A debugger request must still complete while the application never
         # yields, blocks, performs IPC, or enters a syscall.
         transport.send(9, b"\x01")
@@ -164,9 +226,12 @@ def main():
             if kind == 10 and payload[:1] == b"\x01":
                 response = payload
         assert response is not None, "debugger stopped responding under cpu-hog"
+        tick = kill_hog(transport, tick)
+        tick = assert_hog_absent(transport, tick)
         print(
             "PASS: cpu-hog advanced under forced preemption "
-            f"(forced {first[0]}->{second[0]}, cpu {first[1]}->{second[1]})"
+            f"(forced {first[0]}->{second[0]}, resource cpu {first[1]}->{second[1]}, "
+            f"debug r0 {debug_r0_first}->{debug_r0_second}) and was killed safely"
         )
     finally:
         os.close(slave)

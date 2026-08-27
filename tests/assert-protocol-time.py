@@ -10,10 +10,10 @@ def main() -> int:
     framed_time = b"".join(
         bytes.fromhex(frame)
         for frame in (
-            "c2 a5 5a 01 02 01 54 58",
-            "c2 a5 5a 01 02 01 49 4d",
-            "c2 a5 5a 01 02 01 4d 51",
-            "c2 a5 5a 01 02 01 45 49",
+            "c2 a5 5a 01 02 01 01 54 59",
+            "c2 a5 5a 01 02 01 01 49 4e",
+            "c2 a5 5a 01 02 01 01 4d 52",
+            "c2 a5 5a 01 02 01 01 45 4a",
         )
     )
     if b"R\n" not in output or output.count(ack) != 1 or framed_time not in output:

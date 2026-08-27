@@ -138,26 +138,34 @@ cor24-debugger-demo image="build/scheduled-shell/program.bin" map="build/schedul
     ./scripts/swtos-emulator-debug.py {{image}} {{map}} --session {{session}}
 
 # Validate the reproducible emulator-backed Windows demo tape
-windows-demo-validate:
-    vhs validate docs/demos/cor24-windows.tape
+windows-demo-tools:
+    bash scripts/with-demo-tools.sh --check
+
+windows-demo-validate: windows-demo-tools
+    bash scripts/with-demo-tools.sh vhs validate docs/demos/cor24-windows.tape
 
 # Record the Windows demo and encode its README asset
 windows-demo-record: windows-demo-validate scheduled-shell-build cor24-debugger-build te-rs-release
     mkdir -p build/captures
-    vhs docs/demos/cor24-windows.tape
+    bash scripts/with-demo-tools.sh vhs docs/demos/cor24-windows.tape
     just windows-demo-encode
 
 # Encode the recorded master as a compact VP9 README asset
 windows-demo-encode:
-    ffmpeg -y -i build/captures/cor24-windows-master.mp4 -vf fps=12 -an -c:v libvpx-vp9 -b:v 0 -crf 44 -deadline good -cpu-used 4 -row-mt 1 videos/cor24-windows-demo.webm
+    bash scripts/with-demo-tools.sh ffmpeg -y -i build/captures/cor24-windows-master.mp4 -vf fps=12 -an -c:v libvpx-vp9 -b:v 0 -crf 44 -deadline good -cpu-used 4 -row-mt 1 videos/cor24-windows-demo.webm
 
 # Extract representative ignored frames for visual inspection of the recording
 windows-demo-inspect:
     mkdir -p build/captures
-    ffmpeg -y -ss 6 -i build/captures/cor24-windows-master.mp4 -frames:v 1 -update 1 build/captures/cor24-windows-06.png
-    ffmpeg -y -ss 14 -i build/captures/cor24-windows-master.mp4 -frames:v 1 -update 1 build/captures/cor24-windows-14.png
-    ffmpeg -y -ss 27 -i build/captures/cor24-windows-master.mp4 -frames:v 1 -update 1 build/captures/cor24-windows-27.png
-    ffmpeg -y -ss 39 -i build/captures/cor24-windows-master.mp4 -frames:v 1 -update 1 build/captures/cor24-windows-39.png
+    bash scripts/with-demo-tools.sh ffmpeg -y -ss 6 -i build/captures/cor24-windows-master.mp4 -frames:v 1 -update 1 build/captures/cor24-windows-06.png
+    bash scripts/with-demo-tools.sh ffmpeg -y -ss 14 -i build/captures/cor24-windows-master.mp4 -frames:v 1 -update 1 build/captures/cor24-windows-14.png
+    bash scripts/with-demo-tools.sh ffmpeg -y -ss 27 -i build/captures/cor24-windows-master.mp4 -frames:v 1 -update 1 build/captures/cor24-windows-27.png
+    bash scripts/with-demo-tools.sh ffmpeg -y -ss 39 -i build/captures/cor24-windows-master.mp4 -frames:v 1 -update 1 build/captures/cor24-windows-39.png
+    bash scripts/with-demo-tools.sh ffmpeg -y -ss 42 -i build/captures/cor24-windows-master.mp4 -frames:v 1 -update 1 build/captures/cor24-windows-42.png
+    bash scripts/with-demo-tools.sh ffmpeg -y -ss 46 -i build/captures/cor24-windows-master.mp4 -frames:v 1 -update 1 build/captures/cor24-windows-46.png
+    bash scripts/with-demo-tools.sh ffmpeg -y -ss 49 -i build/captures/cor24-windows-master.mp4 -frames:v 1 -update 1 build/captures/cor24-windows-49.png
+    bash scripts/with-demo-tools.sh ffmpeg -y -ss 53 -i build/captures/cor24-windows-master.mp4 -frames:v 1 -update 1 build/captures/cor24-windows-53.png
+    bash scripts/with-demo-tools.sh ffmpeg -y -ss 57 -i build/captures/cor24-windows-master.mp4 -frames:v 1 -update 1 build/captures/cor24-windows-57.png
 
 # Exercise Counter breakpoints, state, stepping, backtrace, and detach
 emulator-debugger-smoke: scheduled-shell-build cor24-debugger-build
