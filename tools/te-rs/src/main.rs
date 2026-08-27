@@ -823,6 +823,7 @@ fn run_windows(options: &Options) -> io::Result<()> {
     let mut tty_buffer = [0_u8; 256];
     let mut next_resource_request = Instant::now();
     let mut next_scheduler_heartbeat = Instant::now();
+    let mut next_hello_retry = Instant::now() + Duration::from_millis(250);
     let mut next_time_frames = Instant::now();
     let mut time_mode = None;
 
@@ -972,7 +973,8 @@ fn run_windows(options: &Options) -> io::Result<()> {
                             }
                         }
                         b'r' => {
-                            connection = ConnectionDecoder::default();
+                            let renegotiate = connection.mode() == Mode::Plain;
+                            connection.resynchronize();
                             resynchronize_heartbeat_parser(&mut serial)?;
                             resources = SnapshotAssembler::default();
                             debug_identity_sent = false;
@@ -981,10 +983,15 @@ fn run_windows(options: &Options) -> io::Result<()> {
                             desktop.set_error(None);
                             desktop.set_connected(true);
                             desktop.push_channel(254, b"reconnecting target transport\n");
-                            serial
-                                .write_all(&hello().encode().expect("HELLO payload is bounded"))?;
-                            serial.flush()?;
+                            if renegotiate {
+                                serial.write_all(
+                                    &hello().encode().expect("HELLO payload is bounded"),
+                                )?;
+                                serial.flush()?;
+                            }
                             next_resource_request = Instant::now();
+                            next_scheduler_heartbeat = Instant::now();
+                            next_hello_retry = Instant::now() + Duration::from_millis(250);
                         }
                         b'e' => {
                             let channel = desktop.focused_channel();
@@ -1111,7 +1118,11 @@ fn run_windows(options: &Options) -> io::Result<()> {
             serial.flush()?;
             next_resource_request = now + Duration::from_millis(250);
         }
-        if connection.mode() == Mode::Framed && now >= next_scheduler_heartbeat {
+        // Heartbeats must continue while HELLO is being negotiated.  In
+        // particular, a detached frontend can leave a non-yielding task on
+        // the CPU; SWTOS then needs clock IRQs to schedule the transport task
+        // which consumes HELLO and emits HELLO_ACK.
+        if now >= next_scheduler_heartbeat {
             let tick = (connected.elapsed().as_millis() as u32 / 10) & 0x00ff_ffff;
             serial.write_all(&scheduler_heartbeat(tick))?;
             serial.flush()?;
@@ -1119,6 +1130,11 @@ fn run_windows(options: &Options) -> io::Result<()> {
             if next_scheduler_heartbeat < now {
                 next_scheduler_heartbeat = now + Duration::from_millis(10);
             }
+        }
+        if connection.mode() == Mode::Plain && now >= next_hello_retry {
+            serial.write_all(&hello().encode().expect("HELLO payload is bounded"))?;
+            serial.flush()?;
+            next_hello_retry = now + Duration::from_millis(250);
         }
         if connection.mode() == Mode::Framed && time_mode.is_some() && now >= next_time_frames {
             let mode = time_mode.expect("checked active time mode");

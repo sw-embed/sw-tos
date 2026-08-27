@@ -106,6 +106,40 @@ def start_frontend(session=None):
     return process, terminal_master, terminal_slave, serial_master, before
 
 
+def negotiation_clock_path():
+    terminal_master, terminal_slave = pty.openpty()
+    serial_master, serial_slave = pty.openpty()
+    before = termios.tcgetattr(terminal_slave)
+    fcntl.ioctl(terminal_slave, termios.TIOCSWINSZ, struct.pack("HHHH", 24, 80, 0, 0))
+
+    def controlling_terminal():
+        os.setsid()
+        fcntl.ioctl(terminal_slave, termios.TIOCSCTTY, 0)
+
+    process = subprocess.Popen(
+        [str(BINARY), "--windows", "--debug-map", str(debug_map_path()), os.ttyname(serial_slave)],
+        stdin=terminal_slave,
+        stdout=terminal_slave,
+        stderr=subprocess.PIPE,
+        pass_fds=(terminal_slave,),
+        preexec_fn=controlling_terminal,
+    )
+    os.close(serial_slave)
+    # Withhold HELLO_ACK as a hostile-running target would. The frontend must
+    # keep supplying IRQ heartbeats and retry HELLO so negotiation can recover.
+    pending = read_until(serial_master, b"never-present", 0.65)
+    assert pending.count(HELLO) >= 2, "HELLO was not retried during negotiation"
+    assert pending.count(b"\xff\x01") >= 10, "scheduler clock stopped before HELLO_ACK"
+    os.write(serial_master, ACK)
+    identity_request = frame(9, 0, b"\x01")
+    assert identity_request in read_until(serial_master, identity_request), "late ACK did not recover"
+    os.write(tty_master := terminal_master, b"\x01d")
+    assert_restored(process, tty_master, terminal_slave, before, 0)
+    os.close(serial_master)
+    os.close(terminal_master)
+    os.close(terminal_slave)
+
+
 def assert_restored(process, terminal_master, terminal_slave, before, expected_status):
     status = process.wait(timeout=3)
     output = read_until(terminal_master, b"\x1b[?1049l", 1.0)
@@ -256,10 +290,11 @@ def copy_mode_interrupt_path():
 
 
 def main() -> int:
+    negotiation_clock_path()
     normal_path()
     failure_path()
     copy_mode_interrupt_path()
-    print("PASS: dynamic PTY frontend routes, restores sessions, alerts, and guards broadcast")
+    print("PASS: frontend negotiates under clock load, routes, restores sessions, alerts, and guards broadcast")
     return 0
 
 

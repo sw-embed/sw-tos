@@ -276,6 +276,13 @@ impl ConnectionDecoder {
         output
     }
 
+    /// Drop bytes from an interrupted frame without discarding a completed
+    /// framed-mode negotiation.
+    pub fn resynchronize(&mut self) {
+        self.pending.clear();
+        self.framed.clear();
+    }
+
     pub fn disconnect(&mut self) -> Vec<StreamItem> {
         let output = if self.pending.is_empty() {
             Vec::new()
@@ -409,5 +416,19 @@ mod tests {
             vec![StreamItem::Plain(ack[..5].to_vec())]
         );
         assert_eq!(connection.mode(), Mode::Plain);
+    }
+
+    #[test]
+    fn connection_resynchronizes_without_losing_framed_mode() {
+        let mut connection = ConnectionDecoder::default();
+        assert_eq!(connection.push(&hello_ack().encode().unwrap()).len(), 1);
+        let encoded = frame(b"fresh").encode().unwrap();
+        assert!(connection.push(&encoded[..5]).is_empty());
+        connection.resynchronize();
+        assert_eq!(connection.mode(), Mode::Framed);
+        assert_eq!(
+            connection.push(&encoded),
+            vec![StreamItem::Frame(frame(b"fresh"))]
+        );
     }
 }

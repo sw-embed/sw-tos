@@ -158,6 +158,14 @@ the ordinary task-exit path, after which Resources omits the endpoint.
 `STALE` means no complete snapshot arrived for one second. `resource data
 unavailable` means the frontend has not yet received a complete generation.
 
+The frontend sends scheduler heartbeats while framed-mode negotiation is still
+in progress and retries `HELLO` periodically. This is required when reconnecting
+after a crash or detach that left a non-yielding process current: the target
+needs clock interrupts before its transport task can run and acknowledge the
+new frontend. Prefix-`r` restarts clock-assisted negotiation when disconnected;
+when already connected it preserves framed mode, discards any partial frame,
+and immediately requests a fresh Resources generation.
+
 ## Debugger
 
 The Debugger pane accepts host-side commands rather than SWTOS TTY input:
