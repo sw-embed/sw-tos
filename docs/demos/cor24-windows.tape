@@ -15,38 +15,56 @@ Type "./scripts/swtos-emulator-debug.py build/scheduled-shell/program.bin build/
 Enter
 Sleep 4s
 
-# Run a Shell command and show the live resource monitor.
+# Inspect the process table from Shell.
 Type "ps"
 Enter
 Sleep 2s
+
+# Run Uptime, show its application output, then inspect its live resource row.
+Type "3"
+Sleep 4s
+Ctrl+A
+Type "2"
+Sleep 2s
 Ctrl+A
 Type "4"
-Sleep 2s
 Ctrl+A
 Type "z"
 Sleep 2s
 Ctrl+A
 Type "z"
+Ctrl+A
+Type "2"
+Ctrl+A
+Type "e"
+Sleep 2s
 
-# Inspect build-matched symbols and live target state.
+# Run Clock and show host-synchronized wall time in the Application pane.
+Ctrl+A
+Type "1"
+Type "4"
+Sleep 4s
+Ctrl+A
+Type "2"
+Sleep 3s
+Ctrl+A
+Type "e"
+Sleep 2s
+
+# Inspect build-matched symbols, source, instructions, registers, and memory.
 Ctrl+A
 Type "3"
 Type "sym _PLSW_COUNTER"
+Enter
+Type "list _PLSW_COUNTER"
+Enter
+Type "dis _PLSW_COUNTER 6"
 Enter
 Type "regs 1"
 Enter
 Type "x 0 8"
 Enter
-Sleep 3s
-
-# Demonstrate debugger scrollback navigation without sending arrows to SWTOS.
-Ctrl+A
-Type "y"
-Up
-Right
-Sleep 2s
-Type "G"
-Type "q"
+Sleep 5s
 
 # Return to Shell, launch Counter, and detach cleanly.
 Ctrl+A

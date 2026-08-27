@@ -155,8 +155,9 @@ windows-demo-encode:
 windows-demo-inspect:
     mkdir -p build/captures
     ffmpeg -y -ss 6 -i build/captures/cor24-windows-master.mp4 -frames:v 1 -update 1 build/captures/cor24-windows-06.png
-    ffmpeg -y -ss 13 -i build/captures/cor24-windows-master.mp4 -frames:v 1 -update 1 build/captures/cor24-windows-13.png
-    ffmpeg -y -ss 20 -i build/captures/cor24-windows-master.mp4 -frames:v 1 -update 1 build/captures/cor24-windows-20.png
+    ffmpeg -y -ss 14 -i build/captures/cor24-windows-master.mp4 -frames:v 1 -update 1 build/captures/cor24-windows-14.png
+    ffmpeg -y -ss 27 -i build/captures/cor24-windows-master.mp4 -frames:v 1 -update 1 build/captures/cor24-windows-27.png
+    ffmpeg -y -ss 39 -i build/captures/cor24-windows-master.mp4 -frames:v 1 -update 1 build/captures/cor24-windows-39.png
 
 # Exercise Counter breakpoints, state, stepping, backtrace, and detach
 emulator-debugger-smoke: scheduled-shell-build cor24-debugger-build
