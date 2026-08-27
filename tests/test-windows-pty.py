@@ -172,6 +172,13 @@ def normal_path():
     assert b"Shell *" in screen and b"Application" in screen, "four-pane grid was not rendered"
     assert b"shell-two" in screen and b"app-one" in screen, "independent pane output missing"
     assert b"mem 10/20B" in screen and b"cntr ep=2" in screen, "resource snapshot missing"
+    damaged = bytearray(frame(2, 0, b"damaged"))
+    damaged[-1] ^= 0x80
+    os.write(serial_master, damaged)
+    assert b"BadChecksum" in read_until(tty_master, b"BadChecksum"), "decode error missing"
+    os.write(serial_master, frame(2, 0, b"recovered\n"))
+    recovered = read_until(tty_master, b" ok", 2.0)
+    assert b"recovered" in recovered and b" ok" in recovered, "valid frame did not clear error"
     os.write(tty_master, b"\x014\x01z")
     resource_zoom = read_until(tty_master, b"cpu=42", 2.0)
     assert b"fp=11" in resource_zoom and b"cpu=42" in resource_zoom, "preemption activity missing"

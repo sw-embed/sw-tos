@@ -163,8 +163,9 @@ in progress and retries `HELLO` periodically. This is required when reconnecting
 after a crash or detach that left a non-yielding process current: the target
 needs clock interrupts before its transport task can run and acknowledge the
 new frontend. Prefix-`r` restarts clock-assisted negotiation when disconnected;
-when already connected it preserves framed mode, discards any partial frame,
-and immediately requests a fresh Resources generation.
+when already connected it preserves the live decoder and immediately requests
+a fresh Resources generation. A malformed frame is reported in the footer,
+but a subsequent valid frame clears that transient transport diagnostic.
 
 ## Debugger
 

@@ -802,6 +802,7 @@ fn run_windows(options: &Options) -> io::Result<()> {
     let mut debugger = DebugConsole::new(debug_map);
     let mut debug_input = String::new();
     let mut debug_identity_sent = false;
+    let mut transport_decode_error = false;
     let mut desktop = Desktop::default();
     if let Some(path) = options.session.as_deref()
         && path.exists()
@@ -876,6 +877,10 @@ fn run_windows(options: &Options) -> io::Result<()> {
                 ));
             }
             for item in connection.push(&serial_buffer[..count]) {
+                if matches!(&item, StreamItem::Frame(_)) && transport_decode_error {
+                    desktop.set_error(None);
+                    transport_decode_error = false;
+                }
                 match item {
                     StreamItem::Plain(bytes) => desktop.push_channel(0, &bytes),
                     StreamItem::Frame(frame) if frame.kind == FrameType::TtyOutput => {
@@ -928,7 +933,10 @@ fn run_windows(options: &Options) -> io::Result<()> {
                         }
                     }
                     StreamItem::Frame(_) => {}
-                    StreamItem::Error(error) => desktop.set_error(Some(format!("{error:?}"))),
+                    StreamItem::Error(error) => {
+                        transport_decode_error = true;
+                        desktop.set_error(Some(format!("{error:?}")));
+                    }
                 }
             }
             dirty = true;
@@ -974,10 +982,13 @@ fn run_windows(options: &Options) -> io::Result<()> {
                         }
                         b'r' => {
                             let renegotiate = connection.mode() == Mode::Plain;
-                            connection.resynchronize();
-                            resynchronize_heartbeat_parser(&mut serial)?;
+                            if renegotiate {
+                                connection.resynchronize();
+                                resynchronize_heartbeat_parser(&mut serial)?;
+                            }
                             resources = SnapshotAssembler::default();
                             debug_identity_sent = false;
+                            transport_decode_error = false;
                             resource_lines = resources.render(Instant::now());
                             desktop.set_resources(&resource_lines);
                             desktop.set_error(None);
