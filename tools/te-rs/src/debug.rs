@@ -300,7 +300,9 @@ impl DebugConsole {
             ["bt"] => Ok(request("requesting ABI backtrace", vec![11])),
             ["kill", endpoint] => endpoint
                 .parse::<u8>()
-                .map(|endpoint| request(&format!("killing endpoint {endpoint}"), vec![13, endpoint]))
+                .map(|endpoint| {
+                    request(&format!("killing endpoint {endpoint}"), vec![13, endpoint])
+                })
                 .map_err(|_| "endpoint must be decimal".to_string()),
             ["detach"] => Ok(request("detaching from emulator", vec![12])),
             ["help"] | [] => Ok(text(

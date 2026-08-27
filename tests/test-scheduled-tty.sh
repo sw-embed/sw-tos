@@ -20,7 +20,7 @@ if ! grep -q $'SPAWN\nXY' <<<"$output"; then
 fi
 
 blocked_dump=$($EMU --load-binary "$OUT_DIR/program.bin@0" --entry 0 \
-    --speed 0 -n 500000 --quiet --trace 20 2>&1)
+    --speed 0 -n 500000 --quiet --trace 300 2>&1)
 if ! grep -q 'lw      r0,24(r2).*0x000007' <<<"$blocked_dump"; then
     echo "FAIL: empty virtual-TTY readers did not remain blocked without redispatch" >&2
     echo "$blocked_dump" >&2

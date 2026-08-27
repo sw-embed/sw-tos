@@ -61,8 +61,9 @@ and sends the unprefixed `3` to it.
 | `z` | Toggle zoom for the focused pane |
 | `y` | Enter or leave copy mode |
 | `e` | Send Escape to the focused Shell or Application pane |
+| `r` | Resynchronize heartbeat framing, renegotiate, refresh Resources, and redraw |
+| `R` | Restore the saved pane layout from `--session` |
 | `w` | Save the layout passed with `--session` |
-| `r` | Restore the saved layout |
 | `b`, then prefix-`b` again | Toggle guarded broadcast input |
 | `?` | Toggle help |
 | `d` | Detach and restore the host terminal |
@@ -108,6 +109,26 @@ run counter --tty=new
 and Clock receive host time frames only while the Resources snapshot reports
 the matching live process. Stop either application by focusing its pane and
 pressing Ctrl-A then `e`.
+
+For the two-context hostile-load demonstration, keep Shell interactive with:
+
+```text
+run cpu-hog --tty=new
+run cpu-hog --tty=new
+ps -l
+```
+
+The first command claims application channel 1/endpoint 2 and the second claims
+channel 2/endpoint 3 without stealing Shell focus. Both run the exact assembly
+listed in `preemptive-multitasking.md`. Use `regs 2` and `regs 3`; `kill 2`
+terminates only the first, after which Resources and `ps -l` must still show
+endpoint 3 advancing.
+
+The tracked preemption tape first uses those application panes for `uptime`
+and `clock`, stops both with Ctrl-A then `e`, and then reuses the freed
+endpoints and panes for the two hogs. This contrasts normal blocking
+applications with forced
+preemption while keeping the final two-hog acceptance evidence unambiguous.
 
 The Application pane retains completed output as scrollback. Text such as
 `Uptime` remaining there does not mean the process is still running; Resources

@@ -154,6 +154,26 @@ windows-demo-record: windows-demo-validate scheduled-shell-build cor24-debugger-
 windows-demo-encode:
     bash scripts/with-demo-tools.sh ffmpeg -y -i build/captures/cor24-windows-master.mp4 -vf fps=12 -an -c:v libvpx-vp9 -b:v 0 -crf 44 -deadline good -cpu-used 4 -row-mt 1 videos/cor24-windows-demo.webm
 
+# Record the six-pane, dual-hostile-process preemption acceptance demo
+preemption-demo-record: windows-demo-tools scheduled-shell-build cor24-debugger-build te-rs-release
+    bash scripts/with-demo-tools.sh vhs validate docs/demos/cor24-preemption.tape
+    mkdir -p build/captures
+    bash scripts/with-demo-tools.sh vhs docs/demos/cor24-preemption.tape
+    just preemption-demo-encode
+
+preemption-demo-encode:
+    bash scripts/with-demo-tools.sh ffmpeg -y -i build/captures/cor24-preemption-master.mp4 -vf fps=12 -an -c:v libvpx-vp9 -b:v 0 -crf 44 -deadline good -cpu-used 4 -row-mt 1 videos/cor24-preemption-demo.webm
+
+# Extract ignored evidence frames from the dual-hog recording for review
+preemption-demo-inspect:
+    mkdir -p build/captures
+    bash scripts/with-demo-tools.sh ffmpeg -y -ss 3 -i build/captures/cor24-preemption-master.mp4 -frames:v 1 -update 1 build/captures/cor24-preemption-03.png
+    bash scripts/with-demo-tools.sh ffmpeg -y -ss 19 -i build/captures/cor24-preemption-master.mp4 -frames:v 1 -update 1 build/captures/cor24-preemption-19.png
+    bash scripts/with-demo-tools.sh ffmpeg -y -ss 42 -i build/captures/cor24-preemption-master.mp4 -frames:v 1 -update 1 build/captures/cor24-preemption-42.png
+    bash scripts/with-demo-tools.sh ffmpeg -y -ss 55 -i build/captures/cor24-preemption-master.mp4 -frames:v 1 -update 1 build/captures/cor24-preemption-55.png
+    bash scripts/with-demo-tools.sh ffmpeg -y -ss 64 -i build/captures/cor24-preemption-master.mp4 -frames:v 1 -update 1 build/captures/cor24-preemption-64.png
+    bash scripts/with-demo-tools.sh ffmpeg -y -ss 70 -i build/captures/cor24-preemption-master.mp4 -frames:v 1 -update 1 build/captures/cor24-preemption-70.png
+
 # Extract representative ignored frames for visual inspection of the recording
 windows-demo-inspect:
     mkdir -p build/captures

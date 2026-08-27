@@ -603,6 +603,47 @@ fn scheduler_heartbeat(tick: u32) -> [u8; 5] {
     [0xff, 1, tick as u8, (tick >> 8) as u8, (tick >> 16) as u8]
 }
 
+fn resynchronize_heartbeat_parser(serial: &mut File) -> io::Result<()> {
+    // A detached frontend may leave the target ISR expecting one of the three
+    // timestamp bytes. The first complete frame drains that partial state;
+    // the second is then aligned. Any ordinary leftovers are harmless because
+    // the SWT frame decoder searches for its A5 5A sync before HELLO.
+    for _ in 0..2 {
+        serial.write_all(&scheduler_heartbeat(0))?;
+        serial.flush()?;
+        thread::sleep(Duration::from_millis(10));
+    }
+    // Frames already in flight belong to the previous decoder generation.
+    // Quarantine them before HELLO so they cannot be rendered as plain text.
+    let mut stale = [0_u8; 1024];
+    loop {
+        let mut descriptor = libc::pollfd {
+            fd: serial.as_raw_fd(),
+            events: libc::POLLIN,
+            revents: 0,
+        };
+        // The serial descriptor deliberately remains blocking for normal I/O.
+        // Probe it first so an empty reconnect quarantine cannot stall HELLO.
+        let ready = unsafe { libc::poll(&mut descriptor, 1, 0) };
+        if ready == 0 || descriptor.revents & libc::POLLIN == 0 {
+            break;
+        }
+        if ready < 0 {
+            let error = io::Error::last_os_error();
+            if error.kind() == io::ErrorKind::Interrupted {
+                continue;
+            }
+            return Err(error);
+        }
+        match serial.read(&mut stale) {
+            Ok(0) => break,
+            Ok(_) => continue,
+            Err(error) => return Err(error),
+        }
+    }
+    Ok(())
+}
+
 fn multiplexed_time_frame(mode: TimeMode, tick: u32) -> Vec<u8> {
     Frame {
         kind: match mode {
@@ -785,6 +826,7 @@ fn run_windows(options: &Options) -> io::Result<()> {
     let mut next_time_frames = Instant::now();
     let mut time_mode = None;
 
+    resynchronize_heartbeat_parser(&mut serial)?;
     serial.write_all(&hello().encode().expect("HELLO payload is bounded"))?;
     serial.flush()?;
 
@@ -922,12 +964,27 @@ fn run_windows(options: &Options) -> io::Result<()> {
                                 desktop.assign_focused(channel, format!("TTY {channel}"));
                             }
                         }
-                        b'r' => {
+                        b'R' => {
                             if let Some(path) = options.session.as_deref() {
                                 if let Err(error) = load_session(path, &mut desktop) {
                                     desktop.set_error(Some(format!("session: {error}")));
                                 }
                             }
+                        }
+                        b'r' => {
+                            connection = ConnectionDecoder::default();
+                            resynchronize_heartbeat_parser(&mut serial)?;
+                            resources = SnapshotAssembler::default();
+                            debug_identity_sent = false;
+                            resource_lines = resources.render(Instant::now());
+                            desktop.set_resources(&resource_lines);
+                            desktop.set_error(None);
+                            desktop.set_connected(true);
+                            desktop.push_channel(254, b"reconnecting target transport\n");
+                            serial
+                                .write_all(&hello().encode().expect("HELLO payload is bounded"))?;
+                            serial.flush()?;
+                            next_resource_request = Instant::now();
                         }
                         b'e' => {
                             let channel = desktop.focused_channel();
@@ -960,6 +1017,11 @@ fn run_windows(options: &Options) -> io::Result<()> {
                 }
                 if byte == 0x03 {
                     return Ok(());
+                }
+                if desktop.help_enabled() && matches!(byte, b'q' | b'?' | 0x1b) {
+                    desktop.command(byte);
+                    dirty = true;
+                    continue;
                 }
                 if desktop.copy_mode_enabled() {
                     handle_copy_input(&mut desktop, byte, &mut copy_escape_state);
@@ -998,19 +1060,9 @@ fn run_windows(options: &Options) -> io::Result<()> {
                             b'\r' | b'\n' => {
                                 let command = shell_input.strip_suffix(" --tty=new");
                                 if let Some(command) = command {
-                                    let used = desktop
-                                        .layout()
-                                        .into_iter()
-                                        .map(|(_, channel, _)| channel)
-                                        .collect::<Vec<_>>();
-                                    if let Some(channel) =
-                                        (2..=253).find(|channel| !used.contains(channel))
-                                    {
-                                        desktop.add_application(
-                                            channel,
-                                            command.strip_prefix("run ").unwrap_or(command),
-                                        );
-                                    }
+                                    desktop.claim_application(
+                                        command.strip_prefix("run ").unwrap_or(command),
+                                    );
                                 }
                                 shell_input.clear();
                             }
@@ -1120,6 +1172,7 @@ fn run(options: &Options) -> io::Result<()> {
     let connected = Instant::now();
     let mut connection = ConnectionDecoder::default();
     if options.framed {
+        resynchronize_heartbeat_parser(&mut serial)?;
         serial.write_all(&hello().encode().expect("HELLO payload is bounded"))?;
         serial.flush()?;
     }

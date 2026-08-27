@@ -52,10 +52,15 @@ class Transport:
 
     def debug(self, payload: bytes):
         self.send(9, payload)
+        prefix = payload[:4] if payload[:1] == b"\x03" else payload[:2]
         deadline = time.monotonic() + 2
         while time.monotonic() < deadline:
             received = self.receive(0.1)
-            if received is not None and received[0] == 10:
+            if (
+                received is not None
+                and received[0] == 10
+                and received[2].startswith(prefix)
+            ):
                 return received[2]
         return None
 
@@ -69,9 +74,21 @@ def diagnostic_state(transport: Transport):
         item["name"]: item["address"]
         for item in json.loads(MAP.read_text())["symbols"]
     }
-    result = {"registers": transport.debug(b"\x02\x01")}
-    for name in ("_current_proc", "_proc_b_preempt", "_preemption_frame_state"):
+    result = {"pause": transport.debug(b"\x04"), "registers": transport.debug(b"\x02\x01")}
+    for name in (
+        "_current_proc",
+        "_proc_a",
+        "_proc_b",
+        "_proc_c",
+        "_proc_b_preempt",
+        "_proc_c_preempt",
+        "_tty_a",
+        "_preemption_frame_state",
+        "_preemption_rx_count",
+    ):
         result[name] = transport.debug(b"\x03" + u24(symbols[name]) + b"\x1e")
+    result["interrupt_enable"] = transport.debug(b"\x03" + u24(0xFF0010) + b"\x01")
+    transport.debug(b"\x05")
     return {key: value.hex() if value is not None else None for key, value in result.items()}
 
 
@@ -84,9 +101,9 @@ def heartbeat(transport: Transport, tick: int):
     time.sleep(0.015)
 
 
-def resource_sample(transport: Transport, tick: int):
+def resource_sample(transport: Transport, tick: int, endpoints=(2,)):
     transport.send(8)
-    latest = None
+    latest = {}
     observed = []
     deadline = time.monotonic() + 5
     while time.monotonic() < deadline:
@@ -99,12 +116,12 @@ def resource_sample(transport: Transport, tick: int):
         observed.append((kind, payload.hex()))
         if kind != 8 or len(payload) < 2:
             continue
-        if payload[0] == 6 and len(payload) == 9 and payload[2] == 2:
-            latest = (
+        if payload[0] == 6 and len(payload) == 9 and payload[2] in endpoints:
+            latest[payload[2]] = (
                 int.from_bytes(payload[3:6], "little"),
                 int.from_bytes(payload[6:9], "little"),
             )
-        if payload[0] == 5 and latest is not None:
+        if payload[0] == 5 and all(endpoint in latest for endpoint in endpoints):
             return tick, latest
     raise AssertionError(
         "resource snapshot did not expose cpu-hog preemption; "
@@ -112,11 +129,11 @@ def resource_sample(transport: Transport, tick: int):
     )
 
 
-def saved_hog_r0(transport: Transport, tick: int):
-    transport.send(9, b"\x02\x02")
+def saved_hog_r0(transport: Transport, tick: int, endpoint: int):
+    transport.send(9, bytes((2, endpoint)))
     first = None
     second = None
-    deadline = time.monotonic() + 3
+    deadline = time.monotonic() + 5
     while time.monotonic() < deadline and (first is None or second is None):
         heartbeat(transport, tick)
         tick += 1
@@ -124,9 +141,9 @@ def saved_hog_r0(transport: Transport, tick: int):
         if received is None or received[0] != 10:
             continue
         payload = received[2]
-        if len(payload) == 15 and payload[:3] == b"\x02\x02\x00":
+        if len(payload) == 15 and payload[:3] == bytes((2, endpoint, 0)):
             first = payload
-        elif len(payload) == 9 and payload[:3] == b"\x02\x02\x01":
+        elif len(payload) == 9 and payload[:3] == bytes((2, endpoint, 1)):
             second = payload
     assert first is not None and second is not None, "no coherent saved cpu-hog context"
     return tick, int.from_bytes(first[3:6], "little")
@@ -147,7 +164,9 @@ def kill_hog(transport: Transport, tick: int):
 
 def assert_hog_absent(transport: Transport, tick: int):
     transport.send(8)
-    seen_hog = False
+    generation_started = False
+    seen_killed = False
+    seen_survivor = False
     deadline = time.monotonic() + 3
     while time.monotonic() < deadline:
         heartbeat(transport, tick)
@@ -156,11 +175,19 @@ def assert_hog_absent(transport: Transport, tick: int):
         if received is None or received[0] != 8:
             continue
         payload = received[2]
-        if len(payload) >= 3 and payload[0] in (3, 4, 6) and payload[2] == 2:
-            seen_hog = True
-        if payload[:1] == b"\x05":
-            assert not seen_hog, "killed cpu-hog remained in Resources"
-            return tick
+        if payload[:1] == b"\x01":
+            generation_started = True
+            seen_killed = False
+            seen_survivor = False
+        if generation_started and len(payload) >= 3 and payload[0] in (3, 4, 6):
+            seen_killed |= payload[2] == 2
+            seen_survivor |= payload[2] == 3
+        if generation_started and payload[:1] == b"\x05":
+            if not seen_killed:
+                assert seen_survivor, "surviving cpu-hog disappeared with endpoint 2"
+                return tick
+            generation_started = False
+            transport.send(8)
     raise AssertionError("no complete Resources generation after killing cpu-hog")
 
 
@@ -180,35 +207,43 @@ def main():
     try:
         transport.send(12, b"SWT1")
         assert transport.receive() == (13, 0, b"SWT1")
-        for byte in b"run cpu-hog\r":
-            transport.send(1, bytes((byte,)), 0)
-            time.sleep(0.003)
+        # Queue two launches before the first hostile process can run. The
+        # scheduler must subsequently keep Shell and framed control traffic
+        # responsive while both children remain entirely non-cooperative.
+        for command in (
+            b"run cpu-hog --tty=new\r",
+            b"run cpu-hog --tty=new\r",
+        ):
+            for byte in command:
+                transport.send(1, bytes((byte,)), 0)
+                time.sleep(0.003)
 
         tick = 1
-        for _ in range(7):
+        for _ in range(40):
             heartbeat(transport, tick)
             tick += 1
         try:
-            tick, first = resource_sample(transport, tick)
+            tick, first = resource_sample(transport, tick, (2, 3))
         except AssertionError as error:
             raise AssertionError(f"{error}; debug={diagnostic_state(transport)}") from error
         for _ in range(7):
             heartbeat(transport, tick)
             tick += 1
-        tick, second = resource_sample(transport, tick)
+        tick, second = resource_sample(transport, tick, (2, 3))
 
-        assert first[0] > 0, first
-        assert second[0] > first[0], (first, second)
-        assert second[1] != first[1], (first, second)
+        for endpoint in (2, 3):
+            assert first[endpoint][0] > 0, first
+            assert second[endpoint][0] > first[endpoint][0], (first, second)
+            assert second[endpoint][1] != first[endpoint][1], (first, second)
 
         # Endpoint-aware debugger reads come from the quiescent ISR stack, not
         # from the emulator's globally running CPU. Two snapshots must prove
         # that the same saved r0 resumes and advances between preemptions.
-        tick, debug_r0_first = saved_hog_r0(transport, tick)
+        tick, debug_r0_first = saved_hog_r0(transport, tick, 2)
         for _ in range(7):
             heartbeat(transport, tick)
             tick += 1
-        tick, debug_r0_second = saved_hog_r0(transport, tick)
+        tick, debug_r0_second = saved_hog_r0(transport, tick, 2)
         assert debug_r0_second != debug_r0_first, (debug_r0_first, debug_r0_second)
 
         # A debugger request must still complete while the application never
@@ -230,7 +265,8 @@ def main():
         tick = assert_hog_absent(transport, tick)
         print(
             "PASS: cpu-hog advanced under forced preemption "
-            f"(forced {first[0]}->{second[0]}, resource cpu {first[1]}->{second[1]}, "
+            f"(ep2 forced {first[2][0]}->{second[2][0]}, "
+            f"ep3 forced {first[3][0]}->{second[3][0]}, "
             f"debug r0 {debug_r0_first}->{debug_r0_second}) and was killed safely"
         )
     finally:

@@ -43,6 +43,14 @@ Its manifest declares three text words and no data or BSS. Thus `r0` itself is
 the counter sampled by Resources, and a changing `cpu=` value proves that the
 same saved context was resumed and executed again after forced preemption.
 
+The dual-hog demonstration launches this exact image twice. There is no second
+or instrumented implementation: endpoint 2 and endpoint 3 receive independent
+private live images, shadows, stacks, ISR frames, and `r0` counters containing
+the assembly above. Catalog flag `preemptible_leaf` permits multiple certified
+instances; `single_instance` is intentionally absent. Unequal saved `r0`
+values and independent forced-preemption counts therefore demonstrate two real
+resumable contexts.
+
 Run the emulator proof with:
 
 ```sh
@@ -190,12 +198,12 @@ complete row in a narrow tiled layout.
 ## Tests and demo
 
 `preemption-runway-smoke` proves exact PC recovery and C7 resume against a real
-emulated UART IRQ. `preemption-acceptance` launches `cpu-hog`, sends clock
-heartbeats, takes two complete resource snapshots, requires both `fp` and
-`cpu` to advance, and reads two coherent saved-register snapshots. Saved `r0`
-must change after the process is resumed and preempted again. The test then
-queues debugger termination and proves a later complete Resources generation
-no longer contains the hog.
+emulated UART IRQ. `preemption-acceptance` launches two background copies of
+`cpu-hog`, sends clock heartbeats, and takes two complete resource snapshots.
+Both endpoints must independently advance `fp` and `cpu`; coherent saved `r0`
+samples must also change after resumption and another preemption. The test then
+queues debugger termination for endpoint 2 and proves a later complete
+Resources generation omits endpoint 2 while endpoint 3 remains live.
 The Windows PTY test verifies parsing and rendering of kind 6 records. The full
 gate is:
 
@@ -210,6 +218,24 @@ queries registers twice, kills the parked hog, and shows its removal:
 ```sh
 just windows-demo-record
 ```
+
+The dedicated tape first displays the complete `catalog/images/cpu-hog.s`
+source shown above. It then opens six panes, runs Uptime and Clock together to
+show ordinary blocking workloads, stops both through their TTYs, and reuses
+their endpoints and panes for two copies of that same hostile image. It shows
+both hog names and zero-yield scheduler state with `ps -l`, reads `regs 2` and
+`regs 3` twice, kills endpoint
+2 only, and proves endpoint 3 remains live:
+
+```sh
+just preemption-demo-record
+```
+
+The sources are `docs/demos/cor24-preemption.tape` and the exact hog assembly
+above; the encoded README asset is `videos/cor24-preemption-demo.webm`. The
+tape's TTY Escape shutdown is intentional: Debugger `kill` targets a process
+parked by forced preemption, whereas Uptime and Clock are normally blocked and
+exit cleanly through their application TTY.
 
 `scripts/with-demo-tools.sh` makes this recording reproducible on non-login
 shells by resolving the conventional Go, Cargo, user-local, and system binary

@@ -92,7 +92,7 @@ _scheduled_cpu_hog_descriptor:
         .word   12
         .word   128
         .word   0
-        .word   66
+        .word   64
 _scheduled_cpu_hog_name:
         .byte   99,112,117,45,104,111,103,0
 

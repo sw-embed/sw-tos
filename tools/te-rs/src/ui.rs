@@ -178,6 +178,33 @@ impl Desktop {
         }
     }
 
+    /// Reserve the next application TTY without stealing keyboard focus.
+    /// Channel 1 is pre-created and corresponds to process endpoint 2.
+    pub fn claim_application(&mut self, title: impl Into<String>) -> Option<u8> {
+        let title = title.into();
+        if let Some(pane) = self
+            .panes
+            .iter_mut()
+            .find(|pane| pane.kind == PaneKind::Application && pane.title == "Application")
+        {
+            pane.title = title;
+            return Some(pane.channel);
+        }
+        let used = self
+            .panes
+            .iter()
+            .map(|pane| pane.channel)
+            .collect::<Vec<_>>();
+        let channel = (1..=253).find(|channel| !used.contains(channel))?;
+        self.panes.push(Pane::new(
+            PaneKind::Application,
+            channel,
+            title,
+            DEFAULT_SCROLLBACK,
+        ));
+        Some(channel)
+    }
+
     pub fn pane_count(&self) -> usize {
         self.panes.len()
     }
@@ -189,6 +216,10 @@ impl Desktop {
     }
     pub fn copy_mode_enabled(&self) -> bool {
         self.copy_mode
+    }
+
+    pub fn help_enabled(&self) -> bool {
+        self.help
     }
 
     pub fn copy_move(&mut self, vertical: isize, horizontal: isize) {
@@ -327,7 +358,11 @@ impl Desktop {
                 self.focus = usize::from(byte - b'1')
             }
             b'n' | b'\t' => self.focus = (self.focus + 1) % self.panes.len(),
-            b'z' => self.zoomed = !self.zoomed,
+            b'p' => self.focus = (self.focus + self.panes.len() - 1) % self.panes.len(),
+            b'z' => {
+                self.help = false;
+                self.zoomed = !self.zoomed;
+            }
             b'x' => self.close_focused(),
             b'y' => self.copy_mode = !self.copy_mode,
             b'w' => return CommandOutcome::Save,
@@ -336,6 +371,7 @@ impl Desktop {
                 self.broadcast_armed = false;
             }
             b'b' => self.broadcast_armed = true,
+            0x1b | b'q' if self.help => self.help = false,
             0x1b => {
                 self.broadcast_armed = false;
                 self.broadcast = false;
@@ -364,10 +400,11 @@ impl Desktop {
                 body_height,
                 "Help",
                 &[
-                    "1-9 focus  n next  z zoom  s split  x close",
-                    "y copy  b,b broadcast  w save  r restore",
+                    "1-9 focus  n next  p previous  z zoom  s split  x close",
+                    "y copy  b,b broadcast  w save  R restore-layout",
                     "copy: arrows/hjkl  PgUp/PgDn  g/G  q exit",
-                    "e target-Escape  ? help  d detach  prefix prefix",
+                    "r reconnect/redraw  e target-Escape  ? help  d detach",
+                    "close help: q, Escape, or ?",
                 ],
                 0,
                 true,
@@ -543,6 +580,20 @@ mod tests {
         desktop.command(b'?');
         let help = desktop.render(60, 16);
         assert!(help.contains("1-9 focus"));
+        desktop.command(b'q');
+        assert!(!desktop.help_enabled());
+        assert!(desktop.render(60, 16).contains("Shell *"));
+    }
+
+    #[test]
+    fn background_application_claims_tty_without_stealing_shell_focus() {
+        let mut desktop = Desktop::default();
+        assert_eq!(desktop.claim_application("cpu-hog"), Some(1));
+        assert_eq!(desktop.focused_kind(), PaneKind::Shell);
+        assert_eq!(desktop.claim_application("cpu-hog"), Some(2));
+        assert_eq!(desktop.focused_kind(), PaneKind::Shell);
+        assert!(desktop.has_channel(1));
+        assert!(desktop.has_channel(2));
     }
 
     #[test]

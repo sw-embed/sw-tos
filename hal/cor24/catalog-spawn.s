@@ -2141,8 +2141,26 @@ _yield:
         sw      r0,9(r2)
 _scan_runnable:
         push    r2
+        ; A framed terminal keystroke occupies a complete SWT frame, and the
+        ; frontend also requests Resources periodically. Draining only one
+        ; byte per 50 ms forced switch cannot keep up and eventually drops
+        ; shell/debug traffic. Consume a bounded batch while already in the
+        ; scheduler's shared-code safe region, then preserve round-robin
+        ; selection latency by returning to process dispatch after 64 bytes.
+        lc      r0,64
+_scan_uart_batch:
+        push    r0
         la      r2,_tty_poll_uart
         jal     r1,(r2)
+        pop     r0
+        la      r2,_preemption_rx_count
+        lw      r1,0(r2)
+        ceq     r1,z
+        brt     _scan_uart_batch_done
+        add     r0,-1
+        ceq     r0,z
+        brf     _scan_uart_batch
+_scan_uart_batch_done:
         pop     r2
         add     r2,39
         la      r1,_proc_table_end

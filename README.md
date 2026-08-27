@@ -23,17 +23,19 @@ a PL/I-inspired systems programming language for the COR24 ISA.
 ## Windows frontend demo
 
 [▶ Watch the tiled Windows frontend demo](videos/cor24-windows-demo.webm) ·
+[▶ Watch two CPU hogs preempted independently](videos/cor24-preemption-demo.webm) ·
 [Windows usage guide](docs/windows-usage.md) ·
-[Reproducible Windows VHS tape](docs/demos/cor24-windows.tape)
+[Reproducible Windows VHS tape](docs/demos/cor24-windows.tape) ·
+[Dual-hog VHS tape](docs/demos/cor24-preemption.tape)
 
 The Resources pane exposes `fp=` forced-preemption counts and the latest
 interrupted `r0` sample as `cpu=`. The `cpu-hog` catalog image deliberately
 contains no yield, syscall, I/O, IPC, sleep, or blocking operation; continued
 Resources and Debugger response while those values advance is the acceptance
 proof for preemptive time slicing.
-The Debugger can read the coherent saved frame with `regs 2` and queue safe
-termination with `kill 2`; the recording demonstrates repeated counter
-progress followed by removal from Resources.
+The Debugger can read coherent saved frames with `regs 2` and `regs 3`, then
+queue safe termination with `kill 2`; the recording demonstrates both counters
+progressing and endpoint 3 continuing after endpoint 2 leaves Resources.
 
 ### Key Features
 

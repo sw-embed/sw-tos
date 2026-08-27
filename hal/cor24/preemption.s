@@ -431,6 +431,15 @@ _preemption_restore_loop:
         la      r2,_TASK_EXIT
         jmp     (r2)
 _preemption_landing_schedule:
+        ; Forced recovery masked UART before leaving the interrupted task.
+        ; Restore delivery before selecting the next context, not only when
+        ; the selected context happens to be an IRQ-saved one. Otherwise a
+        ; newly spawned hostile task can start with its scheduler clock off.
+        ; The old task's IRQ-context flag remains set throughout this shared
+        ; scheduler interval, so a heartbeat cannot carpet shared code.
+        la      r2,0xFF0010
+        lc      r0,1
+        sb      r0,0(r2)
         la      r2,_current_proc
         lw      r2,0(r2)
         la      r1,_scan_runnable
