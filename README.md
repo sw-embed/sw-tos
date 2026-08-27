@@ -20,6 +20,12 @@ a PL/I-inspired systems programming language for the COR24 ISA.
 [Full terminal transcript](docs/transcript.log) ·
 [Reproducible VHS tape](docs/demos/cor24-terminal.tape)
 
+## Windows frontend demo
+
+[▶ Watch the tiled Windows frontend demo](videos/cor24-windows-demo.webm) ·
+[Windows usage guide](docs/windows-usage.md) ·
+[Reproducible Windows VHS tape](docs/demos/cor24-windows.tape)
+
 ### Key Features
 
 - **Synchronous message-passing IPC** -- `send`, `receive`, `sendrec`
@@ -53,8 +59,9 @@ a PL/I-inspired systems programming language for the COR24 ISA.
 ## Documentation
 
 See [docs/architecture.md](docs/architecture.md) for the implemented system
-architecture and [docs/user-guide.md](docs/user-guide.md) for setup, interactive
-operation, application workflows, testing, and troubleshooting.
+architecture, [docs/user-guide.md](docs/user-guide.md) for general operation,
+and [docs/windows-usage.md](docs/windows-usage.md) for the tiled frontend,
+scrollback, process monitoring, and debugger workflows.
 
 See [docs/plan.md](docs/plan.md) for the full development plan including
 design philosophy, memory map, kernel subsystems, UART heartbeat protocol,

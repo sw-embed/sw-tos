@@ -137,8 +137,30 @@ cor24-debugger-demo image="build/scheduled-shell/program.bin" map="build/schedul
     mkdir -p build/sessions
     ./scripts/swtos-emulator-debug.py {{image}} {{map}} --session {{session}}
 
+# Validate the reproducible emulator-backed Windows demo tape
+windows-demo-validate:
+    vhs validate docs/demos/cor24-windows.tape
+
+# Record the Windows demo and encode its README asset
+windows-demo-record: windows-demo-validate scheduled-shell-build cor24-debugger-build te-rs-release
+    mkdir -p build/captures
+    vhs docs/demos/cor24-windows.tape
+    just windows-demo-encode
+
+# Encode the recorded master as a compact VP9 README asset
+windows-demo-encode:
+    ffmpeg -y -i build/captures/cor24-windows-master.mp4 -vf fps=12 -an -c:v libvpx-vp9 -b:v 0 -crf 44 -deadline good -cpu-used 4 -row-mt 1 videos/cor24-windows-demo.webm
+
+# Extract representative ignored frames for visual inspection of the recording
+windows-demo-inspect:
+    mkdir -p build/captures
+    ffmpeg -y -ss 6 -i build/captures/cor24-windows-master.mp4 -frames:v 1 -update 1 build/captures/cor24-windows-06.png
+    ffmpeg -y -ss 13 -i build/captures/cor24-windows-master.mp4 -frames:v 1 -update 1 build/captures/cor24-windows-13.png
+    ffmpeg -y -ss 20 -i build/captures/cor24-windows-master.mp4 -frames:v 1 -update 1 build/captures/cor24-windows-20.png
+
 # Exercise Counter breakpoints, state, stepping, backtrace, and detach
 emulator-debugger-smoke: scheduled-shell-build cor24-debugger-build
+    cargo test --manifest-path build/cor24-debugger/adapter-source/Cargo.toml
     ./tests/test-emulator-debugger.py
 
 # Build the interactive Rust terminal used by local and hardware demos

@@ -12,6 +12,10 @@ const SYNC: [u8; 2] = [0xa5, 0x5a];
 const DEBUG_REQUEST: u8 = 9;
 const DEBUG_RESPONSE: u8 = 10;
 const HELLO: u8 = 12;
+const TTY_INPUT: u8 = 1;
+const UPTIME: u8 = 6;
+const WALL_CLOCK: u8 = 7;
+const RESOURCE_SNAPSHOT: u8 = 8;
 
 fn main() -> Result<(), String> {
     let mut args = env::args().skip(1);
@@ -81,7 +85,8 @@ fn handle_frame(
     uart_log_seen: &mut usize,
 ) -> Result<(), String> {
     match (frame.kind, frame.payload.as_slice()) {
-        (HELLO, b"SWT1") | (1, _) => feed_target_frame(emu, &frame, io, uart_log_seen),
+        (HELLO, b"SWT1") => feed_target_frame(emu, &frame, io, uart_log_seen),
+        (kind, _) if target_frame(kind) => feed_target_frame(emu, &frame, io, uart_log_seen),
         (DEBUG_REQUEST, [1]) => write_debug(
             io,
             vec![
@@ -158,6 +163,10 @@ fn handle_frame(
         }
         _ => write_debug(io, vec![0xff, 1]),
     }
+}
+
+fn target_frame(kind: u8) -> bool {
+    matches!(kind, TTY_INPUT | UPTIME | WALL_CLOCK | RESOURCE_SNAPSHOT)
 }
 
 fn stop_payload(emu: &EmulatorCore, reason: &StopReason) -> Vec<u8> {
@@ -324,4 +333,18 @@ fn libc_nonblock() -> i32 {
 #[cfg(not(target_os = "linux"))]
 fn libc_nonblock() -> i32 {
     0
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn routes_target_control_without_hiding_debug_requests() {
+        for kind in [TTY_INPUT, UPTIME, WALL_CLOCK, RESOURCE_SNAPSHOT] {
+            assert!(target_frame(kind));
+        }
+        assert!(!target_frame(DEBUG_REQUEST));
+        assert!(!target_frame(HELLO));
+    }
 }

@@ -310,14 +310,23 @@ cannot be enabled accidentally.
 
 Commit: `feat(windows): add dynamic panes and session management`
 
-## Deferred hardware saga
+## Hardware validation status
 
-Hardware validation starts only after Sagas 1 through 9 pass emulator
-acceptance. Its first step will verify framed UART transport, flow control,
-disconnect recovery, TTY focus, and monitoring without enabling instruction
-breakpoints.
+Hardware validation started after Sagas 1 through 9 passed emulator acceptance.
+The COR24-TB has run the framed four-pane frontend with build-matched identity,
+live resource snapshots, isolated pane focus, dynamic application panes, Shell
+commands, Uptime, and read-only register and memory inspection. Follow-up fixes
+normalize terminal Enter, locally echo framed input, gate Uptime and Clock
+frames from live process snapshots, preserve Ctrl-C in copy mode, and provide
+an unambiguous prefix-`e` target Escape command.
 
-The next step will add cooperative process debugging: attach to a process,
+The reproducible emulator demo found and fixed a separate adapter defect: the
+adapter now forwards Resource, Uptime, and Clock frames to the emulated target
+instead of reporting them as invalid debug requests. The focused debugger and
+window tests cover this routing, and `docs/windows-usage.md` documents normal
+emulator and hardware operation.
+
+Future hardware work may add cooperative process debugging: attach to a process,
 request a pause at its next kernel boundary, inspect its saved context, and
 continue it. This remains useful even if arbitrary instruction interception is
 not feasible.
