@@ -61,6 +61,17 @@ pane has `*` in its title and exclusively receives ordinary input. SWTOS does
 not echo framed input, so the frontend locally displays printable input,
 backspace, and Enter in Shell and Application panes.
 
+The SWTOS menu reads a single keypress, so type `3`, not `3` and Enter. A
+trailing newline is delivered as a second, invalid choice, which the shell
+answers with `BAD` once the launched application exits.
+
+Escape reaches a focused Shell or Application pane whether it is typed as the
+Escape key or as Ctrl-[, which is the same byte. Neither is echoed locally --
+only printable characters, newline, and backspace are -- so the application's
+response is the only confirmation. Escape is consumed by the frontend instead
+when the help overlay is open, in copy mode, while the Debugger pane has
+focus, or with a broadcast armed; prefix-`e` is unambiguous in every case.
+
 The default host prefix is Ctrl-A. Release Ctrl-A before typing its command;
 each focus change needs its own prefix. For example, `Ctrl-A 2`, `Ctrl-A 3`
 focuses Application and then Debugger, while `Ctrl-A 2 3` focuses Application

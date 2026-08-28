@@ -595,7 +595,16 @@ fn scheduler_heartbeat(tick: u32) -> [u8; 5] {
     [0xff, 1, tick as u8, (tick >> 8) as u8, (tick >> 16) as u8]
 }
 
-fn resynchronize_heartbeat_parser(serial: &mut File) -> io::Result<()> {
+/// Realign the target's heartbeat parser and return whatever it had already
+/// sent.
+///
+/// The bytes waiting here are the target's own output from before this
+/// frontend attached. On a reconnect they belong to the previous decoder
+/// generation and the caller discards them. On a first attach they are the
+/// boot banner and the shell's opening menu, and discarding them left the
+/// Shell pane blank until the operator pressed a key -- which the menu then
+/// rejected as an invalid choice. Hand them back and let each caller decide.
+fn resynchronize_heartbeat_parser(serial: &mut File) -> io::Result<Vec<u8>> {
     // A detached frontend may leave the target ISR expecting one of the three
     // timestamp bytes. The first complete frame drains that partial state;
     // the second is then aligned. Any ordinary leftovers are harmless because
@@ -608,6 +617,7 @@ fn resynchronize_heartbeat_parser(serial: &mut File) -> io::Result<()> {
     // Frames already in flight belong to the previous decoder generation.
     // Quarantine them before HELLO so they cannot be rendered as plain text.
     let mut stale = [0_u8; 1024];
+    let mut pending = Vec::new();
     loop {
         // The serial descriptor deliberately remains blocking for normal I/O.
         // Probe it first so an empty reconnect quarantine cannot stall HELLO.
@@ -621,11 +631,14 @@ fn resynchronize_heartbeat_parser(serial: &mut File) -> io::Result<()> {
         }
         match serial.read(&mut stale) {
             Ok(0) => break,
-            Ok(_) => continue,
+            Ok(count) => {
+                pending.extend_from_slice(&stale[..count]);
+                continue;
+            }
             Err(error) => return Err(error),
         }
     }
-    Ok(())
+    Ok(pending)
 }
 
 fn multiplexed_time_frame(mode: TimeMode, tick: u32) -> Vec<u8> {
@@ -859,7 +872,17 @@ fn run_windows(options: &Options) -> io::Result<()> {
     let mut next_time_frames = Instant::now();
     let mut time_mode = None;
 
-    resynchronize_heartbeat_parser(&mut serial)?;
+    // Nothing precedes this frontend on a first attach, so the target's boot
+    // output is not stale: render it instead of dropping it.
+    let pending = resynchronize_heartbeat_parser(&mut serial)?;
+    for item in connection.push(&pending) {
+        if let StreamItem::Plain(bytes) = item {
+            desktop.push_channel(0, &bytes);
+        }
+    }
+    if !pending.is_empty() {
+        last_size = repaint_desktop(&mut tty, &mut desktop)?;
+    }
     serial.write_all(&hello().encode().expect("HELLO payload is bounded"))?;
     serial.flush()?;
 
@@ -998,7 +1021,8 @@ fn run_windows(options: &Options) -> io::Result<()> {
                             let renegotiate = connection.mode() == Mode::Plain;
                             if renegotiate {
                                 connection.resynchronize();
-                                resynchronize_heartbeat_parser(&mut serial)?;
+                                // A previous decoder generation: discard.
+                                let _ = resynchronize_heartbeat_parser(&mut serial)?;
                             }
                             resources = SnapshotAssembler::default();
                             debug_identity_sent = false;
@@ -1213,7 +1237,15 @@ fn run(options: &Options) -> io::Result<()> {
     let connected = Instant::now();
     let mut connection = ConnectionDecoder::default();
     if options.framed {
-        resynchronize_heartbeat_parser(&mut serial)?;
+        let pending = resynchronize_heartbeat_parser(&mut serial)?;
+        for item in connection.push(&pending) {
+            if let StreamItem::Plain(bytes) = item {
+                tty.write_all(&bytes)?;
+            }
+        }
+        if !pending.is_empty() {
+            tty.flush()?;
+        }
         serial.write_all(&hello().encode().expect("HELLO payload is bounded"))?;
         serial.flush()?;
     }
