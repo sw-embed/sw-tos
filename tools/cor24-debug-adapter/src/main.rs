@@ -223,8 +223,7 @@ fn flush_uart(
         .collect::<Vec<_>>();
     *uart_log_seen = entries.len();
     if !bytes.is_empty() {
-        io.write_all(&bytes).map_err(err)?;
-        io.flush().map_err(err)?;
+        write_all_retrying(io, &bytes)?;
         emu.clear_uart_output();
     }
     Ok(())
@@ -233,6 +232,35 @@ fn flush_uart(
 fn write_debug(io: &mut File, payload: Vec<u8>) -> Result<(), String> {
     write_frame(io, DEBUG_RESPONSE, 0, &payload)
 }
+/// Write every byte to the pseudo-terminal, waiting out a full output buffer.
+///
+/// The adapter's descriptor is non-blocking, and `write_all` reports
+/// `WouldBlock` instead of retrying, so any emulator burst larger than the
+/// pseudo-terminal could hold killed the adapter outright. Darwin buffers
+/// roughly 1 KiB where Linux buffers about 8 KiB, which made an ordinary
+/// `ls` enough to lose the session on macOS. Retry until the frontend drains
+/// the pipe. A frontend that has actually gone away fails with EIO rather
+/// than EAGAIN, so a genuine hangup still ends the loop.
+fn write_all_retrying<W: Write>(io: &mut W, bytes: &[u8]) -> Result<(), String> {
+    let mut pending = bytes;
+    while !pending.is_empty() {
+        match io.write(pending) {
+            Ok(0) => return Err("pseudo-terminal accepted no bytes".into()),
+            Ok(written) => pending = &pending[written..],
+            Err(error)
+                if matches!(
+                    error.kind(),
+                    io::ErrorKind::WouldBlock | io::ErrorKind::Interrupted
+                ) =>
+            {
+                std::thread::sleep(Duration::from_millis(1));
+            }
+            Err(error) => return Err(err(error)),
+        }
+    }
+    Ok(())
+}
+
 fn write_frame(io: &mut File, kind: u8, channel: u8, payload: &[u8]) -> Result<(), String> {
     let len = payload.len() as u16;
     let mut bytes = vec![
@@ -250,8 +278,7 @@ fn write_frame(io: &mut File, kind: u8, channel: u8, payload: &[u8]) -> Result<(
             .iter()
             .fold(0u8, |sum, byte| sum.wrapping_add(*byte)),
     );
-    io.write_all(&bytes).map_err(err)?;
-    io.flush().map_err(err)
+    write_all_retrying(io, &bytes)
 }
 
 #[derive(Default)]
@@ -401,6 +428,70 @@ mod tests {
         }
         assert!(!target_frame(DEBUG_REQUEST));
         assert!(!target_frame(HELLO));
+    }
+
+    /// Accepts bytes only after refusing a fixed number of times, and never
+    /// more than `chunk` per call, like a pseudo-terminal whose buffer is
+    /// full and then partially drained by the frontend.
+    struct FullBuffer {
+        refusals: usize,
+        chunk: usize,
+        accepted: Vec<u8>,
+    }
+
+    impl Write for FullBuffer {
+        fn write(&mut self, buf: &[u8]) -> io::Result<usize> {
+            if self.refusals > 0 {
+                self.refusals -= 1;
+                return Err(io::Error::from(io::ErrorKind::WouldBlock));
+            }
+            let written = self.chunk.min(buf.len());
+            self.accepted.extend_from_slice(&buf[..written]);
+            Ok(written)
+        }
+
+        fn flush(&mut self) -> io::Result<()> {
+            Ok(())
+        }
+    }
+
+    struct FailingWriter(io::ErrorKind);
+
+    impl Write for FailingWriter {
+        fn write(&mut self, _: &[u8]) -> io::Result<usize> {
+            Err(io::Error::from(self.0))
+        }
+
+        fn flush(&mut self) -> io::Result<()> {
+            Ok(())
+        }
+    }
+
+    #[test]
+    fn a_full_pseudo_terminal_delays_output_instead_of_ending_the_session() {
+        // The descriptor is non-blocking, so write_all reports WouldBlock
+        // rather than retrying. Treating that as fatal killed the adapter on
+        // any burst larger than the pseudo-terminal buffer, which on Darwin
+        // is roughly 1 KiB, so an ordinary `ls` was enough.
+        let payload: Vec<u8> = (0..4096).map(|index| index as u8).collect();
+        let mut sink = FullBuffer {
+            refusals: 3,
+            chunk: 7,
+            accepted: Vec::new(),
+        };
+        write_all_retrying(&mut sink, &payload).expect("a full buffer must not be fatal");
+        assert_eq!(sink.accepted, payload, "every byte arrives, in order");
+    }
+
+    #[test]
+    fn a_departed_frontend_still_ends_the_session() {
+        for kind in [io::ErrorKind::BrokenPipe, io::ErrorKind::NotConnected] {
+            let mut sink = FailingWriter(kind);
+            assert!(
+                write_all_retrying(&mut sink, b"payload").is_err(),
+                "{kind:?} must not be retried forever"
+            );
+        }
     }
 
     #[test]

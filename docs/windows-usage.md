@@ -21,6 +21,13 @@ start without a saved layout, pass another session path:
 just cor24-debugger-demo session=build/sessions/fresh.json
 ```
 
+Each session writes `build/logs/emulator-debug-<timestamp>.log`, capturing
+the adapter's and the frontend's output. Both would otherwise be lost: the
+frontend owns the alternate screen, and the launcher terminates the adapter
+as soon as the frontend exits, so a crash message is erased on restore. When
+either process ends badly the launcher prints the log path and its last
+lines. Pass `--log PATH` to choose a different destination.
+
 No UART, serial adapter, or COR24-TB board is required: the recipe pairs the
 frontend with the emulator over a pseudo-terminal. This is also the command the
 recorded demos drive. The `.tape` files under `docs/demos/` are only scripted

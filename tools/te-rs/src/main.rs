@@ -1413,7 +1413,19 @@ fn main() -> ExitCode {
     match run(&options) {
         Ok(()) => ExitCode::SUCCESS,
         Err(error) => {
-            eprintln!("{}: {error}", options.device);
+            // A hangup can surface on either side of the loop. The read path
+            // already names it; a write reports the raw errno for the
+            // pseudo-terminal or serial node, which says nothing about the
+            // emulator or board having gone away. Report both.
+            let vanished = matches!(
+                error.kind(),
+                io::ErrorKind::UnexpectedEof | io::ErrorKind::BrokenPipe
+            ) || error.raw_os_error() == Some(libc::EIO);
+            if vanished {
+                eprintln!("{}: serial transport lost ({error})", options.device);
+            } else {
+                eprintln!("{}: {error}", options.device);
+            }
             ExitCode::FAILURE
         }
     }
