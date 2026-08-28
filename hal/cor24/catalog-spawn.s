@@ -18,6 +18,13 @@ _kernel_stack_fill:
         add     r0,3
         ceq     r0,r2
         brf     _kernel_stack_fill
+        ; The heap base is a link-time address, so it cannot be a .word
+        ; initializer. Establish it before the first spawn allocates.
+        la      r0,_swtos_image_end
+        la      r2,_heap_next
+        sw      r0,0(r2)
+        la      r2,_heap_peak_next
+        sw      r0,0(r2)
         la      r0,_banner
         la      r2,_puts
         jal     r1,(r2)
@@ -198,7 +205,11 @@ _spawn_provider_store:
         ; tentative child allocation back to its generation mark.
         la      r2,_spawn_arena_mark
         lw      r0,0(r2)
-        la      r2,_ebr_next
+        la      r2,_stack_next
+        sw      r0,0(r2)
+        la      r2,_spawn_heap_mark
+        lw      r0,0(r2)
+        la      r2,_heap_next
         sw      r0,0(r2)
         lc      r0,1
         la      r2,_spawn_status
@@ -257,7 +268,11 @@ _spawn_allocation_failed:
 _spawn_child_allocation_failed:
         la      r2,_spawn_arena_mark
         lw      r0,0(r2)
-        la      r2,_ebr_next
+        la      r2,_stack_next
+        sw      r0,0(r2)
+        la      r2,_spawn_heap_mark
+        lw      r0,0(r2)
+        la      r2,_heap_next
         sw      r0,0(r2)
         lc      r0,3
         la      r2,_spawn_status
@@ -287,10 +302,14 @@ _TASK_SPAWN:
         lbu     r0,0(r2)
         ceq     r0,z
         brf     _spawn_have_arena_mark
-        la      r2,_ebr_next
+        la      r2,_stack_next
         lw      r0,0(r2)
         la      r2,_spawn_arena_mark
         sw      r0,0(r2)       ; app allocations are reclaimed at TASK_EXIT
+        la      r2,_heap_next
+        lw      r0,0(r2)
+        la      r2,_spawn_heap_mark
+        sw      r0,0(r2)
 _spawn_have_arena_mark:
         la      r2,_proc_b
 _spawn_find_slot:
@@ -666,14 +685,14 @@ _reserve_words:
         add     r0,r1           ; requested bytes = words * 3
         la      r2,_allocation_bytes
         sw      r0,0(r2)
-        la      r2,_ebr_next
+        la      r2,_stack_next
         lw      r1,0(r2)
         la      r2,_allocation_old_high
         sw      r1,0(r2)
-        la      r2,0xFEEB00
-        sub     r2,r1           ; current arena bytes
-        add     r0,r2           ; proposed arena bytes
-        la      r2,2814         ; 938 aligned words within the EBR window
+        la      r2,0x100000
+        sub     r2,r1           ; current stack-region bytes
+        add     r0,r2           ; proposed stack-region bytes
+        la      r2,0x010000     ; 64 KB of SRAM: 16 slots at 4 KB
         cls     r2,r0
         brt     _reserve_words_failed
         la      r2,_allocation_peak_bytes
@@ -687,7 +706,7 @@ _reserve_words_keep_peak:
         la      r2,_allocation_bytes
         lw      r0,0(r2)
         sub     r1,r0
-        la      r2,_ebr_next
+        la      r2,_stack_next
         sw      r1,0(r2)
         mov     r0,r1
         bra     _reserve_words_done
@@ -701,6 +720,55 @@ _reserve_words_failed:
         sw      r0,0(r2)
         lc      r0,0
 _reserve_words_done:
+        pop     r2
+        pop     r1
+        jmp     (r1)
+
+; Reserve r0 words from the SRAM heap and return the low base address, or
+; zero on exhaustion. The heap grows upward from the end of the linked image
+; toward the process-stack region, so the two arenas approach each other from
+; opposite ends of free SRAM and the check below is where they meet.
+;
+; Loaded image text, its preemption shadow, and private process state come
+; from here rather than from EBR: a loaded image costs twice its size because
+; the preemption runway restores overwritten text from the shadow, and the
+; 3 KB EBR window could not hold an app of any useful size.
+_reserve_heap_words:
+        push    r1
+        push    r2
+        la      r2,_allocation_failed
+        lc      r1,0
+        sb      r1,0(r2)
+        mov     r1,r0
+        add     r0,r1
+        add     r0,r1           ; requested bytes = words * 3
+        la      r2,_heap_next
+        lw      r1,0(r2)        ; r1 = allocation base
+        add     r0,r1           ; r0 = proposed new high water
+        la      r2,0x0F0000     ; floor of the process-stack region
+        cls     r2,r0
+        brt     _reserve_heap_failed
+        la      r2,_heap_peak_next
+        lw      r1,0(r2)
+        cls     r1,r0
+        brf     _reserve_heap_keep_peak
+        sw      r0,0(r2)
+_reserve_heap_keep_peak:
+        la      r2,_heap_next
+        lw      r1,0(r2)        ; base to return
+        sw      r0,0(r2)        ; commit the new high water
+        mov     r0,r1
+        bra     _reserve_heap_done
+_reserve_heap_failed:
+        la      r2,_allocation_failed
+        lc      r1,1
+        sb      r1,0(r2)
+        la      r2,_allocation_failures
+        lw      r0,0(r2)
+        add     r0,1
+        sw      r0,0(r2)
+        lc      r0,0
+_reserve_heap_done:
         pop     r2
         pop     r1
         jmp     (r1)
@@ -726,7 +794,7 @@ _alloc_state_words:
         push    r2
         la      r2,_zero_remaining
         sw      r0,0(r2)
-        la      r2,_reserve_words
+        la      r2,_reserve_heap_words
         jal     r1,(r2)
         ceq     r0,z
         brt     _state_done
@@ -1211,7 +1279,7 @@ _TASK_RECOVERY_RECLAIM_VERIFY:
         lbu     r0,0(r2)
         ceq     r0,z
         brf     _recovery_reclaim_fail
-        la      r2,_ebr_next
+        la      r2,_stack_next
         lw      r0,0(r2)
         la      r2,_spawn_arena_mark
         lw      r1,0(r2)
@@ -2695,8 +2763,8 @@ _TASK_MEM_INFO:
         la      r0,_swtos_image_end
         add     r0,1
         sw      r0,3(r2)
-        la      r0,0xFEEB00
-        la      r1,_ebr_next
+        la      r0,0x100000
+        la      r1,_stack_next
         lw      r1,0(r1)
         sub     r0,r1
         sw      r0,6(r2)
@@ -2779,8 +2847,8 @@ _TASK_MEM_RESET:
         push    r2
         push    r1
         mov     fp,sp
-        la      r0,0xFEEB00
-        la      r2,_ebr_next
+        la      r0,0x100000
+        la      r2,_stack_next
         lw      r1,0(r2)
         sub     r0,r1
         la      r2,_allocation_peak_bytes
@@ -3081,7 +3149,11 @@ _TASK_EXIT:
         ; The last child releases the allocation generation.
         la      r2,_spawn_arena_mark
         lw      r0,0(r2)
-        la      r2,_ebr_next
+        la      r2,_stack_next
+        sw      r0,0(r2)
+        la      r2,_spawn_heap_mark
+        lw      r0,0(r2)
+        la      r2,_heap_next
         sw      r0,0(r2)
 _task_exit_keep_arena:
         la      r2,_proc_a
@@ -3536,8 +3608,8 @@ _protocol_resource_request_valid:
         la      r1,_protocol_resource_generation
         lbu     r0,0(r1)
         sb      r0,1(r2)
-        la      r0,0xFEEB00
-        la      r1,_ebr_next
+        la      r0,0x100000
+        la      r1,_stack_next
         lw      r1,0(r1)
         sub     r0,r1
         sw      r0,2(r2)
@@ -4812,8 +4884,21 @@ _crc_bits:
         .byte   0
 _crc_lsb:
         .byte   0
-_ebr_next:
-        .word   0xFEEB00
+; Process stacks are allocated downward from the top of the 1 MB SRAM. Only
+; the kernel and boot stack remain in EBR, which is far too small to hold
+; sixteen process stacks: 3 KB against 16 x 4 KB.
+_stack_next:
+        .word   0x100000
+; Loaded image text, its preemption shadow, and private process state are
+; allocated upward from the end of the linked image. _swtos_image_end is
+; emitted by scripts/catalog-spawn-link.sh, so the heap can never overlap the
+; static image. Initialized at boot because its base is a link-time address.
+_heap_next:
+        .zero   3
+_heap_peak_next:
+        .zero   3
+_spawn_heap_mark:
+        .zero   3
 _child_count:
         .byte   0
 _banner:

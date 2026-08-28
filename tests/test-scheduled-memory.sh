@@ -24,8 +24,8 @@ if [ "$summary_count" -ne 3 ]; then
 fi
 
 for expected in \
-    'arena=262 peak=262' \
-    'arena=262 peak=648' \
+    'arena=256 peak=256' \
+    'arena=256 peak=640' \
     'kstack=8' \
     'failures=0 slots=1/3' \
     'ep=1 status=1 stack=256 state=6 total=262' \
@@ -39,7 +39,7 @@ for expected in \
     fi
 done
 
-if [ "$(grep -c 'arena=262 peak=262' <<<"$output")" -ne 2 ]; then
+if [ "$(grep -c 'arena=256 peak=256' <<<"$output")" -ne 2 ]; then
     echo "FAIL: mem -r did not reset the arena high-water mark" >&2
     echo "$output" >&2
     exit 1
@@ -50,7 +50,9 @@ mkdir -p "$FAIL_BUILD"
 # 0,/re/s//../; BSD sed rejects a zero line address and silently copies the
 # manifest through unchanged, leaving nothing oversized to reject. awk is the
 # portable way to bound the substitution to the first match.
-awk '!done && sub(/stack_words = 192/, "stack_words = 1000") { done = 1 } { print }' \
+# The stack region is 64 KB of SRAM, so exhausting it needs a request past
+# its 21845-word capacity; 1000 words fitted only in the former 3 KB EBR arena.
+awk '!done && sub(/stack_words = 192/, "stack_words = 30000") { done = 1 } { print }' \
     "$ROOT_DIR/catalog/catalog.toml" > "$FAIL_MANIFEST"
 "$ROOT_DIR/scripts/catalog-spawn-link.sh" \
     "$ROOT_DIR/tests/catalog-shell.plsw" scheduled-memory-exhaustion memory \
@@ -65,8 +67,10 @@ if ! grep -q 'ERROR' <<<"$failure_output"; then
     echo "$failure_output" >&2
     exit 1
 fi
-if ! grep -q 'arena=262 peak=263.*failures=1 slots=1/3' <<<"$failure_output"; then
-    echo "FAIL: failed spawn did not report failure and reclaim its state" >&2
+# The stack-region peak no longer moves on a failed spawn: the state block it
+# rolls back is allocated from the SRAM heap, which mem does not yet report.
+if ! grep -q 'arena=256 peak=256.*failures=1 slots=1/3' <<<"$failure_output"; then
+    echo "FAIL: failed spawn did not report the failure" >&2
     echo "$failure_output" >&2
     exit 1
 fi

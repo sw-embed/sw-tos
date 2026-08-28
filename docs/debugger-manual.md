@@ -156,17 +156,20 @@ COR24-TB address space:
 | `FEE000`-`FEFFFF` | Embedded Block RAM window, 8 KB addressable |
 | `FF0000`-`FFFFFF` | I/O space (LEDs, UART, SPI, I2C) |
 
-Only 3 KB of the EBR window is physically populated on the MachXO FPGA, and
-SWTOS divides that populated part as follows. Both regions grow **downward**:
+Only 3 KB of the EBR window is physically populated on the MachXO FPGA. SWTOS
+divides free SRAM and that populated EBR as follows:
 
 | Range | Contents |
 |-------|----------|
-| `FEE000`-`FEEBFF` | The 3 KB populated EBR |
-| `FEEB01`-`FEEBFF` | Kernel and boot stack reserve; `sp` starts at `FEEC00` and grows down |
-| `FEE002`-`FEEB00` | Process arena: per-process stacks, private state, and the text of loaded images. 2814 bytes, 938 aligned words, allocated downward from `FEEB00` |
+| `000000`-`0055xx` | The linked image: kernel, resident programs, catalog, data. Ends at `_swtos_image_end` |
+| `0055xx`-`0EFFFF` | Heap, ~961 KB. Loaded image text, its preemption shadow, and private process state. Grows **up** from the image end, so it can never overlap it |
+| `0F0000`-`0FFFFF` | Process stacks, 64 KB. Allocated **downward** from the top of SRAM |
+| `FEEB01`-`FEEBFF` | Kernel and boot stack reserve, 255 B; `sp` starts at `FEEC00` and grows down |
 
-Allocating below `FEE000` would leave the installed EBR window, so the arena
-capacity check refuses it.
+Heap and stacks approach each other from opposite ends of free SRAM, and the
+heap's capacity check is where they meet. Only the kernel stack remains in EBR:
+3 KB cannot hold sixteen process stacks, and a loaded image costs twice its
+size because the preemption runway restores overwritten text from a shadow.
 
 Reading a `regs` result against this map places a process, and where `pc` and
 `sp` fall tells you which kind it is:

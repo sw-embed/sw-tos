@@ -170,15 +170,17 @@ const HARDWARE: &[(&str, &str)] = &[
 /// a kernel layout change must be reflected here.
 const PLANNED: &[(&str, &str)] = &[
     ("000000-......", "kernel text, resident programs, catalog, data"),
-    ("......-0FFFFF", "free SRAM; plan.md maps stacks/state here"),
+    ("......-0EFFFF", "heap: loaded image text, shadow, private state"),
+    ("0F0000-0FFFFF", "process stacks, 64 KB, allocated downward"),
     ("FEEC00", "kernel stack top; grows down"),
     ("FEEB01-FEEBFF", "kernel and boot stack reserve, 255 B"),
-    ("FEE002-FEEB00", "process arena, 2814 B: stacks, state, images"),
 ];
 
-/// Configured process arena, from hal/cor24/catalog-spawn.s.
-const ARENA_TOP: u32 = 0x00FE_EB00;
-const ARENA_CAPACITY: u32 = 2814;
+/// Configured process-stack region, from hal/cor24/catalog-spawn.s. Loaded
+/// image text and private state come from the heap below it, which the target
+/// does not yet report.
+const ARENA_TOP: u32 = 0x0010_0000;
+const ARENA_CAPACITY: u32 = 0x0001_0000;
 const SRAM_END: u32 = 0x000F_FFFF;
 
 pub struct DebugConsole {
@@ -393,9 +395,10 @@ impl DebugConsole {
                     let size = high - low + 1;
                     lines.push(format!("  {low:06x}-{high:06x} image, {size} B linked"));
                     lines.push(format!(
-                        "  {:06x}-{SRAM_END:06x} free SRAM, {} B unused",
+                        "  {:06x}-{:06x} heap, {} B for loaded images and state",
                         high + 1,
-                        SRAM_END - high
+                        ARENA_TOP - ARENA_CAPACITY - 1,
+                        ARENA_TOP - ARENA_CAPACITY - high - 1
                     ));
                 }
                 None => lines.push("  image extent unknown; no matching debug map".into()),
@@ -405,7 +408,7 @@ impl DebugConsole {
                     let used = snapshot.memory.current;
                     let free = ARENA_CAPACITY.saturating_sub(used);
                     lines.push(format!(
-                        "  {:06x}-{ARENA_TOP:06x} arena {used}/{ARENA_CAPACITY} B, free {free} B",
+                        "  {:06x}-{SRAM_END:06x} stacks {used}/{ARENA_CAPACITY} B, free {free} B",
                         ARENA_TOP - ARENA_CAPACITY
                     ));
                     if used > ARENA_CAPACITY {
@@ -414,7 +417,7 @@ impl DebugConsole {
                         );
                     }
                     lines.push(format!(
-                        "  arena peak {} B, kernel stack peak {} B, failures {}",
+                        "  stack peak {} B, kernel stack peak {} B, failures {}",
                         snapshot.memory.peak,
                         snapshot.memory.kernel_stack_peak,
                         snapshot.memory.allocation_failures
