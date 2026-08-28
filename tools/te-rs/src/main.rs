@@ -241,6 +241,16 @@ fn parse_prefix(value: &str) -> Result<u8, String> {
     }
 }
 
+/// 921,600 baud, the COR24-TB UART rate.
+///
+/// Linux encodes speeds as opaque `Bxxx` indices, so the constant must come
+/// from libc. Darwin and the BSDs encode `speed_t` as the literal baud rate
+/// and define no `B921600`, so the numeric value is used directly there.
+#[cfg(target_os = "linux")]
+const SERIAL_SPEED: libc::speed_t = libc::B921600;
+#[cfg(not(target_os = "linux"))]
+const SERIAL_SPEED: libc::speed_t = 921_600;
+
 struct TermiosGuard {
     fd: RawFd,
     original: libc::termios,
@@ -256,10 +266,10 @@ impl TermiosGuard {
         configured.c_cflag |= libc::CS8 | libc::CLOCAL | libc::CREAD | libc::CRTSCTS;
         configured.c_iflag |= libc::IGNBRK;
 
-        // SAFETY: configured is valid and B921600 is a supported speed constant
-        // on Linux. Errors are reported through errno.
-        if unsafe { libc::cfsetispeed(&mut configured, libc::B921600) } == -1
-            || unsafe { libc::cfsetospeed(&mut configured, libc::B921600) } == -1
+        // SAFETY: configured is valid and SERIAL_SPEED is a supported speed
+        // for this platform. Errors are reported through errno.
+        if unsafe { libc::cfsetispeed(&mut configured, SERIAL_SPEED) } == -1
+            || unsafe { libc::cfsetospeed(&mut configured, SERIAL_SPEED) } == -1
         {
             return Err(io::Error::last_os_error());
         }
@@ -418,21 +428,12 @@ fn read_monitor_response_line(
         }
         let remaining = deadline.saturating_duration_since(now);
         let timeout_ms = remaining.as_millis().min(i32::MAX as u128) as i32;
-        let mut descriptor = libc::pollfd {
-            fd: serial.as_raw_fd(),
-            events: libc::POLLIN,
-            revents: 0,
+        let [ready] = match wait_readable([serial.as_raw_fd()], timeout_ms) {
+            Ok(readable) => readable,
+            Err(error) if error.kind() == io::ErrorKind::Interrupted => continue,
+            Err(error) => return Err(error),
         };
-        // SAFETY: descriptor points to one valid pollfd.
-        let ready = unsafe { libc::poll(&mut descriptor, 1, timeout_ms) };
-        if ready == -1 {
-            let error = io::Error::last_os_error();
-            if error.kind() == io::ErrorKind::Interrupted {
-                continue;
-            }
-            return Err(error);
-        }
-        if ready == 0 {
+        if !ready {
             break;
         }
         serial.read_exact(&mut byte)?;
@@ -470,21 +471,12 @@ fn receive_echo(
         }
         let remaining = deadline.saturating_duration_since(now);
         let timeout_ms = remaining.as_millis().min(i32::MAX as u128) as i32;
-        let mut descriptor = libc::pollfd {
-            fd: serial.as_raw_fd(),
-            events: libc::POLLIN,
-            revents: 0,
+        let [ready] = match wait_readable([serial.as_raw_fd()], timeout_ms) {
+            Ok(readable) => readable,
+            Err(error) if error.kind() == io::ErrorKind::Interrupted => continue,
+            Err(error) => return Err(error),
         };
-        // SAFETY: descriptor points to one valid pollfd.
-        let ready = unsafe { libc::poll(&mut descriptor, 1, timeout_ms) };
-        if ready == -1 {
-            let error = io::Error::last_os_error();
-            if error.kind() == io::ErrorKind::Interrupted {
-                continue;
-            }
-            return Err(error);
-        }
-        if ready == 0 {
+        if !ready {
             continue;
         }
 
@@ -617,23 +609,15 @@ fn resynchronize_heartbeat_parser(serial: &mut File) -> io::Result<()> {
     // Quarantine them before HELLO so they cannot be rendered as plain text.
     let mut stale = [0_u8; 1024];
     loop {
-        let mut descriptor = libc::pollfd {
-            fd: serial.as_raw_fd(),
-            events: libc::POLLIN,
-            revents: 0,
-        };
         // The serial descriptor deliberately remains blocking for normal I/O.
         // Probe it first so an empty reconnect quarantine cannot stall HELLO.
-        let ready = unsafe { libc::poll(&mut descriptor, 1, 0) };
-        if ready == 0 || descriptor.revents & libc::POLLIN == 0 {
+        let [ready] = match wait_readable([serial.as_raw_fd()], 0) {
+            Ok(readable) => readable,
+            Err(error) if error.kind() == io::ErrorKind::Interrupted => continue,
+            Err(error) => return Err(error),
+        };
+        if !ready {
             break;
-        }
-        if ready < 0 {
-            let error = io::Error::last_os_error();
-            if error.kind() == io::ErrorKind::Interrupted {
-                continue;
-            }
-            return Err(error);
         }
         match serial.read(&mut stale) {
             Ok(0) => break,
@@ -780,6 +764,53 @@ fn handle_copy_input(desktop: &mut Desktop, byte: u8, escape_state: &mut u8) {
     }
 }
 
+/// Wait until at least one of the descriptors is readable, reporting
+/// readiness per descriptor.
+///
+/// `select` is used rather than `poll` because Darwin reports `POLLNVAL` for
+/// a perfectly valid `/dev/tty` descriptor instead of `POLLIN`, which
+/// silently swallows every keystroke. `select` reports the controlling
+/// terminal correctly on both Darwin and Linux.
+///
+/// A negative `timeout_ms` waits indefinitely. A hangup surfaces as
+/// readability whose subsequent read returns zero bytes or fails, which each
+/// caller already treats as a lost transport.
+fn wait_readable<const N: usize>(fds: [RawFd; N], timeout_ms: i32) -> io::Result<[bool; N]> {
+    // SAFETY: an all-zero fd_set is the empty set on every supported platform.
+    let mut readable: libc::fd_set = unsafe { std::mem::zeroed() };
+    let mut highest = 0;
+    for &fd in &fds {
+        // SAFETY: readable is a valid fd_set and fd is an open descriptor
+        // below FD_SETSIZE.
+        unsafe { libc::FD_SET(fd, &mut readable) };
+        highest = highest.max(fd);
+    }
+    let mut timeout = libc::timeval {
+        tv_sec: (timeout_ms / 1000) as libc::time_t,
+        tv_usec: ((timeout_ms % 1000) * 1000) as libc::suseconds_t,
+    };
+    let deadline = if timeout_ms < 0 {
+        std::ptr::null_mut()
+    } else {
+        &mut timeout
+    };
+    // SAFETY: readable is a valid fd_set and deadline is null or a valid timeval.
+    let ready = unsafe {
+        libc::select(
+            highest + 1,
+            &mut readable,
+            std::ptr::null_mut(),
+            std::ptr::null_mut(),
+            deadline,
+        )
+    };
+    if ready == -1 {
+        return Err(io::Error::last_os_error());
+    }
+    // SAFETY: readable is a valid fd_set and each fd is an open descriptor.
+    Ok(fds.map(|fd| unsafe { libc::FD_ISSET(fd, &readable) }))
+}
+
 fn run_windows(options: &Options) -> io::Result<()> {
     let connected = Instant::now();
     let mut serial = OpenOptions::new()
@@ -833,47 +864,30 @@ fn run_windows(options: &Options) -> io::Result<()> {
     serial.flush()?;
 
     loop {
-        let mut descriptors = [
-            libc::pollfd {
-                fd: serial.as_raw_fd(),
-                events: libc::POLLIN,
-                revents: 0,
-            },
-            libc::pollfd {
-                fd: tty.as_raw_fd(),
-                events: libc::POLLIN,
-                revents: 0,
-            },
-        ];
         // A short timeout provides portable resize detection without installing
         // a process-global signal handler.
-        let ready = unsafe { libc::poll(descriptors.as_mut_ptr(), 2, 10) };
-        if ready == -1 {
-            let error = io::Error::last_os_error();
-            if error.kind() == io::ErrorKind::Interrupted {
-                continue;
-            }
-            return Err(error);
-        }
+        let readable = match wait_readable([serial.as_raw_fd(), tty.as_raw_fd()], 10) {
+            Ok(readable) => readable,
+            Err(error) if error.kind() == io::ErrorKind::Interrupted => continue,
+            Err(error) => return Err(error),
+        };
         let mut dirty = false;
 
-        if descriptors[0].revents & (libc::POLLHUP | libc::POLLERR) != 0 {
-            desktop.set_connected(false);
-            desktop.set_error(Some("transport lost".into()));
-            repaint_desktop(&mut tty, &mut desktop)?;
-            return Err(io::Error::new(
-                io::ErrorKind::UnexpectedEof,
-                "serial transport lost",
-            ));
-        }
-        if descriptors[0].revents & libc::POLLIN != 0 {
-            let count = serial.read(&mut serial_buffer)?;
+        if readable[0] {
+            // A hangup makes the descriptor readable; the read then reports
+            // the loss as zero bytes or as an error.
+            let count = match serial.read(&mut serial_buffer) {
+                Ok(count) => count,
+                Err(error) if error.kind() == io::ErrorKind::Interrupted => continue,
+                Err(_) => 0,
+            };
             if count == 0 {
                 desktop.set_connected(false);
+                desktop.set_error(Some("transport lost".into()));
                 repaint_desktop(&mut tty, &mut desktop)?;
                 return Err(io::Error::new(
                     io::ErrorKind::UnexpectedEof,
-                    "serial device disconnected",
+                    "serial transport lost",
                 ));
             }
             for item in connection.push(&serial_buffer[..count]) {
@@ -942,7 +956,7 @@ fn run_windows(options: &Options) -> io::Result<()> {
             dirty = true;
         }
 
-        if descriptors[1].revents & libc::POLLIN != 0 {
+        if readable[1] {
             let count = tty.read(&mut tty_buffer)?;
             if count == 0 {
                 return Ok(());
@@ -1212,19 +1226,6 @@ fn run(options: &Options) -> io::Result<()> {
     let mut serial_buffer = [0_u8; 1024];
     let mut tty_buffer = [0_u8; 256];
     loop {
-        let mut descriptors = [
-            libc::pollfd {
-                fd: serial.as_raw_fd(),
-                events: libc::POLLIN,
-                revents: 0,
-            },
-            libc::pollfd {
-                fd: tty.as_raw_fd(),
-                events: libc::POLLIN,
-                revents: 0,
-            },
-        ];
-        // SAFETY: descriptors is a valid two-element pollfd array.
         let timeout = if time_mode.is_some() {
             next_frame
                 .saturating_duration_since(Instant::now())
@@ -1233,16 +1234,13 @@ fn run(options: &Options) -> io::Result<()> {
         } else {
             -1
         };
-        let ready = unsafe { libc::poll(descriptors.as_mut_ptr(), 2, timeout) };
-        if ready == -1 {
-            let error = io::Error::last_os_error();
-            if error.kind() == io::ErrorKind::Interrupted {
-                continue;
-            }
-            return Err(error);
-        }
+        let readable = match wait_readable([serial.as_raw_fd(), tty.as_raw_fd()], timeout) {
+            Ok(readable) => readable,
+            Err(error) if error.kind() == io::ErrorKind::Interrupted => continue,
+            Err(error) => return Err(error),
+        };
 
-        if descriptors[0].revents & libc::POLLIN != 0 {
+        if readable[0] {
             let count = serial.read(&mut serial_buffer)?;
             if count == 0 {
                 return Err(io::Error::new(
@@ -1291,7 +1289,7 @@ fn run(options: &Options) -> io::Result<()> {
             }
         }
 
-        if descriptors[1].revents & libc::POLLIN != 0 {
+        if readable[1] {
             let count = tty.read(&mut tty_buffer)?;
             if count == 0 {
                 return Ok(());

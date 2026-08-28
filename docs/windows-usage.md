@@ -21,6 +21,13 @@ start without a saved layout, pass another session path:
 just cor24-debugger-demo session=build/sessions/fresh.json
 ```
 
+No UART, serial adapter, or COR24-TB board is required: the recipe pairs the
+frontend with the emulator over a pseudo-terminal. This is also the command the
+recorded demos drive. The `.tape` files under `docs/demos/` are only scripted
+keystrokes for this same session -- `vhs` is needed to record a video, never to
+run the demo. To follow `cor24-preemption.tape` by hand, start the recipe and
+type its `run ...` lines and `Ctrl-A` pane commands yourself.
+
 ## COR24-TB hardware
 
 Build the frontend and attach it to the already-running resident image:
@@ -34,8 +41,9 @@ tools/te-rs/target/release/te-rs \
   DEVICE
 ```
 
-Use the stable `/dev/serial/by-id/` path for `DEVICE`. `--windows` implies the
-negotiated framed SWTOS transport. Only one frontend may own the UART at a
+Use the stable `/dev/serial/by-id/` path for `DEVICE` on Linux; on macOS use
+the adapter's `/dev/cu.*` node. `--windows` implies the negotiated framed SWTOS
+transport. Only one frontend may own the UART at a
 time. Hardware upload and validation remain governed by
 [`hw-validation.md`](hw-validation.md).
 

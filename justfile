@@ -385,10 +385,16 @@ plsw-dump *ARGS:
 
 # ---- Toolchain ----
 
-# Install toolchain binaries (see docs/plan.md section 16)
-install-tools:
-    @echo "See docs/plan.md -- toolchain section for build instructions"
-    @echo "Binaries should be placed in {{TOOLSDIR}}/"
+# Clone the peer dependency repositories and build tools/bin/ from source
+toolchain:
+    ./scripts/build-toolchain.sh
+
+# Verify the toolchain binaries this repository expects are installed
+toolchain-check:
+    ./scripts/build-toolchain.sh --check
+
+# Backward-compatible alias.
+install-tools: toolchain
 
 # Clean build artifacts
 clean:

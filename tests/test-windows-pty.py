@@ -10,6 +10,7 @@ import struct
 import subprocess
 import sys
 import termios
+import threading
 import time
 
 ROOT = pathlib.Path(__file__).resolve().parents[1]
@@ -47,22 +48,114 @@ def debug_map_path() -> pathlib.Path:
     return output
 
 
+class _Drain:
+    """Continuously read one pseudo-terminal master into a pending buffer.
+
+    The frontend is single threaded: it writes the rendered screen to its
+    terminal and protocol frames to its serial device from the same loop. A
+    harness that reads only the descriptor it is currently asserting on lets
+    the other pseudo-terminal fill, which blocks the frontend inside write()
+    and stalls both streams. Linux hides this because its pseudo-terminals
+    buffer about 8 KiB; a rendered four-pane screen exceeds the roughly 1 KiB
+    a Darwin pseudo-terminal holds, so the frontend deadlocks there. Draining
+    every master continuously keeps the frontend running on both platforms.
+
+    Two further Darwin behaviors shape this reader. A master read reports EIO
+    whenever no process holds the slave, which includes the window between the
+    harness closing its own slave descriptor and the frontend opening the
+    slave by name, so EIO is retried rather than treated as end of stream. And
+    select() can report a master readable spuriously, so the descriptor is
+    non-blocking and EAGAIN is retried.
+
+    The reader owns a duplicate descriptor so a test closing the original
+    cannot make this thread read from a recycled descriptor number. stop()
+    releases that duplicate, which is required before a test closes a master
+    to make the frontend observe the hangup.
+    """
+
+    def __init__(self, fd: int):
+        self.fd = os.dup(fd)
+        fcntl.fcntl(self.fd, fcntl.F_SETFL,
+                    fcntl.fcntl(self.fd, fcntl.F_GETFL) | os.O_NONBLOCK)
+        self.buffer = bytearray()
+        self.lock = threading.Lock()
+        self.done = threading.Event()
+        self.thread = threading.Thread(target=self._run, daemon=True)
+        self.thread.start()
+
+    def _run(self) -> None:
+        try:
+            while not self.done.is_set():
+                try:
+                    ready, _, _ = select.select([self.fd], [], [], 0.05)
+                    if not ready:
+                        continue
+                    data = os.read(self.fd, 65536)
+                except (BlockingIOError, InterruptedError):
+                    time.sleep(0.005)
+                    continue
+                except (OSError, ValueError):
+                    # EIO while the slave side is unopened; retry.
+                    time.sleep(0.01)
+                    continue
+                if not data:
+                    time.sleep(0.01)
+                    continue
+                with self.lock:
+                    self.buffer.extend(data)
+        finally:
+            try:
+                os.close(self.fd)
+            except OSError:
+                pass
+
+    def take(self) -> bytes:
+        with self.lock:
+            data = bytes(self.buffer)
+            del self.buffer[:]
+            return data
+
+    def stop(self) -> None:
+        self.done.set()
+        self.thread.join(timeout=1.0)
+
+
+_drains: dict[int, _Drain] = {}
+
+
+def watch(fd: int) -> int:
+    """Start draining a freshly opened pseudo-terminal master."""
+    _drains[fd] = _Drain(fd)
+    return fd
+
+
+def close_watched(fd: int) -> None:
+    """Stop draining a master and close it, so the peer observes the hangup."""
+    drain = _drains.pop(fd, None)
+    if drain is not None:
+        drain.stop()
+    os.close(fd)
+
+
 def read_until(fd: int, needle: bytes, timeout: float = 3.0) -> bytes:
+    drain = _drains.get(fd)
+    if drain is None:
+        watch(fd)
+        drain = _drains[fd]
     data = bytearray()
     deadline = time.monotonic() + timeout
-    while needle not in data and time.monotonic() < deadline:
-        ready, _, _ = select.select([fd], [], [], 0.05)
-        if ready:
-            try:
-                data.extend(os.read(fd, 65536))
-            except OSError:
-                time.sleep(0.01)
-    return bytes(data)
+    while True:
+        data.extend(drain.take())
+        if needle in data or time.monotonic() >= deadline:
+            return bytes(data)
+        time.sleep(0.01)
 
 
 def start_frontend(session=None):
     terminal_master, terminal_slave = pty.openpty()
     serial_master, serial_slave = pty.openpty()
+    watch(terminal_master)
+    watch(serial_master)
     before = termios.tcgetattr(terminal_slave)
     fcntl.ioctl(terminal_slave, termios.TIOCSWINSZ, struct.pack("HHHH", 24, 80, 0, 0))
 
@@ -109,6 +202,8 @@ def start_frontend(session=None):
 def negotiation_clock_path():
     terminal_master, terminal_slave = pty.openpty()
     serial_master, serial_slave = pty.openpty()
+    watch(terminal_master)
+    watch(serial_master)
     before = termios.tcgetattr(terminal_slave)
     fcntl.ioctl(terminal_slave, termios.TIOCSWINSZ, struct.pack("HHHH", 24, 80, 0, 0))
 
@@ -127,23 +222,44 @@ def negotiation_clock_path():
     os.close(serial_slave)
     # Withhold HELLO_ACK as a hostile-running target would. The frontend must
     # keep supplying IRQ heartbeats and retry HELLO so negotiation can recover.
+    #
+    # Anchor the observation window on the first HELLO instead of on process
+    # start. How long the frontend takes to launch and open both devices says
+    # nothing about the retry behavior under test, and on a loaded machine it
+    # can consume most of a window measured from Popen.
+    assert HELLO in read_until(serial_master, HELLO, 5.0), "frontend never sent HELLO"
     pending = read_until(serial_master, b"never-present", 0.65)
-    assert pending.count(HELLO) >= 2, "HELLO was not retried during negotiation"
+    assert HELLO in pending, "HELLO was not retried during negotiation"
     assert pending.count(b"\xff\x01") >= 10, "scheduler clock stopped before HELLO_ACK"
     os.write(serial_master, ACK)
     identity_request = frame(9, 0, b"\x01")
     assert identity_request in read_until(serial_master, identity_request), "late ACK did not recover"
     os.write(tty_master := terminal_master, b"\x01d")
     assert_restored(process, tty_master, terminal_slave, before, 0)
-    os.close(serial_master)
-    os.close(terminal_master)
+    close_watched(serial_master)
+    close_watched(terminal_master)
     os.close(terminal_slave)
+
+
+def terminal_attributes(terminal_master, terminal_slave):
+    """Read the pseudo-terminal's attributes after the frontend has exited.
+
+    Darwin revokes every descriptor for a controlling terminal when its
+    session leader exits, so the slave descriptor stops answering tcgetattr
+    even though the terminal still exists. The master mirrors the same
+    attributes and survives the revoke, so it is the fallback. Linux does not
+    revoke, and keeps using the slave.
+    """
+    try:
+        return termios.tcgetattr(terminal_slave)
+    except termios.error:
+        return termios.tcgetattr(terminal_master)
 
 
 def assert_restored(process, terminal_master, terminal_slave, before, expected_status):
     status = process.wait(timeout=3)
     output = read_until(terminal_master, b"\x1b[?1049l", 1.0)
-    after = termios.tcgetattr(terminal_slave)
+    after = terminal_attributes(terminal_master, terminal_slave)
     assert status == expected_status, (status, process.stderr.read().decode(errors="replace"))
     assert b"\x1b[?1049l" in output, "screen restore"
     assert b"\x1b[?25h" in output, "cursor restore"
@@ -266,24 +382,24 @@ def normal_path():
     time.sleep(0.1)
     os.write(tty_master, b"\x01d")
     assert_restored(process, tty_master, tty_slave, before, 0)
-    os.close(serial_master)
-    os.close(tty_master)
+    close_watched(serial_master)
+    close_watched(tty_master)
     os.close(tty_slave)
 
     restored, tty_master, tty_slave, serial_master, before = start_frontend(session)
     assert b"Counter" in read_until(tty_master, b"Counter"), "saved session restore"
     os.write(tty_master, b"\x01d")
     assert_restored(restored, tty_master, tty_slave, before, 0)
-    os.close(serial_master)
-    os.close(tty_master)
+    close_watched(serial_master)
+    close_watched(tty_master)
     os.close(tty_slave)
 
 
 def failure_path():
     process, tty_master, tty_slave, serial_master, before = start_frontend()
-    os.close(serial_master)
+    close_watched(serial_master)
     assert_restored(process, tty_master, tty_slave, before, 1)
-    os.close(tty_master)
+    close_watched(tty_master)
     os.close(tty_slave)
 
 
@@ -291,8 +407,8 @@ def copy_mode_interrupt_path():
     process, tty_master, tty_slave, serial_master, before = start_frontend()
     os.write(tty_master, b"\x01y\x03")
     assert_restored(process, tty_master, tty_slave, before, 0)
-    os.close(serial_master)
-    os.close(tty_master)
+    close_watched(serial_master)
+    close_watched(tty_master)
     os.close(tty_slave)
 
 

@@ -14,10 +14,12 @@ read -r image_block image_length < <(
     "$ROOT_DIR/scripts/cor24-storage.py" extent "$MEDIA" embedded-hello
 )
 test "$image_length" -gt 0
-sed -i \
-    -e "s/@CATALOG_COUNT@/$catalog_count/" \
+# In-place editing is spelled differently by GNU and BSD sed, so rewrite
+# through a temporary file instead.
+sed -e "s/@CATALOG_COUNT@/$catalog_count/" \
     -e "s/@IMAGE_BLOCK@/$image_block/" \
-    "$OUT_DIR/program.s"
+    "$OUT_DIR/program.s" > "$OUT_DIR/program.s.tmp"
+mv "$OUT_DIR/program.s.tmp" "$OUT_DIR/program.s"
 sed -n 'p' "$ROOT_DIR/hal/cor24/spi.s" >> "$OUT_DIR/program.s"
 "$ROOT_DIR/tools/bin/cor24-asm" "$OUT_DIR/program.s" \
     -o "$OUT_DIR/program.lgo" --listing "$OUT_DIR/program.lst"

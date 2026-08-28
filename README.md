@@ -107,16 +107,52 @@ Milestone 0 fixtures that still gate the build.
 
 ## Building
 
-Requires the PL/SW toolchain (compiler, assembler, and linker):
+### Toolchain
+
+The host toolchain is built from sibling checkouts of the COR24 repositories.
+Their crates refer to each other by relative path, so the layout is fixed:
+
+```
+<parent>/sw-cor24-isa           cor24-isa crate (shared ISA tables)
+<parent>/sw-cor24-emulator      cor24-emu, cor24-dbg
+<parent>/sw-cor24-x-assembler   cor24-asm
+<parent>/sw-cor24-plsw          link24, meta-gen (components/linker)
+<parent>/sw-cor24-x-tinyc       tc24r (only to rebuild tools/plsw.lgo)
+<parent>/sw-tos                 this repository
+```
+
+Clone the missing peers and build every binary into `tools/bin/` with:
+
+```
+just toolchain
+```
+
+`just toolchain-check` verifies the installed set without rebuilding. Set
+`ORGROOT` to place the peer checkouts somewhere other than this repository's
+parent directory. The tools produced are:
 
 - [sw-cor24-plsw](https://github.com/sw-embed/sw-cor24-plsw) -- PL/SW compiler
 - `cor24-asm` -- COR24 assembler
 - `link24` -- FIXUP-based linker
 - `meta-gen` -- cross-module symbol and FIXUP metadata generator
 
+The PL/SW compiler itself ships as `tools/plsw.lgo`, a checked-in COR24 program
+that runs on the emulator; rebuilding it is only necessary when the compiler
+changes, and requires `tc24r` from `sw-cor24-x-tinyc`.
+
+Then build the system image:
+
 ```
 just plsw-system
 ```
+
+### Host requirements
+
+Linux and macOS (Apple Silicon) are both supported hosts, and the full
+acceptance gate passes on each. Beyond the peer checkouts you need a Rust
+toolchain (`cargo`), `python3`, and `just`. Recording the demo tapes
+additionally needs `vhs` and `ffmpeg`; running the demos interactively does
+not.
 
 Run the complete noninteractive emulator acceptance gate with:
 

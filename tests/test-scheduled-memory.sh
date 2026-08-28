@@ -46,7 +46,11 @@ if [ "$(grep -c 'arena=262 peak=262' <<<"$output")" -ne 2 ]; then
 fi
 
 mkdir -p "$FAIL_BUILD"
-sed '0,/stack_words = 192/s//stack_words = 1000/' \
+# Enlarge only the first 192-word stack request. GNU sed spells this
+# 0,/re/s//../; BSD sed rejects a zero line address and silently copies the
+# manifest through unchanged, leaving nothing oversized to reject. awk is the
+# portable way to bound the substitution to the first match.
+awk '!done && sub(/stack_words = 192/, "stack_words = 1000") { done = 1 } { print }' \
     "$ROOT_DIR/catalog/catalog.toml" > "$FAIL_MANIFEST"
 "$ROOT_DIR/scripts/catalog-spawn-link.sh" \
     "$ROOT_DIR/tests/catalog-shell.plsw" scheduled-memory-exhaustion memory \
