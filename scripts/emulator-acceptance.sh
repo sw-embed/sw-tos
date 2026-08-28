@@ -33,6 +33,7 @@ RECIPES=(
     scheduled-protocol-smoke
     windows-smoke
     debug-info-smoke
+    generated-banner-smoke
     emulator-debugger-smoke
     scheduled-catalog-smoke
     scheduled-memory-smoke

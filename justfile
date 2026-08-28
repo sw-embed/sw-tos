@@ -128,6 +128,10 @@ windows-smoke:
 debug-info-smoke:
     ./tests/test-debug-info.sh
 
+# Verify every generated source declares its generator and forbids editing
+generated-banner-smoke: plsw-system scheduled-shell-build
+    python3 scripts/check-generated-banners.py
+
 # Build the pinned official stateful COR24 debugger under build/
 cor24-debugger-build:
     ./scripts/build-cor24-debugger.sh

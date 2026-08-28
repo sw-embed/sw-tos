@@ -176,6 +176,18 @@ compiles into the complete system image:
 just catalog-smoke
 ```
 
+Every generated source -- the checked-in catalog tables, the compiler output
+under `build/`, and the module concatenations the linker consumes -- opens
+with a banner naming the script that produced it and forbidding edits. This
+matters most for `build/*/kernel.raw.s`, which is assembled from several
+`hal/cor24/*.s` files and would otherwise read exactly like the tracked
+kernel source while being discarded by the next build. Verify the banners
+with:
+
+```
+just generated-banner-smoke
+```
+
 The first embedded executable format is also defined and validated. Its
 27-byte header records `C24IMG` magic, version, text/data/BSS word counts,
 entry offset, relocation count, and a payload checksum. Build the deterministic
