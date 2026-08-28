@@ -125,6 +125,10 @@ impl SnapshotAssembler {
         false
     }
 
+    pub fn snapshot(&self) -> Option<&ResourceSnapshot> {
+        self.current.as_ref()
+    }
+
     pub fn disconnect(&mut self) {
         self.pending = None;
         self.current = None;

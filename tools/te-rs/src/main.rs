@@ -1086,7 +1086,7 @@ fn run_windows(options: &Options) -> io::Result<()> {
                     match byte {
                         b'\r' | b'\n' => {
                             desktop.push_channel(254, b"\n");
-                            let result = debugger.command(&debug_input);
+                            let result = debugger.command(&debug_input, resources.snapshot());
                             debug_input.clear();
                             for line in result.lines {
                                 desktop.push_channel(254, format!("{line}\n").as_bytes());

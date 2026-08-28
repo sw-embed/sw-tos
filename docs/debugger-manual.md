@@ -91,6 +91,7 @@ to inspect data the program has written.
 | `sym NAME` | map | Print `NAME = ADDRESS (module)` |
 | `list LOC` | map | Print the source line at or below `LOC` |
 | `dis LOC [N]` | map | Disassemble `N` instructions from `LOC` (default 8, max 32) |
+| `map [hw\|plan\|live]` | both | Hardware ranges, SWTOS's intended use, and live occupancy |
 | `regs [EP]` | target | Registers for endpoint `EP` (default 1): `r0 r1 r2 sp`, then `pc status` |
 | `x ADDR [N]` | target | Read `N` bytes (1..12, default 12) of live memory at `ADDR` |
 | `bt` | target | Best-effort ABI backtrace from the saved frame pointer chain |
@@ -105,6 +106,38 @@ to inspect data the program has written.
 | `detach` | target | Detach the adapter and exit |
 
 Anything else prints `unknown debugger command; use help`.
+
+## `map` -- what is where
+
+`map` prints three views of memory. `map hw`, `map plan`, and `map live` print
+one each.
+
+- **hardware** -- the COR24-TB physical address space. Fixed by the board.
+- **planned** -- how SWTOS intends to use it. These lines mirror the memory map
+  in `plan.md` section 5 and the kernel constants in
+  `hal/cor24/catalog-spawn.s`. The frontend cannot read either at runtime, so a
+  kernel layout change must be reflected in `HARDWARE`/`PLANNED` in
+  `tools/te-rs/src/debug.rs`.
+- **actual** -- live. The image extent comes from the debug map; arena use,
+  peaks, allocation failures, slot use, and per-process stack and state sizes
+  come from the most recent resource snapshot.
+
+```text
+map live
+actual
+  000000-005581 image, 21890 B linked
+  005582-0fffff free SRAM, 1026686 B unused
+  fee002-feeb00 arena 1194/2814 B, free 1620 B
+  arena peak 1194 B, kernel stack peak 24 B, failures 0
+  slots 2/3 used
+  ep=1 shel     stack 256w state 6w
+  ep=2 cpu-     stack 128w state 0w
+```
+
+Process names are the target's four-byte name field, so they appear truncated.
+If arena use ever exceeds the configured capacity, `map` says so rather than
+printing a negative free figure: that means the constants above have drifted
+from the kernel.
 
 ## Address ranges
 

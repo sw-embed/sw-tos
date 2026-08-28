@@ -1,5 +1,6 @@
 //! Build-matched symbolic inspection for COR24 debug artifacts.
 
+use crate::resource::ResourceSnapshot;
 use serde::Deserialize;
 use std::fs;
 use std::path::Path;
@@ -153,6 +154,33 @@ pub fn memory_request(address: u32, length: u8) -> Result<Vec<u8>, String> {
     ])
 }
 
+
+/// COR24-TB physical address space. Hardware facts, fixed by the board.
+const HARDWARE: &[(&str, &str)] = &[
+    ("000000-0FFFFF", "1 MB SRAM (ISSI IS61WV10248EDBLL)"),
+    ("100000-FDFFFF", "unmapped; addressable, reads zero"),
+    ("FEE000-FEFFFF", "EBR window, 8 KB addressable"),
+    ("FEE000-FEEBFF", "EBR populated, 3 KB on the MachXO"),
+    ("FF0000-FFFFFF", "I/O space: LEDs, UART, SPI, I2C"),
+];
+
+/// How SWTOS intends to use those ranges. Mirrors the memory map in
+/// docs/plan.md section 5 and the kernel constants in
+/// hal/cor24/catalog-spawn.s; the frontend cannot read either at runtime, so
+/// a kernel layout change must be reflected here.
+const PLANNED: &[(&str, &str)] = &[
+    ("000000-......", "kernel text, resident programs, catalog, data"),
+    ("......-0FFFFF", "free SRAM; plan.md maps stacks/state here"),
+    ("FEEC00", "kernel stack top; grows down"),
+    ("FEEB01-FEEBFF", "kernel and boot stack reserve, 255 B"),
+    ("FEE002-FEEB00", "process arena, 2814 B: stacks, state, images"),
+];
+
+/// Configured process arena, from hal/cor24/catalog-spawn.s.
+const ARENA_TOP: u32 = 0x00FE_EB00;
+const ARENA_CAPACITY: u32 = 2814;
+const SRAM_END: u32 = 0x000F_FFFF;
+
 pub struct DebugConsole {
     pub map: Option<DebugMap>,
     target_build_id: Option<u32>,
@@ -279,9 +307,11 @@ impl DebugConsole {
         }
     }
 
-    pub fn command(&self, line: &str) -> CommandResult {
+    pub fn command(&self, line: &str, resources: Option<&ResourceSnapshot>) -> CommandResult {
         let words: Vec<&str> = line.split_whitespace().collect();
         let result = match words.as_slice() {
+            ["map"] => self.map_command(resources, "all"),
+            ["map", view] => self.map_command(resources, view),
             ["sym", name] => self.symbol_command(name),
             ["list", location] => self.list_command(location),
             ["dis", location] => self.disassemble_command(location, 8),
@@ -321,11 +351,95 @@ impl DebugConsole {
                 .map_err(|_| "endpoint must be decimal".to_string()),
             ["detach"] => Ok(request("detaching from emulator", vec![12])),
             ["help"] | [] => Ok(text(
-                "sym NAME | list LOC | dis LOC [N] | regs [EP] | x ADDR [N] | kill EP | pause | continue | break LOC | bl | delete LOC | step | next | bt | detach",
+                "map [hw|plan|live] | sym NAME | list LOC | dis LOC [N] | regs [EP] | x ADDR [N] | kill EP | pause | continue | break LOC | bl | delete LOC | step | next | bt | detach",
             )),
             _ => Err("unknown debugger command; use help".into()),
         };
         result.unwrap_or_else(|error| text(&error))
+    }
+
+
+    /// Three views of memory: what the board has, how SWTOS means to use it,
+    /// and what is actually there now.
+    fn map_command(
+        &self,
+        resources: Option<&ResourceSnapshot>,
+        view: &str,
+    ) -> Result<CommandResult, String> {
+        let (hardware, planned, live) = match view {
+            "all" => (true, true, true),
+            "hw" => (true, false, false),
+            "plan" => (false, true, false),
+            "live" => (false, false, true),
+            other => return Err(format!("unknown map view '{other}'; use hw, plan, or live")),
+        };
+        let mut lines = Vec::new();
+        if hardware {
+            lines.push("hardware".into());
+            for (range, use_) in HARDWARE {
+                lines.push(format!("  {range:<13} {use_}"));
+            }
+        }
+        if planned {
+            lines.push("planned".into());
+            for (range, use_) in PLANNED {
+                lines.push(format!("  {range:<13} {use_}"));
+            }
+        }
+        if live {
+            lines.push("actual".into());
+            match self.map.as_ref().and_then(|map| map.mapped_extent()) {
+                Some((low, high)) => {
+                    let size = high - low + 1;
+                    lines.push(format!("  {low:06x}-{high:06x} image, {size} B linked"));
+                    lines.push(format!(
+                        "  {:06x}-{SRAM_END:06x} free SRAM, {} B unused",
+                        high + 1,
+                        SRAM_END - high
+                    ));
+                }
+                None => lines.push("  image extent unknown; no matching debug map".into()),
+            }
+            match resources {
+                Some(snapshot) => {
+                    let used = snapshot.memory.current;
+                    let free = ARENA_CAPACITY.saturating_sub(used);
+                    lines.push(format!(
+                        "  {:06x}-{ARENA_TOP:06x} arena {used}/{ARENA_CAPACITY} B, free {free} B",
+                        ARENA_TOP - ARENA_CAPACITY
+                    ));
+                    if used > ARENA_CAPACITY {
+                        lines.push(
+                            "  arena use exceeds the configured capacity; constants stale".into(),
+                        );
+                    }
+                    lines.push(format!(
+                        "  arena peak {} B, kernel stack peak {} B, failures {}",
+                        snapshot.memory.peak,
+                        snapshot.memory.kernel_stack_peak,
+                        snapshot.memory.allocation_failures
+                    ));
+                    lines.push(format!(
+                        "  slots {}/{} used",
+                        snapshot.memory.used_slots, snapshot.memory.total_slots
+                    ));
+                    for process in snapshot.processes.values() {
+                        lines.push(format!(
+                            "  ep={} {:<8} stack {}w state {}w",
+                            process.endpoint,
+                            process.name,
+                            process.stack_words,
+                            process.state_words
+                        ));
+                    }
+                }
+                None => lines.push("  no resource snapshot yet".into()),
+            }
+        }
+        Ok(CommandResult {
+            lines,
+            request: None,
+        })
     }
 
     fn matched_map(&self) -> Result<&DebugMap, String> {
@@ -470,7 +584,7 @@ mod tests {
         // 0x13 is one past the final mapped instruction, and fee7db is the
         // kind of arena program counter `regs` reports for a loaded image.
         for outside in ["13", "fee7db"] {
-            let result = console.command(&format!("list {outside}"));
+            let result = console.command(&format!("list {outside}"), None);
             assert!(
                 result.lines.iter().any(|line| line.contains("no source")),
                 "list {outside} must not resolve, got {:?}",
@@ -480,7 +594,7 @@ mod tests {
         // An address inside an instruction still resolves, including one that
         // lands part-way through the two-byte instruction at 0x10.
         for inside in ["10", "11"] {
-            let result = console.command(&format!("list {inside}"));
+            let result = console.command(&format!("list {inside}"), None);
             assert!(
                 result.lines.iter().any(|line| line.contains("app.s:7")),
                 "list {inside} must resolve, got {:?}",
@@ -495,14 +609,14 @@ mod tests {
         console.response(&[1, 0x56, 0x34, 0x12]);
         // An operator reaches an address like this by pasting the program
         // counter `regs` reports for an endpoint that has already exited.
-        let result = console.command("dis fee7db 20");
+        let result = console.command("dis fee7db 20", None);
         assert!(
             result.lines.iter().any(|line| line.contains("fee7db")),
             "an empty range must be reported, got {:?}",
             result.lines
         );
         // A real range still disassembles.
-        let good = console.command("dis 10 2");
+        let good = console.command("dis 10 2", None);
         assert!(
             good.lines.iter().any(|line| line.contains("lc r0,1")),
             "valid range must still disassemble, got {:?}",
@@ -576,30 +690,30 @@ mod tests {
     #[test]
     fn symbolic_commands_require_a_matching_build_but_raw_commands_do_not() {
         let mut console = DebugConsole::new(Some(map()));
-        assert!(console.command("sym counter").lines[0].contains("not received"));
+        assert!(console.command("sym counter", None).lines[0].contains("not received"));
         console.response(&[1, 0x21, 0x43, 0x65]);
-        assert!(console.command("sym counter").lines[0].contains("mismatch"));
-        assert_eq!(console.command("regs 2").request, Some(vec![2, 2]));
+        assert!(console.command("sym counter", None).lines[0].contains("mismatch"));
+        assert_eq!(console.command("regs 2", None).request, Some(vec![2, 2]));
         console.response(&[1, 0x56, 0x34, 0x12]);
-        assert!(console.command("sym counter").lines[0].contains("000010"));
+        assert!(console.command("sym counter", None).lines[0].contains("000010"));
         assert_eq!(
-            console.command("list counter").lines[0],
+            console.command("list counter", None).lines[0],
             "000010 app.s:7 lc r0,1"
         );
-        assert_eq!(console.command("dis counter 2").lines.len(), 2);
+        assert_eq!(console.command("dis counter 2", None).lines.len(), 2);
         assert_eq!(
-            console.command("break counter").request,
+            console.command("break counter", None).request,
             Some(vec![6, 0x10, 0, 0])
         );
         assert_eq!(
-            console.command("break app.s:8").request,
+            console.command("break app.s:8", None).request,
             Some(vec![6, 0x12, 0, 0])
         );
         assert_eq!(
-            console.command("delete 0x10").request,
+            console.command("delete 0x10", None).request,
             Some(vec![7, 0x10, 0, 0])
         );
-        assert_eq!(console.command("next").request, Some(vec![10]));
+        assert_eq!(console.command("next", None).request, Some(vec![10]));
         assert_eq!(
             console.response(&[8, 1, 0x10, 0, 0]),
             vec!["1: 000010 counter"]
