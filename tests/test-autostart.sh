@@ -5,7 +5,7 @@ set -euo pipefail
 ROOT_DIR="$(cd "$(dirname "$0")/.." && pwd)"
 EMU="$ROOT_DIR/tools/bin/cor24-emu"
 
-if grep -q 'CALL MENU' "$ROOT_DIR/system.plsw"; then
+if grep -q 'CALL MENU' "$ROOT_DIR/tests/system.plsw"; then
     echo "FAIL: system boot still calls MENU directly" >&2
     exit 1
 fi

@@ -449,7 +449,7 @@ image. The same generator emits `hal/cor24/catalog_generated.s`, whose
 descriptors and name storage are appended to the scheduler kernel before
 assembly and linking.
 At boot, `CATALOG_AUTOSTART` scans the generated descriptor flags and invokes
-each selected entry through `CATALOG_CALL_ENTRY`; `system.plsw` contains no
+each selected entry through `CATALOG_CALL_ENTRY`; `tests/system.plsw` contains no
 direct shell call. `CATALOG_FIND_PROGRAM` compares a requested name against
 program descriptors and returns the linked entry for indirect dispatch.
 `CATALOG_LIST` walks the same table and prints every program and service name.
@@ -776,7 +776,7 @@ constructs needed by SWTOS:
 - [x] Volatile memory-mapped I/O access (UART, LED registers)
 - [x] MACRODEF/GEN for recurring kernel patterns
 
-**Status:** smoke-test.plsw compiles and runs. Proven: BASED record
+**Status:** tests/smoke-test.plsw compiles and runs. Proven: BASED record
 templates with PTR dereference, %INCLUDE with FILE: protocol, %DEFINE
 constants, MACRODEF/GEN invocation, ADDR(), inline ASM via ASM DO,
 DO WHILE loop, PROC with stack frame.
@@ -793,7 +793,7 @@ DO WHILE loop, PROC with stack frame.
   is ~3 seconds for typical programs (not minutes -- the delay was
   caused by incorrect `--terminal --echo` usage instead of `--uart-file`).
 
-**Deliverable:** `smoke-test.plsw` compiles and runs in the emulator.
+**Deliverable:** `tests/smoke-test.plsw` compiles and runs in the emulator.
 `just plsw-link-smoke` independently compiles an entry module and library,
 generates symbol/FIXUP metadata, performs two-pass assembly, links them with
 link24, and verifies the linked program output in the emulator.
@@ -1288,8 +1288,8 @@ The name in `FILE:` must match the `%INCLUDE` name (without .msw).
 
 | Recipe              | Description                                |
 |---------------------|--------------------------------------------|
-| `just plsw-smoke`   | Compile smoke-test.plsw with .msw includes |
-| `just plsw-smoke-run` | Compile and run smoke-test.plsw         |
+| `just plsw-smoke`   | Compile tests/smoke-test.plsw with .msw includes |
+| `just plsw-smoke-run` | Compile and run tests/smoke-test.plsw   |
 | `just plsw-system`  | Compile the complete menu system to `.lgo` and `.bin` |
 | `just plsw-system-interactive` | Build and run the scheduler-integrated menu |
 | `just plsw-system-run` | Alias for `plsw-system-interactive` |
@@ -1333,7 +1333,7 @@ The name in `FILE:` must match the `%INCLUDE` name (without .msw).
 | `just plsw-compile <[.msw ...] file.plsw>` | Compile any .plsw  |
 | `just plsw-run <[.msw ...] file.plsw>` | Compile and run any .plsw |
 | `just plsw-dump <[.msw ...] file.plsw>` | Compile and dump memory |
-| `just smoke`         | Assemble smoke-test.s (assembly, not PL/SW) |
+| `just smoke`         | Assemble tests/smoke-test.s (assembly, not PL/SW) |
 | `just run`           | Run assembly smoke test                   |
 
 ---

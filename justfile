@@ -30,7 +30,7 @@ hardware-acceptance-report-smoke:
 # Assemble smoke test
 smoke:
     mkdir -p build
-    {{COR24ASM}} smoke-test.s -o build/smoke-test.lgo --listing build/smoke-test.lst
+    {{COR24ASM}} tests/smoke-test.s -o build/smoke-test.lgo --listing build/smoke-test.lst
 
 # Run assembly smoke test
 run: smoke
@@ -78,7 +78,7 @@ cor24-loader-smoke:
 
 # Compile and run PL/SW system image (menu + apps)
 plsw-system: catalog-generate
-    {{PIPELINE}} include/swtos.msw include/menu.msw include/hello_app.msw include/counter_app.msw include/clock_app.msw include/catalog_generated.msw include/catalog.msw system.plsw
+    {{PIPELINE}} include/swtos.msw include/menu.msw include/hello_app.msw include/counter_app.msw include/clock_app.msw include/catalog_generated.msw include/catalog.msw tests/system.plsw
 
 # Verify IMAGE_AUTOSTART dispatch launches the shell from catalog metadata
 autostart-smoke: plsw-system
@@ -311,7 +311,7 @@ plsw-system-run: plsw-system-interactive
 
 # Compile PL/SW smoke test (with .msw includes) to .s + .lgo
 plsw-smoke:
-    {{PIPELINE}} include/swtos.msw smoke-test.plsw
+    {{PIPELINE}} include/swtos.msw tests/smoke-test.plsw
 
 # Compile and run PL/SW smoke test
 plsw-smoke-run: plsw-smoke

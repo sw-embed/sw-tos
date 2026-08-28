@@ -80,6 +80,31 @@ See [docs/plan.md](docs/plan.md) for the full development plan including
 design philosophy, memory map, kernel subsystems, UART heartbeat protocol,
 resident catalog design, milestones, and risk assessment.
 
+## Repository layout
+
+Source lives under a directory that names its role; the repository root holds
+no build inputs.
+
+```
+include/          PL/SW macro headers (.msw) shared by every image
+hal/cor24/        COR24 kernel and HAL assembly (scheduler, preemption,
+                  context switch, protocol, SPI/I2C drivers)
+catalog/          catalog.toml manifest and providers.toml
+catalog/images/   cataloged program sources (cpu-hog.s, embedded-hello.s,
+                  embedded-ping.plsw) with a .toml descriptor each
+tests/            image sources and their test drivers, including
+                  catalog-shell.plsw -- the primary scheduled shell image
+scripts/          build, packaging, capture, and terminal launchers
+tools/            te-rs frontend, debug adapter, plsw.lgo, built tools/bin/
+docs/demos/       VHS tapes; docs/ holds the design and validation records
+build/            all generated artifacts (ignored)
+```
+
+The scheduled shell used by the demos and the preemption proof is built from
+`tests/catalog-shell.plsw` plus `hal/cor24/*.s`; `tests/system.plsw` is the
+older direct-call compatibility image, and `tests/smoke-test.{s,plsw}` are the
+Milestone 0 fixtures that still gate the build.
+
 ## Building
 
 Requires the PL/SW toolchain (compiler, assembler, and linker):

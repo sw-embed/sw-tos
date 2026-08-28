@@ -24,7 +24,7 @@ COR24 HAL: UART, bit-banged SPI, I2C
 Device: Rust emulator models or COR24-TB peripherals
 ```
 
-The primary interactive system is not the direct-call `system.plsw` image.
+The primary interactive system is not the direct-call `tests/system.plsw` image.
 `scripts/catalog-spawn-link.sh` compiles the PL/SW application module, combines
 it with `hal/cor24/catalog-spawn.s` and the HAL modules, and FIXUP-links them as
 a flat binary. The persistent shell is the autostart process; selected programs
