@@ -25,6 +25,7 @@ a PL/I-inspired systems programming language for the COR24 ISA.
 [▶ Watch the tiled Windows frontend demo](videos/cor24-windows-demo.webm) ·
 [▶ Watch two CPU hogs preempted independently](videos/cor24-preemption-demo.webm) ·
 [Windows usage guide](docs/windows-usage.md) ·
+[Debugger manual](docs/debugger-manual.md) ·
 [Reproducible Windows VHS tape](docs/demos/cor24-windows.tape) ·
 [Dual-hog VHS tape](docs/demos/cor24-preemption.tape)
 

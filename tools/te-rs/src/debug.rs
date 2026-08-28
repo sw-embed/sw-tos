@@ -382,12 +382,19 @@ impl DebugConsole {
 
     fn disassemble_command(&self, value: &str, count: usize) -> Result<CommandResult, String> {
         let address = self.address(value)?;
-        let lines = self
+        let lines: Vec<String> = self
             .matched_map()?
             .disassemble(address, count.min(32))
             .into_iter()
             .map(|item| format!("{:06x} {:<8} {}", item.address, item.bytes, item.text))
             .collect();
+        if lines.is_empty() {
+            // An address outside the image disassembles to nothing. Saying so
+            // matters because the addresses an operator pastes in come from
+            // `regs`, which reports a stale program counter for an endpoint
+            // that has exited, and silence reads as a broken command.
+            return Err(format!("no instructions at {address:06x}"));
+        }
         Ok(CommandResult {
             lines,
             request: None,
@@ -432,6 +439,27 @@ fn u24(bytes: &[u8]) -> u32 {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn disassembling_outside_the_image_says_so_instead_of_printing_nothing() {
+        let mut console = DebugConsole::new(Some(map()));
+        console.response(&[1, 0x56, 0x34, 0x12]);
+        // An operator reaches an address like this by pasting the program
+        // counter `regs` reports for an endpoint that has already exited.
+        let result = console.command("dis fee7db 20");
+        assert!(
+            result.lines.iter().any(|line| line.contains("fee7db")),
+            "an empty range must be reported, got {:?}",
+            result.lines
+        );
+        // A real range still disassembles.
+        let good = console.command("dis 10 2");
+        assert!(
+            good.lines.iter().any(|line| line.contains("lc r0,1")),
+            "valid range must still disassemble, got {:?}",
+            good.lines
+        );
+    }
 
     fn map() -> DebugMap {
         DebugMap {

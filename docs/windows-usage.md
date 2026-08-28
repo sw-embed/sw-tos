@@ -196,6 +196,10 @@ x ADDRESS [1..12]
 kill ENDPOINT
 ```
 
+The full command reference, including location forms, the difference between
+`list` and `dis`, and which commands the physical board supports, is in
+[`debugger-manual.md`](debugger-manual.md).
+
 Symbolic commands require the target build ID to match the selected debug map.
 Registers and memory are read-only hardware-safe operations. `kill` is limited
 to a certified hostile process parked at a safe interrupt context. Breakpoints,
