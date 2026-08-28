@@ -1,0 +1,20 @@
+#!/bin/bash
+# swtos-emu -- cor24-emu with the SWTOS stack map.
+#
+# SWTOS keeps process stacks in high SRAM and only its kernel stack in EBR.
+# The emulator's stack-bounds check defaults to the EBR window alone, so every
+# process stack reads as an overflow on its first push. The range below spans
+# both regions. It is deliberately the single place that knows the SWTOS stack
+# map: a layout change edits this file, not each of the invocations across
+# tests/ and scripts/.
+#
+# The check is an emulator debugging aid, not COR24 behaviour: the ISA has no
+# stack concept and the board has no trap.
+
+set -euo pipefail
+
+ROOT_DIR="$(cd "$(dirname "$0")/.." && pwd)"
+
+# Low bound: the floor of the process-stack region in SRAM.
+# High bound: the kernel stack top in EBR, which is also the emulator's reset SP.
+exec "$ROOT_DIR/tools/bin/cor24-emu" --stack-bounds 0x0F0000:0xFEEC00 "$@"

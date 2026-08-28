@@ -4,7 +4,7 @@ set -euo pipefail
 
 ROOT_DIR="$(cd "$(dirname "$0")/.." && pwd)"
 OUT_DIR="$ROOT_DIR/build/scheduled-stats"
-EMU="$ROOT_DIR/tools/bin/cor24-emu"
+EMU="$ROOT_DIR/scripts/swtos-emu"
 
 "$ROOT_DIR/scripts/catalog-spawn-link.sh" \
     "$ROOT_DIR/tests/catalog-shell.plsw" scheduled-stats

@@ -4,7 +4,7 @@ set -euo pipefail
 
 ROOT_DIR="$(cd "$(dirname "$0")/.." && pwd)"
 ASM="$ROOT_DIR/tools/bin/cor24-asm"
-EMU="$ROOT_DIR/tools/bin/cor24-emu"
+EMU="$ROOT_DIR/scripts/swtos-emu"
 SOURCE="$ROOT_DIR/hal/cor24/heartbeat.s"
 OUT_DIR="$ROOT_DIR/build/heartbeat"
 

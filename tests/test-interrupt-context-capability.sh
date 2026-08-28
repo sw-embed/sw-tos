@@ -16,7 +16,7 @@ mkdir -p "$OUT_DIR"
 # final-register-safe resume path after an IR runway has recovered the PC.
 "$ASM" "$ROOT_DIR/tests/absolute-jump-resume.s" \
     -o "$OUT_DIR/absolute-jump-resume.lgo" >/dev/null
-output=$("$ROOT_DIR/tools/bin/cor24-emu" \
+output=$("$ROOT_DIR/scripts/swtos-emu" \
     --lgo "$OUT_DIR/absolute-jump-resume.lgo" \
     --speed 0 -n 200000 --quiet 2>/dev/null)
 if [ "$output" != "J1" ]; then

@@ -20,7 +20,7 @@ test "$image_length" -gt 0
 "$ROOT_DIR/tools/bin/cor24-asm" "$ROOT_DIR/tests/spi-launch-seed.s" \
     -o "$OUT_DIR/seed.lgo"
 
-output=$("$ROOT_DIR/tools/bin/cor24-emu" \
+output=$("$ROOT_DIR/scripts/swtos-emu" \
     --lgo "$OUT_DIR/seed.lgo" --load-binary "$OUT_DIR/program.bin@0" --entry 0 \
     --spi-device "w25q32@cs=3?file=$MEDIA" \
     --speed 0 -n 3000000 --quiet 2>/dev/null | sed '/^Entry point:/d')
@@ -39,7 +39,7 @@ echo "PASS: scheduled catalog lookup and executable load used W25Q32 storage"
 CORRUPT_MEDIA="$OUT_DIR/corrupt-storage.bin"
 cp "$MEDIA" "$CORRUPT_MEDIA"
 printf 'X' | dd of="$CORRUPT_MEDIA" bs=1 seek="$((image_offset + 3))" conv=notrunc 2>/dev/null
-corrupt_output=$("$ROOT_DIR/tools/bin/cor24-emu" \
+corrupt_output=$("$ROOT_DIR/scripts/swtos-emu" \
     --lgo "$OUT_DIR/seed.lgo" --load-binary "$OUT_DIR/program.bin@0" --entry 0 \
     --spi-device "w25q32@cs=3?file=$CORRUPT_MEDIA" \
     --speed 0 -n 3000000 --quiet 2>/dev/null | sed '/^Entry point:/d')
@@ -64,7 +64,7 @@ for corruption in magic entry size; do
     else
         printf '\377\377\377' | dd of="$bad_media" bs=1 seek="$((image_offset + 9))" conv=notrunc 2>/dev/null
     fi
-    bad_output=$("$ROOT_DIR/tools/bin/cor24-emu" \
+    bad_output=$("$ROOT_DIR/scripts/swtos-emu" \
         --lgo "$OUT_DIR/seed.lgo" --load-binary "$OUT_DIR/program.bin@0" --entry 0 \
         --spi-device "w25q32@cs=3?file=$bad_media" \
         --speed 0 -n 3000000 --quiet 2>/dev/null | sed '/^Entry point:/d')
@@ -88,7 +88,7 @@ for corruption in ordinal alignment length flags bounds; do
         flags) printf '\000' | dd of="$bad_media" bs=1 seek="$((record_offset + 23))" conv=notrunc 2>/dev/null ;;
         bounds) printf '\077\377\370' | dd of="$bad_media" bs=1 seek="$((record_offset + 17))" conv=notrunc 2>/dev/null ;;
     esac
-    bad_output=$("$ROOT_DIR/tools/bin/cor24-emu" \
+    bad_output=$("$ROOT_DIR/scripts/swtos-emu" \
         --lgo "$OUT_DIR/seed.lgo" --load-binary "$OUT_DIR/program.bin@0" --entry 0 \
         --spi-device "w25q32@cs=3?file=$bad_media" \
         --speed 0 -n 3000000 --quiet 2>/dev/null | sed '/^Entry point:/d')
@@ -109,7 +109,7 @@ for corruption in count name; do
     else
         printf 'xxxxxxxxxxxxxxxx' | dd of="$bad_media" bs=1 seek="$record_offset" conv=notrunc 2>/dev/null
     fi
-    bad_output=$("$ROOT_DIR/tools/bin/cor24-emu" \
+    bad_output=$("$ROOT_DIR/scripts/swtos-emu" \
         --lgo "$OUT_DIR/seed.lgo" --load-binary "$OUT_DIR/program.bin@0" --entry 0 \
         --spi-device "w25q32@cs=3?file=$bad_media" \
         --speed 0 -n 3000000 --quiet 2>/dev/null | sed '/^Entry point:/d')
@@ -125,7 +125,7 @@ echo "PASS: target rejected invalid SPI catalog count and unterminated name"
 CHECKSUM_MEDIA="$OUT_DIR/corrupt-catalog-checksum.bin"
 cp "$MEDIA" "$CHECKSUM_MEDIA"
 printf 'j' | dd of="$CHECKSUM_MEDIA" bs=1 seek=8 conv=notrunc 2>/dev/null
-checksum_output=$("$ROOT_DIR/tools/bin/cor24-emu" \
+checksum_output=$("$ROOT_DIR/scripts/swtos-emu" \
     --lgo "$OUT_DIR/seed.lgo" --load-binary "$OUT_DIR/program.bin@0" --entry 0 \
     --spi-device "w25q32@cs=3?file=$CHECKSUM_MEDIA" \
     --speed 0 -n 3000000 --quiet 2>/dev/null | sed '/^Entry point:/d')

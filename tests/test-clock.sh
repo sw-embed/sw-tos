@@ -3,7 +3,7 @@
 set -euo pipefail
 
 ROOT_DIR="$(cd "$(dirname "$0")/.." && pwd)"
-EMU="$ROOT_DIR/tools/bin/cor24-emu"
+EMU="$ROOT_DIR/scripts/swtos-emu"
 
 output=$($EMU --lgo "$ROOT_DIR/build/system.lgo" \
     -u '3\xFF\x01\xF4\x01\x00\xFF\x01\x58\x02\x00\xFF\x01\xBC\x02\x00\x1B4\xFF\x02\xC0\xFF\x03\x45\xFF\x02\x24\x1E\x45\xFF\x02\x88\x1E\x45\x1B0' \

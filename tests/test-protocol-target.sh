@@ -6,7 +6,7 @@ ROOT_DIR="$(cd "$(dirname "$0")/.." && pwd)"
 OUT_DIR="$ROOT_DIR/build/protocol-v1"
 ASM="$ROOT_DIR/tools/bin/cor24-asm"
 META_GEN="$ROOT_DIR/tools/bin/meta-gen"
-EMU="$ROOT_DIR/tools/bin/cor24-emu"
+EMU="$ROOT_DIR/scripts/swtos-emu"
 
 mkdir -p "$OUT_DIR"
 sed -n 'p' "$ROOT_DIR/tests/protocol-v1-harness.s" \

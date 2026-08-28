@@ -10,7 +10,7 @@ OUT_DIR="$ROOT_DIR/build/i2c-ds1307"
 "$ROOT_DIR/tools/bin/cor24-asm" "$ROOT_DIR/tests/spi-launch-seed.s" \
     -o "$OUT_DIR/seed.lgo"
 
-output=$("$ROOT_DIR/tools/bin/cor24-emu" \
+output=$("$ROOT_DIR/scripts/swtos-emu" \
     --lgo "$OUT_DIR/seed.lgo" \
     --load-binary "$OUT_DIR/program.bin@0" --entry 0 \
     --i2c-device 'ds1307@0x68?hour=12&minute=34&second=56' \
@@ -53,7 +53,7 @@ for event in 'ADDR 0x3C WR ACK' 'WR   0x3C 0xAE ACK' \
     fi
 done
 
-missing_output=$("$ROOT_DIR/tools/bin/cor24-emu" \
+missing_output=$("$ROOT_DIR/scripts/swtos-emu" \
     --lgo "$OUT_DIR/seed.lgo" \
     --load-binary "$OUT_DIR/program.bin@0" --entry 0 \
     --i2c-device 'ssd1306@0x3C?width=128&height=64' \
@@ -69,7 +69,7 @@ if ! echo "$missing_output" | grep -q 'ADDR 0x68 WR NAK'; then
     exit 1
 fi
 
-missing_oled_output=$("$ROOT_DIR/tools/bin/cor24-emu" \
+missing_oled_output=$("$ROOT_DIR/scripts/swtos-emu" \
     --lgo "$OUT_DIR/seed.lgo" \
     --load-binary "$OUT_DIR/program.bin@0" --entry 0 \
     --i2c-device 'ds1307@0x68?hour=12&minute=34&second=56' \

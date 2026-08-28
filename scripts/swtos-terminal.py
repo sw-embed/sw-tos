@@ -13,7 +13,7 @@ import tty
 
 
 ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
-EMU = os.path.join(ROOT, "tools", "bin", "cor24-emu")
+EMU = os.path.join(ROOT, "scripts", "swtos-emu")
 DEFAULT_IMAGE = os.path.join(ROOT, "build", "system.bin")
 CTRL_RIGHT_BRACKET = 0x1D
 APP_ESCAPE = 0x1B

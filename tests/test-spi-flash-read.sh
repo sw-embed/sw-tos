@@ -24,7 +24,7 @@ sed -n 'p' "$ROOT_DIR/hal/cor24/spi.s" >> "$OUT_DIR/program.s"
 "$ROOT_DIR/tools/bin/cor24-asm" "$OUT_DIR/program.s" \
     -o "$OUT_DIR/program.lgo" --listing "$OUT_DIR/program.lst"
 
-output=$("$ROOT_DIR/tools/bin/cor24-emu" --lgo "$OUT_DIR/program.lgo" \
+output=$("$ROOT_DIR/scripts/swtos-emu" --lgo "$OUT_DIR/program.lgo" \
     --spi-device "w25q32@cs=3?file=$MEDIA" --speed 0 -n 100000 --quiet 2>/dev/null)
 if [ "$output" != "S" ]; then
     echo "FAIL: expected S, got '$output'" >&2

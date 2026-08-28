@@ -44,6 +44,11 @@ fn main() -> Result<(), String> {
         .map_err(err)?;
 
     let mut emu = EmulatorCore::new();
+    // SWTOS keeps process stacks in high SRAM and only its kernel stack in
+    // EBR. The emulator's stack-bounds check defaults to the EBR window
+    // alone, which reads every process stack as an overflow. Match the range
+    // scripts/swtos-emu passes to the CLI.
+    emu.set_stack_bounds(0x000F_0000, 0x00FE_EC00);
     emu.load_program(0, &fs::read(&image).map_err(err)?);
     emu.set_pc(0);
     // SWTOS owns memory outside the emulator's default standalone stack window.

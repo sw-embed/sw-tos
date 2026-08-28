@@ -5,7 +5,7 @@ set -euo pipefail
 ROOT_DIR="$(cd "$(dirname "$0")/.." && pwd)"
 OUT_DIR="$ROOT_DIR/build/preemption-runway"
 ASM="$ROOT_DIR/tools/bin/cor24-asm"
-EMU="$ROOT_DIR/tools/bin/cor24-emu"
+EMU="$ROOT_DIR/scripts/swtos-emu"
 
 mkdir -p "$OUT_DIR"
 "$ASM" "$ROOT_DIR/hal/cor24/preemption-runway.s" \

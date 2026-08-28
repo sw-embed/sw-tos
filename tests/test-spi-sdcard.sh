@@ -21,7 +21,7 @@ done | dd of="$MEDIA" bs=1 count=1024 status=none
 "$ROOT_DIR/tools/bin/cor24-asm" "$ROOT_DIR/tests/spi-launch-seed.s" \
     -o "$OUT_DIR/seed.lgo"
 
-output=$("$ROOT_DIR/tools/bin/cor24-emu" \
+output=$("$ROOT_DIR/scripts/swtos-emu" \
     --lgo "$OUT_DIR/seed.lgo" \
     --load-binary "$OUT_DIR/program.bin@0" --entry 0 \
     --spi-device "sdcard@cs=0?file=$MEDIA" \
@@ -39,7 +39,7 @@ if ! echo "$output" | grep -q 'END'; then
     exit 1
 fi
 
-missing_output=$("$ROOT_DIR/tools/bin/cor24-emu" \
+missing_output=$("$ROOT_DIR/scripts/swtos-emu" \
     --lgo "$OUT_DIR/seed.lgo" \
     --load-binary "$OUT_DIR/program.bin@0" --entry 0 \
     --speed 0 -n 3000000 --quiet 2>&1)

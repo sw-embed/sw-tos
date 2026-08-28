@@ -4,7 +4,7 @@ set -euo pipefail
 
 ROOT_DIR="$(cd "$(dirname "$0")/.." && pwd)"
 ASM="$ROOT_DIR/tools/bin/cor24-asm"
-EMU="$ROOT_DIR/tools/bin/cor24-emu"
+EMU="$ROOT_DIR/scripts/swtos-emu"
 TOOL="$ROOT_DIR/scripts/cor24-image.py"
 MANIFEST="$ROOT_DIR/catalog/images/loader-smoke.toml"
 OUT_DIR="$ROOT_DIR/build/cor24-loader"

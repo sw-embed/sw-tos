@@ -14,7 +14,7 @@ ROOT_DIR="$(dirname "$SCRIPT_DIR")"
 TOOLDIR="$ROOT_DIR/tools"
 PLSW_LGO="$TOOLDIR/plsw.lgo"
 COR24ASM="$TOOLDIR/bin/cor24-asm"
-COR24EMU="$TOOLDIR/bin/cor24-emu"
+COR24EMU="$ROOT_DIR/scripts/swtos-emu"
 
 if [ ! -f "$PLSW_LGO" ]; then
     echo "Error: $PLSW_LGO not found." >&2

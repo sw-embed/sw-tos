@@ -83,7 +83,7 @@ def main() -> int:
         "tools": {
             "just": command_output(["just", "--version"]),
             "git": command_output(["git", "--version"]),
-            "cor24_emu": tool_record("tools/bin/cor24-emu", ["--version"]),
+            "cor24_emu": tool_record("scripts/swtos-emu", ["--version"]),
             "cor24_asm": tool_record("tools/bin/cor24-asm", ["--version"]),
             "meta_gen": tool_record("tools/bin/meta-gen"),
             "link24": tool_record("tools/bin/link24"),

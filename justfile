@@ -4,7 +4,8 @@ set shell := ["bash", "-cu"]
 
 TOOLSDIR := "tools/bin"
 COR24ASM := TOOLSDIR + "/cor24-asm"
-COR24EMU := TOOLSDIR + "/cor24-emu"
+# cor24-emu with the SWTOS stack map; see scripts/swtos-emu.
+COR24EMU := "scripts/swtos-emu"
 COR24DBG := TOOLSDIR + "/cor24-dbg"
 PLSWLGO := "tools/plsw.lgo"
 PIPELINE := "./scripts/plsw-pipeline.sh"

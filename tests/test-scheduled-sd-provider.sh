@@ -16,7 +16,7 @@ test "$image_length" -gt 0
 "$ROOT_DIR/tools/bin/cor24-asm" "$ROOT_DIR/tests/spi-launch-seed.s" \
     -o "$OUT_DIR/seed.lgo"
 
-output=$("$ROOT_DIR/tools/bin/cor24-emu" \
+output=$("$ROOT_DIR/scripts/swtos-emu" \
     --lgo "$OUT_DIR/seed.lgo" \
     --load-binary "$OUT_DIR/program.bin@0" --entry 0 \
     --spi-device "sdcard@cs=2?file=$MEDIA" \
@@ -37,7 +37,7 @@ echo "PASS: catalog lookup and executable load used cached SD sectors"
 CORRUPT_MEDIA="$OUT_DIR/corrupt-storage.bin"
 cp "$MEDIA" "$CORRUPT_MEDIA"
 printf 'X' | dd of="$CORRUPT_MEDIA" bs=1 seek="$((image_offset + 3))" conv=notrunc status=none
-corrupt_output=$("$ROOT_DIR/tools/bin/cor24-emu" \
+corrupt_output=$("$ROOT_DIR/scripts/swtos-emu" \
     --lgo "$OUT_DIR/seed.lgo" \
     --load-binary "$OUT_DIR/program.bin@0" --entry 0 \
     --spi-device "sdcard@cs=2?file=$CORRUPT_MEDIA" \
@@ -57,7 +57,7 @@ CROSS_MEDIA="$OUT_DIR/two-sector-storage.bin"
     --image-alignment 512
 "$ROOT_DIR/scripts/catalog-spawn-link.sh" \
     "$ROOT_DIR/tests/catalog-sd-cross-sector.plsw" scheduled-sd-cross-sector
-cross_output=$("$ROOT_DIR/tools/bin/cor24-emu" \
+cross_output=$("$ROOT_DIR/scripts/swtos-emu" \
     --lgo "$OUT_DIR/seed.lgo" \
     --load-binary "$ROOT_DIR/build/scheduled-sd-cross-sector/program.bin@0" --entry 0 \
     --spi-device "sdcard@cs=2?file=$CROSS_MEDIA" \
@@ -81,7 +81,7 @@ test "$cross_image_length" -gt 33
 "$ROOT_DIR/scripts/catalog-spawn-link.sh" \
     "$ROOT_DIR/tests/catalog-sd-cross-image.plsw" scheduled-sd-cross-image memory \
     "$ROOT_DIR/tests/catalog-sd-cross-image.toml"
-cross_image_output=$("$ROOT_DIR/tools/bin/cor24-emu" \
+cross_image_output=$("$ROOT_DIR/scripts/swtos-emu" \
     --lgo "$OUT_DIR/seed.lgo" \
     --load-binary "$ROOT_DIR/build/scheduled-sd-cross-image/program.bin@0" --entry 0 \
     --spi-device "sdcard@cs=2?file=$CROSS_IMAGE_MEDIA" \
@@ -97,7 +97,7 @@ echo "PASS: one authenticated executable read crossed from SD sector one into se
 TRUNCATED_CROSS_IMAGE_MEDIA="$OUT_DIR/truncated-cross-sector-image-storage.bin"
 cp "$CROSS_IMAGE_MEDIA" "$TRUNCATED_CROSS_IMAGE_MEDIA"
 truncate -s 1024 "$TRUNCATED_CROSS_IMAGE_MEDIA"
-truncated_cross_output=$("$ROOT_DIR/tools/bin/cor24-emu" \
+truncated_cross_output=$("$ROOT_DIR/scripts/swtos-emu" \
     --lgo "$OUT_DIR/seed.lgo" \
     --load-binary "$ROOT_DIR/build/scheduled-sd-cross-image/program.bin@0" --entry 0 \
     --spi-device "sdcard@cs=2?file=$TRUNCATED_CROSS_IMAGE_MEDIA" \
@@ -116,7 +116,7 @@ printf '\000' | dd of="$RECOVERY_MEDIA" bs=1 seek="$((cross_image_offset + 33))"
 "$ROOT_DIR/scripts/catalog-spawn-link.sh" \
     "$ROOT_DIR/tests/catalog-sd-recovery.plsw" scheduled-sd-recovery memory \
     "$ROOT_DIR/tests/catalog-sd-cross-image.toml"
-recovery_output=$("$ROOT_DIR/tools/bin/cor24-emu" \
+recovery_output=$("$ROOT_DIR/scripts/swtos-emu" \
     --lgo "$OUT_DIR/seed.lgo" \
     --load-binary "$ROOT_DIR/build/scheduled-sd-recovery/program.bin@0" --entry 0 \
     --spi-device "sdcard@cs=2?file=$RECOVERY_MEDIA" \

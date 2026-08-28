@@ -3,7 +3,7 @@
 set -euo pipefail
 
 ROOT_DIR="$(cd "$(dirname "$0")/.." && pwd)"
-EMU="$ROOT_DIR/tools/bin/cor24-emu"
+EMU="$ROOT_DIR/scripts/swtos-emu"
 OUT_DIR="$ROOT_DIR/build/scheduled-shell"
 FAIL_BUILD="$ROOT_DIR/build/scheduled-memory-exhaustion"
 FAIL_MANIFEST="$FAIL_BUILD/catalog.toml"
