@@ -824,6 +824,14 @@ fn wait_readable<const N: usize>(fds: [RawFd; N], timeout_ms: i32) -> io::Result
     Ok(fds.map(|fd| unsafe { libc::FD_ISSET(fd, &readable) }))
 }
 
+/// Shown in a pane when Escape is sent to the target.
+///
+/// Escape is not printable, so the local echo skipped it and the key looked
+/// dead: nothing appeared, and an application that exits on Escape only
+/// answered afterwards. Naming it makes the keystroke visible at the point it
+/// was sent, whichever way it was typed.
+const ESCAPE_ECHO: &[u8] = b"Esc";
+
 fn run_windows(options: &Options) -> io::Result<()> {
     let connected = Instant::now();
     let mut serial = OpenOptions::new()
@@ -1049,6 +1057,7 @@ fn run_windows(options: &Options) -> io::Result<()> {
                             ) {
                                 serial.write_all(&multiplexed_input_frame(channel, &[0x1b]))?;
                                 serial.flush()?;
+                                desktop.push_channel(channel, ESCAPE_ECHO);
                             }
                         }
                         _ => match desktop.command(byte) {
@@ -1136,6 +1145,10 @@ fn run_windows(options: &Options) -> io::Result<()> {
                     if matches!(outgoing, b'\n' | 0x08 | 0x7f | 0x20..=0x7e) {
                         for &channel in &input_channels {
                             desktop.push_channel(channel, &[outgoing]);
+                        }
+                    } else if outgoing == 0x1b {
+                        for &channel in &input_channels {
+                            desktop.push_channel(channel, ESCAPE_ECHO);
                         }
                     }
                     for channel in input_channels {

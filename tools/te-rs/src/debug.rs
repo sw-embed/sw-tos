@@ -394,11 +394,13 @@ impl DebugConsole {
                 Some((low, high)) => {
                     let size = high - low + 1;
                     lines.push(format!("  {low:06x}-{high:06x} image, {size} B linked"));
+                    let heap_end = ARENA_TOP - ARENA_CAPACITY - 1;
+                    let capacity = heap_end - high;
+                    let used = resources.map_or(0, |snapshot| snapshot.memory.heap_current);
                     lines.push(format!(
-                        "  {:06x}-{:06x} heap, {} B for loaded images and state",
+                        "  {:06x}-{heap_end:06x} heap {used}/{capacity} B, free {} B",
                         high + 1,
-                        ARENA_TOP - ARENA_CAPACITY - 1,
-                        ARENA_TOP - ARENA_CAPACITY - high - 1
+                        capacity.saturating_sub(used)
                     ));
                 }
                 None => lines.push("  image extent unknown; no matching debug map".into()),

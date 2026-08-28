@@ -18,6 +18,10 @@ pub struct MemorySnapshot {
     pub allocation_failures: u32,
     pub used_slots: u8,
     pub total_slots: u8,
+    /// Heap use and high water, in bytes above the linked image. Zero when the
+    /// target predates the heap and sends the shorter memory record.
+    pub heap_current: u32,
+    pub heap_peak: u32,
 }
 
 #[derive(Clone, Debug, Default, Eq, PartialEq)]
@@ -73,7 +77,9 @@ impl SnapshotAssembler {
             return false;
         };
         match kind {
-            MEMORY if body.len() == 14 => {
+            // 14 bytes is the record without heap figures, which a target
+            // built before the SRAM heap still sends.
+            MEMORY if body.len() == 14 || body.len() == 20 => {
                 snapshot.memory = MemorySnapshot {
                     current: u24(&body[0..3]),
                     peak: u24(&body[3..6]),
@@ -81,6 +87,16 @@ impl SnapshotAssembler {
                     allocation_failures: u24(&body[9..12]),
                     used_slots: body[12],
                     total_slots: body[13],
+                    heap_current: if body.len() == 20 {
+                        u24(&body[14..17])
+                    } else {
+                        0
+                    },
+                    heap_peak: if body.len() == 20 {
+                        u24(&body[17..20])
+                    } else {
+                        0
+                    },
                 };
             }
             PROCESS if body.len() == 13 => {
@@ -152,10 +168,15 @@ impl SnapshotAssembler {
             .updated
             .is_none_or(|updated| now.duration_since(updated) > Duration::from_secs(1));
         let marker = if stale { "STALE " } else { "" };
+        // "stk" is the SRAM stack region, "heap" the loaded-image and state
+        // arena above the linked image. Reporting only one of them hides
+        // whichever is filling up.
         let mut lines = vec![format!(
-            "{marker}mem {}/{}B kstk={}B fail={} slots={}/{}",
+            "{marker}stk {}/{}B heap {}/{}B kstk={}B fail={} slots={}/{}",
             snapshot.memory.current,
             snapshot.memory.peak,
+            snapshot.memory.heap_current,
+            snapshot.memory.heap_peak,
             snapshot.memory.kernel_stack_peak,
             snapshot.memory.allocation_failures,
             snapshot.memory.used_slots,
@@ -219,7 +240,7 @@ mod tests {
         assert!(!assembler.push(&[END, 6, 0, 0, 0, 0, 0, 0, 0, 0, 0], now));
         assert!(assembler.push(&[END, 7, 2, 0, 0, 8, 0, 0, 9, 0, 0], now));
         let lines = assembler.render(now);
-        assert!(lines.iter().any(|line| line.contains("mem 10/20B")));
+        assert!(lines.iter().any(|line| line.contains("stk 10/20B")));
         assert!(
             lines
                 .iter()
@@ -271,7 +292,7 @@ mod tests {
         );
         assembler.push(&[END, 2, 0, 0, 0, 0, 0, 0, 0, 0, 0], now);
         let lines = assembler.render(now);
-        assert!(lines[0].contains("mem 10/40B"));
+        assert!(lines[0].contains("stk 10/40B"));
         assert!(!lines.iter().any(|line| line.contains("ep=2")));
     }
 }

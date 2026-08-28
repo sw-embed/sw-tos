@@ -3628,7 +3628,20 @@ _protocol_resource_request_valid:
         sb      r0,14(r2)
         lc      r0,3
         sb      r0,15(r2)
-        lc      r0,16
+        ; Heap use and high water, relative to the link-time image end that is
+        ; the heap's base. Without these the stack region is the only arena a
+        ; frontend can see, and loaded image text is invisible.
+        la      r0,_heap_next
+        lw      r0,0(r0)
+        la      r1,_swtos_image_end
+        sub     r0,r1
+        sw      r0,16(r2)
+        la      r0,_heap_peak_next
+        lw      r0,0(r0)
+        la      r1,_swtos_image_end
+        sub     r0,r1
+        sw      r0,19(r2)
+        lc      r0,22
         la      r2,_protocol_resource_length
         sw      r0,0(r2)
         la      r2,_protocol_emit_resource_record
@@ -4685,8 +4698,10 @@ _protocol_debug_length:
         .zero   3
 _protocol_resource_generation:
         .byte   0
+; Sized for the longest resource record: the memory record, which carries the
+; stack region, the heap, the kernel stack, failures, and slot use.
 _protocol_resource_payload:
-        .zero   16
+        .zero   22
 _protocol_resource_length:
         .zero   3
 _protocol_resource_checksum:

@@ -287,7 +287,7 @@ def normal_path():
     assert b"\x1b[?1049h" in screen and b"\x1b[?25l" in screen, "screen entry"
     assert b"Shell *" in screen and b"Application" in screen, "four-pane grid was not rendered"
     assert b"shell-two" in screen and b"app-one" in screen, "independent pane output missing"
-    assert b"mem 10/20B" in screen and b"cntr ep=2" in screen, "resource snapshot missing"
+    assert b"stk 10/20B" in screen and b"cntr ep=2" in screen, "resource snapshot missing"
     damaged = bytearray(frame(2, 0, b"damaged"))
     damaged[-1] ^= 0x80
     os.write(serial_master, damaged)
@@ -359,6 +359,14 @@ def normal_path():
     exclusive = read_until(serial_master, frame(1, 0, b"q"))
     assert frame(1, 0, b"q") in exclusive
     assert frame(1, 1, b"q") not in exclusive and frame(1, 2, b"q") not in exclusive
+    # Escape is not printable, so it must still be named in the pane it was
+    # sent to; otherwise the key is indistinguishable from a dead one.
+    os.write(tty_master, b"\x1b")
+    assert b"Esc" in read_until(tty_master, b"Esc"), "Escape was not echoed locally"
+    assert frame(1, 0, b"\x1b") in read_until(serial_master, frame(1, 0, b"\x1b")), (
+        "Escape did not reach the target"
+    )
+
     os.write(tty_master, b"\x01b\x01bv")
     broadcast = read_until(serial_master, frame(1, 2, b"v"))
     assert all(frame(1, channel, b"v") in broadcast for channel in (0, 1, 2)), "confirmed broadcast"
