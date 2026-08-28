@@ -236,8 +236,7 @@ impl DebugConsole {
                 for address in words.chunks_exact(3).map(u24).filter(|value| *value != 0) {
                     if let Some(map) = &self.map
                         && let Some(function) = map.function_at(address)
-                    {
-                        if !lines
+                        && !lines
                             .iter()
                             .any(|line| line.contains(&format!("pc={address:06x}")))
                         {
@@ -247,7 +246,6 @@ impl DebugConsole {
                                 function.name
                             ));
                         }
-                    }
                 }
                 if lines.len() == 1 {
                     lines.push("best-effort stack scan found no caller".into());

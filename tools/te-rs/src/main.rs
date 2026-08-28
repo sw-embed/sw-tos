@@ -1011,11 +1011,10 @@ fn run_windows(options: &Options) -> io::Result<()> {
                             }
                         }
                         b'R' => {
-                            if let Some(path) = options.session.as_deref() {
-                                if let Err(error) = load_session(path, &mut desktop) {
+                            if let Some(path) = options.session.as_deref()
+                                && let Err(error) = load_session(path, &mut desktop) {
                                     desktop.set_error(Some(format!("session: {error}")));
                                 }
-                            }
                         }
                         b'r' => {
                             let renegotiate = connection.mode() == Mode::Plain;
@@ -1055,11 +1054,10 @@ fn run_windows(options: &Options) -> io::Result<()> {
                         _ => match desktop.command(byte) {
                             CommandOutcome::Detach => return Ok(()),
                             CommandOutcome::Save => {
-                                if let Some(path) = options.session.as_deref() {
-                                    if let Err(error) = save_session(path, &desktop) {
+                                if let Some(path) = options.session.as_deref()
+                                    && let Err(error) = save_session(path, &desktop) {
                                         desktop.set_error(Some(format!("session: {error}")));
                                     }
-                                }
                             }
                             CommandOutcome::Continue => {}
                         },
@@ -1185,8 +1183,10 @@ fn run_windows(options: &Options) -> io::Result<()> {
             serial.flush()?;
             next_hello_retry = now + Duration::from_millis(250);
         }
-        if connection.mode() == Mode::Framed && time_mode.is_some() && now >= next_time_frames {
-            let mode = time_mode.expect("checked active time mode");
+        if connection.mode() == Mode::Framed
+            && let Some(mode) = time_mode
+            && now >= next_time_frames
+        {
             let tick = match mode {
                 TimeMode::Uptime => connected.elapsed().as_millis() as u32 / 10,
                 TimeMode::Clock => wall_centiseconds(),
@@ -1410,8 +1410,8 @@ fn run(options: &Options) -> io::Result<()> {
         }
 
         let now = Instant::now();
-        if let Some(mode) = time_mode {
-            if now >= next_frame {
+        if let Some(mode) = time_mode
+            && now >= next_frame {
                 let tick = match mode {
                     TimeMode::Uptime => connected.elapsed().as_millis() as u32 / 10,
                     TimeMode::Clock => wall_centiseconds(),
@@ -1424,7 +1424,6 @@ fn run(options: &Options) -> io::Result<()> {
                 serial.flush()?;
                 next_frame = now + Duration::from_secs(1);
             }
-        }
     }
 }
 

@@ -394,20 +394,22 @@ impl Desktop {
         if self.help {
             draw_box(
                 &mut canvas,
-                0,
-                0,
-                width,
-                body_height,
-                "Help",
-                &[
-                    "1-9 focus  n next  p previous  z zoom  s split  x close",
-                    "y copy  b,b broadcast  w save  R restore-layout",
-                    "copy: arrows/hjkl  PgUp/PgDn  g/G  q exit",
-                    "r reconnect/redraw  e target-Escape  ? help  d detach",
-                    "close help: q, Escape, or ?",
-                ],
-                0,
-                true,
+                BoxSpec {
+                    x: 0,
+                    y: 0,
+                    width,
+                    height: body_height,
+                    title: "Help",
+                    lines: &[
+                        "1-9 focus  n next  p previous  z zoom  s split  x close",
+                        "y copy  b,b broadcast  w save  R restore-layout",
+                        "copy: arrows/hjkl  PgUp/PgDn  g/G  q exit",
+                        "r reconnect/redraw  e target-Escape  ? help  d detach",
+                        "close help: q, Escape, or ?",
+                    ],
+                    horizontal_offset: 0,
+                    focused: true,
+                },
             );
         } else if self.zoomed {
             self.draw_pane(&mut canvas, self.focus, 0, 0, width, body_height);
@@ -468,55 +470,68 @@ impl Desktop {
         let content_height = height.saturating_sub(2);
         let lines = self.panes[index].visible_lines(content_height);
         let horizontal_offset = self.panes[index].horizontal_offset;
+        let title = format!(
+            "{}{}",
+            self.panes[index].title,
+            if self.panes[index].alert { " !" } else { "" }
+        );
         draw_box(
             canvas,
-            x,
-            y,
-            width,
-            height,
-            &format!(
-                "{}{}",
-                self.panes[index].title,
-                if self.panes[index].alert { " !" } else { "" }
-            ),
-            &lines,
-            horizontal_offset,
-            index == self.focus,
+            BoxSpec {
+                x,
+                y,
+                width,
+                height,
+                title: &title,
+                lines: &lines,
+                horizontal_offset,
+                focused: index == self.focus,
+            },
         );
     }
 }
 
-fn draw_box(
-    canvas: &mut [Vec<char>],
+/// Where a box goes and what it holds.
+struct BoxSpec<'a> {
     x: usize,
     y: usize,
     width: usize,
     height: usize,
-    title: &str,
-    lines: &[&str],
+    title: &'a str,
+    lines: &'a [&'a str],
     horizontal_offset: usize,
     focused: bool,
-) {
+}
+
+fn draw_box(canvas: &mut [Vec<char>], spec: BoxSpec<'_>) {
+    let BoxSpec {
+        x,
+        y,
+        width,
+        height,
+        title,
+        lines,
+        horizontal_offset,
+        focused,
+    } = spec;
     if width < 2 || height < 2 || y >= canvas.len() {
         return;
     }
     let right = (x + width - 1).min(canvas[0].len() - 1);
     let bottom = (y + height - 1).min(canvas.len() - 1);
-    for column in x..=right {
-        canvas[y][column] = if column == x || column == right {
-            '+'
-        } else {
-            '-'
-        };
-        canvas[bottom][column] = if column == x || column == right {
-            '+'
-        } else {
-            '-'
-        };
+    // The top and bottom edges are identical, so build the run once and copy
+    // it into both rows. This also keeps working when the box is clamped flat
+    // and the two edges are the same row.
+    let mut edge = vec!['-'; right + 1 - x];
+    edge[0] = '+';
+    if let Some(last) = edge.last_mut() {
+        *last = '+';
     }
-    for row in y + 1..bottom {
-        canvas[row][x] = '|';
-        canvas[row][right] = '|';
+    canvas[y][x..=right].copy_from_slice(&edge);
+    canvas[bottom][x..=right].copy_from_slice(&edge);
+    for row in canvas.iter_mut().take(bottom).skip(y + 1) {
+        row[x] = '|';
+        row[right] = '|';
     }
     let label = format!(" {}{} ", title, if focused { " *" } else { "" });
     for (offset, character) in label.chars().take(width.saturating_sub(2)).enumerate() {
