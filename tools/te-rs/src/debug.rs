@@ -84,11 +84,28 @@ impl DebugMap {
         self.symbols.iter().find(|symbol| symbol.name == name)
     }
 
+    /// The instruction containing `address`, if the map describes one.
+    ///
+    /// The search runs backwards to the nearest instruction at or below the
+    /// address, then confirms the address actually falls inside it. Without
+    /// that bound every address above the image resolved to the last mapped
+    /// instruction, so `list` answered a confident, wrong source location for
+    /// any address outside the linked program -- and those are common, because
+    /// `regs` reports program counters in runtime-loaded arena memory that the
+    /// map never covers.
     pub fn source_at(&self, address: u32) -> Option<&Instruction> {
         self.instructions
             .iter()
             .rev()
             .find(|instruction| instruction.address <= address)
+            .filter(|instruction| address < instruction.address + instruction.size)
+    }
+
+    /// Lowest and highest addresses the map describes, for diagnostics.
+    pub fn mapped_extent(&self) -> Option<(u32, u32)> {
+        let first = self.instructions.first()?;
+        let last = self.instructions.last()?;
+        Some((first.address, last.address + last.size - 1))
     }
 
     pub fn disassemble(&self, address: u32, count: usize) -> Vec<&Instruction> {
@@ -368,10 +385,13 @@ impl DebugConsole {
 
     fn list_command(&self, value: &str) -> Result<CommandResult, String> {
         let address = self.address(value)?;
-        let instruction = self
-            .matched_map()?
-            .source_at(address)
-            .ok_or_else(|| format!("no source for {address:06x}"))?;
+        let map = self.matched_map()?;
+        let instruction = map.source_at(address).ok_or_else(|| match map.mapped_extent() {
+            Some((low, high)) => {
+                format!("no source for {address:06x}; image maps {low:06x}-{high:06x}")
+            }
+            None => format!("no source for {address:06x}"),
+        })?;
         Ok(text(&format!(
             "{:06x} {}:{} {}",
             instruction.address, instruction.source, instruction.line, instruction.text
@@ -391,7 +411,12 @@ impl DebugConsole {
             // matters because the addresses an operator pastes in come from
             // `regs`, which reports a stale program counter for an endpoint
             // that has exited, and silence reads as a broken command.
-            return Err(format!("no instructions at {address:06x}"));
+            return Err(match self.matched_map()?.mapped_extent() {
+                Some((low, high)) => {
+                    format!("no instructions at {address:06x}; image maps {low:06x}-{high:06x}")
+                }
+                None => format!("no instructions at {address:06x}"),
+            });
         }
         Ok(CommandResult {
             lines,
@@ -437,6 +462,32 @@ fn u24(bytes: &[u8]) -> u32 {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn listing_outside_the_image_reports_the_gap_instead_of_the_nearest_line() {
+        let mut console = DebugConsole::new(Some(map()));
+        console.response(&[1, 0x56, 0x34, 0x12]);
+        // 0x13 is one past the final mapped instruction, and fee7db is the
+        // kind of arena program counter `regs` reports for a loaded image.
+        for outside in ["13", "fee7db"] {
+            let result = console.command(&format!("list {outside}"));
+            assert!(
+                result.lines.iter().any(|line| line.contains("no source")),
+                "list {outside} must not resolve, got {:?}",
+                result.lines
+            );
+        }
+        // An address inside an instruction still resolves, including one that
+        // lands part-way through the two-byte instruction at 0x10.
+        for inside in ["10", "11"] {
+            let result = console.command(&format!("list {inside}"));
+            assert!(
+                result.lines.iter().any(|line| line.contains("app.s:7")),
+                "list {inside} must resolve, got {:?}",
+                result.lines
+            );
+        }
+    }
 
     #[test]
     fn disassembling_outside_the_image_says_so_instead_of_printing_nothing() {

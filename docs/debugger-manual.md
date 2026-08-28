@@ -59,8 +59,10 @@ dis counter 3
 000012 28       jmp (r2)
 ```
 
-An address with no instructions at or after it reports
-`no instructions at <address>` rather than printing nothing. This matters
+An address the map does not describe is reported as such, with the range that
+is mapped -- `no instructions at fee7db; image maps 000000-005581`. `list`
+answers the same way, and resolves only when the address falls *inside* a
+mapped instruction rather than merely at or after one. This matters
 because the addresses you paste in usually come from `regs`, which reports a
 stale program counter for an endpoint that has already exited -- an address
 far outside the image is the normal symptom of a dead endpoint, not a broken
@@ -103,6 +105,54 @@ to inspect data the program has written.
 | `detach` | target | Detach the adapter and exit |
 
 Anything else prints `unknown debugger command; use help`.
+
+## Address ranges
+
+The debug map describes the **linked image only**. Anything loaded at runtime
+-- every cataloged program launched with `run`, including `cpu-hog` -- is
+copied into arena memory that no build-time artifact covers, so `list` and
+`dis` cannot describe it while `regs` and `x` can. A `regs` program counter far
+above the image is normal for a loaded process, not a fault.
+
+COR24-TB address space:
+
+| Range | Contents |
+|-------|----------|
+| `000000`-`0FFFFF` | 1 MB on-board SRAM (ISSI IS61WV10248EDBLL). The linked SWTOS image loads at `000000` |
+| `100000`-`FDFFFF` | Unmapped. Addressable, reads return zero |
+| `FEE000`-`FEFFFF` | Embedded Block RAM window, 8 KB addressable |
+| `FF0000`-`FFFFFF` | I/O space (LEDs, UART, SPI, I2C) |
+
+Only 3 KB of the EBR window is physically populated on the MachXO FPGA, and
+SWTOS divides that populated part as follows. Both regions grow **downward**:
+
+| Range | Contents |
+|-------|----------|
+| `FEE000`-`FEEBFF` | The 3 KB populated EBR |
+| `FEEB01`-`FEEBFF` | Kernel and boot stack reserve; `sp` starts at `FEEC00` and grows down |
+| `FEE002`-`FEEB00` | Process arena: per-process stacks, private state, and the text of loaded images. 2814 bytes, 938 aligned words, allocated downward from `FEEB00` |
+
+Allocating below `FEE000` would leave the installed EBR window, so the arena
+capacity check refuses it.
+
+Reading a `regs` result against this map places a process, and where `pc` and
+`sp` fall tells you which kind it is:
+
+```text
+regs 1                       resident: linked text in SRAM, stack in EBR
+ep=1 pc=001067 sp=feeac3     -> different regions
+
+regs 2                       loaded: text copied into the arena that also
+ep=2 pc=fee7da sp=fee7c7        supplies its stack -> same region, adjacent
+```
+
+A resident program -- the shell, Hello, Counter, Clock -- is linked into the
+image, so its program counter is in SRAM and `list`/`dis` describe it. A loaded
+image such as `cpu-hog` is copied into the process arena at spawn, so its
+program counter and stack are both in EBR, within a few bytes of each other,
+and no build-time artifact describes that text. A `pc` above `FEE000` is
+therefore the signature of a loaded process, and `dis` reporting nothing for it
+is correct rather than a fault.
 
 ## Endpoints
 
