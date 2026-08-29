@@ -96,7 +96,7 @@ CATALOG_INIT: PROC;
         'sw      r0,9(r2)';
         'la      r0,0';
         'sw      r0,12(r2)';
-        'la      r0,192';
+        'la      r0,256';
         'sw      r0,15(r2)';
         'la      r0,4';
         'sw      r0,18(r2)';

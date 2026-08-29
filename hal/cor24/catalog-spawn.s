@@ -2860,22 +2860,17 @@ _TASK_MEM_PROCESS_INFO:
         push    r2
         push    r1
         mov     fp,sp
+        ; Resolve through the table. Naming only the first three slots sent
+        ; every other endpoint to the third one's record, so a caller walking
+        ; the table saw slot three's state sixteen times over and could not
+        ; tell a live process from a free slot.
         lw      r0,9(fp)
-        lc      r1,1
-        ceq     r0,r1
-        brt     _task_mem_process_a
-        lc      r1,2
-        ceq     r0,r1
-        brt     _task_mem_process_b
-        la      r2,_proc_c
-        bra     _task_mem_process_selected
-_task_mem_process_a:
-        la      r2,_proc_a
-        bra     _task_mem_process_selected
-_task_mem_process_b:
-        la      r2,_proc_b
-_task_mem_process_selected:
+        la      r2,_proc_for_endpoint
+        jal     r1,(r2)
         lw      r1,12(fp)
+        ceq     r0,z
+        brt     _task_mem_process_none
+        mov     r2,r0
         lw      r0,24(r2)
         sw      r0,0(r1)
         ceq     r0,z
@@ -2888,6 +2883,9 @@ _task_mem_process_selected:
         add     r0,r2
         sw      r0,9(r1)
         bra     _task_mem_process_done
+_task_mem_process_none:
+        lc      r0,0
+        sw      r0,0(r1)
 _task_mem_process_free:
         lc      r0,0
         sw      r0,3(r1)

@@ -824,9 +824,18 @@ PLSW_TIME_APP: PROC(STATE_PTR PTR, FRAME_CODE INT);
 END;
 
 MON_REPORT: PROC;
-    /* One line per tick: what the table and the arena look like right now.
-       The strings are the ones the shell's own mem command uses, so a
-       monitor costs no new storage in the image. */
+    /* A summary line and then one line per live process, which is the same
+       report the frontend's own pane draws. A summary alone repeats itself
+       whenever the totals hold still, which reads as a stuck program rather
+       than a quiet system. Free slots are skipped: sixteen "name=none" lines
+       a second bury the processes that matter. The strings are the ones the
+       shell's mem command already uses, so this costs no new storage. */
+    DCL EP INT;
+    DCL 1 PROCESS_MEMORY_INFO,
+        3 SPM_STATUS INT,
+        3 SPM_STACK_WORDS INT,
+        3 SPM_STATE_WORDS INT,
+        3 SPM_TOTAL_WORDS INT;
     DCL 1 MEMORY_INFO,
         3 SMI_TOTAL_WORDS INT,
         3 SMI_IMAGE_BYTES INT,
@@ -838,6 +847,7 @@ MON_REPORT: PROC;
         3 SMI_TOTAL_SLOTS INT,
         3 SMI_ARENA_CAPACITY_BYTES INT;
     CALL TASK_MEM_INFO(ADDR(MEMORY_INFO));
+    CALL UART_PUTCHAR(12);
     CALL UART_PUTS(ADDR(SHELL_MEM_SLOTS));
     CALL SHELL_PRINT_INT(MEMORY_INFO.SMI_USED_SLOTS);
     CALL UART_PUTCHAR(47);
@@ -849,6 +859,13 @@ MON_REPORT: PROC;
     CALL UART_PUTS(ADDR(SHELL_MEM_FAIL));
     CALL SHELL_PRINT_INT(MEMORY_INFO.SMI_ALLOCATION_FAILURES);
     CALL UART_PUTCHAR(10);
+    EP = 1;
+    DO WHILE (EP < 17);
+        CALL TASK_MEM_PROCESS_INFO(EP, ADDR(PROCESS_MEMORY_INFO));
+        IF (PROCESS_MEMORY_INFO.SPM_STATUS = 0) THEN EP = EP;
+        ELSE CALL TASK_PROCESS_PRINT(EP);
+        EP = EP + 1;
+    END;
 END;
 
 PLSW_MON: PROC(STATE_PTR PTR);

@@ -36,10 +36,23 @@ test "$(git -C "$EMU_SOURCE" rev-parse HEAD)" = "$EMU_REV"
 test "$(git -C "$ISA_SOURCE" rev-parse HEAD)" = "$ISA_REV"
 test "$(dirname "$EMU_SOURCE")/sw-cor24-isa" -ef "$ISA_SOURCE"
 
+# Install an executable by writing beside the target and renaming over it.
+#
+# Copying onto an existing binary keeps its inode, and the kernel goes on
+# validating cached pages against the signature the old contents had. The
+# freshly copied file then fails code-signing at exec and is killed outright:
+# "SIGKILL (Code Signature Invalid)", even though codesign reports it valid on
+# disk. A rename publishes a new inode, so no stale validation can attach to it.
+install_executable() {
+    cp "$1" "$2.incoming"
+    chmod +x "$2.incoming"
+    mv -f "$2.incoming" "$2"
+}
+
 cargo build --release --manifest-path "$EMU_SOURCE/Cargo.toml" \
     -p cor24-cli --bin cor24-dbg
 mkdir -p "$OUT_DIR"
-cp "$EMU_SOURCE/target/release/cor24-dbg" "$OUT_DIR/cor24-dbg"
+install_executable "$EMU_SOURCE/target/release/cor24-dbg" "$OUT_DIR/cor24-dbg"
 "$OUT_DIR/cor24-dbg" --version
 
 ADAPTER_SOURCE="$ROOT_DIR/tools/cor24-debug-adapter"
@@ -49,5 +62,5 @@ cp "$ADAPTER_SOURCE/src/main.rs" "$ADAPTER_BUILD/src/main.rs"
 sed "s#../../../sw-cor24-emulator#$EMU_SOURCE#" \
     "$ADAPTER_SOURCE/Cargo.toml" > "$ADAPTER_BUILD/Cargo.toml"
 cargo build --release --manifest-path "$ADAPTER_BUILD/Cargo.toml"
-cp "$ADAPTER_BUILD/target/release/swtos-cor24-debug-adapter" \
+install_executable "$ADAPTER_BUILD/target/release/swtos-cor24-debug-adapter" \
     "$OUT_DIR/swtos-cor24-debug-adapter"

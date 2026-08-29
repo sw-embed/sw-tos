@@ -67,7 +67,7 @@ _scheduled_mon_descriptor:
         .word   _plsw_mon_trampoline
         .word   0
         .word   0
-        .word   192
+        .word   256
         .word   4
         .word   1
 _scheduled_mon_name:
