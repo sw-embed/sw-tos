@@ -5,6 +5,15 @@ use std::collections::VecDeque;
 
 pub const DEFAULT_SCROLLBACK: usize = 1_000;
 
+/// Longest line a pane will accumulate before breaking it.
+///
+/// Completed lines are capped by the scrollback limit, but the line still
+/// being assembled is not: a program that emits bytes and never a newline
+/// would grow one pane without bound. Breaking the line keeps the output and
+/// puts it under the scrollback limit, which is what a terminal does when it
+/// wraps.
+pub const MAX_LINE_BYTES: usize = 4_096;
+
 #[derive(Clone, Copy, Debug, Deserialize, Eq, PartialEq, Serialize)]
 #[serde(rename_all = "lowercase")]
 pub enum PaneKind {
@@ -81,6 +90,9 @@ impl Pane {
                 }
                 0x20..=0x7e => self.current.push(char::from(byte)),
                 _ => self.current.push('�'),
+            }
+            if self.current.len() >= MAX_LINE_BYTES {
+                self.finish_line();
             }
         }
     }
@@ -414,17 +426,7 @@ impl Desktop {
         } else if self.zoomed {
             self.draw_pane(&mut canvas, self.focus, 0, 0, width, body_height);
         } else {
-            let columns = if self.panes.len() <= 1 { 1 } else { 2 };
-            let rows = self.panes.len().div_ceil(columns);
-            for index in 0..self.panes.len() {
-                let column = index % columns;
-                let row = index / columns;
-                let x = column * width / columns;
-                let next_x = (column + 1) * width / columns;
-                let y = row * body_height / rows;
-                let next_y = (row + 1) * body_height / rows;
-                self.draw_pane(&mut canvas, index, x, y, next_x - x, next_y - y);
-            }
+            self.draw_grid(&mut canvas, width, body_height);
         }
 
         let mut output = String::from("\x1b[H");
@@ -456,6 +458,196 @@ impl Desktop {
         output.push_str(&truncate(&status, width));
         output.push_str("\x1b[K\r\n");
         output
+    }
+
+}
+
+/// The tiling: how many rows and columns, and the width left for panes once
+/// the column rules are taken out.
+struct Grid {
+    width: usize,
+    columns: usize,
+    column_total: usize,
+    rows: usize,
+}
+
+impl Desktop {
+    /// Tile the panes, sharing every edge.
+    ///
+    /// Boxing each pane separately spends two lines per row on borders and a
+    /// column on each outer edge, which at nine rows costs half the display.
+    /// Panes here share one rule per row and one rule per column boundary, and
+    /// there is no outer frame at all. A rule names the pane above it and the
+    /// pane below it in each column, so the titles cost no extra lines:
+    ///
+    ///   -- ^ Shell ------- v Debugger ---|-- ^ TTY 2 ------ v TTY 3 -------
+    fn draw_grid(&self, canvas: &mut [Vec<char>], width: usize, height: usize) {
+        let columns = if self.panes.len() <= 1 { 1 } else { 2 };
+        let grid = Grid {
+            width,
+            columns,
+            column_total: width.saturating_sub(columns - 1),
+            rows: self.panes.len().div_ceil(columns),
+        };
+        if grid.rows == 0 || height <= grid.rows {
+            return;
+        }
+
+        // Rules sit between rows only. The top line is content, not a border,
+        // and the footer closes the bottom; a single row still needs one rule
+        // to carry its names, so it gets one beneath it.
+        let rules = if grid.rows == 1 { 1 } else { grid.rows - 1 };
+        if height <= rules {
+            return;
+        }
+        let content_total = height - rules;
+
+        let mut y = 0;
+        for row in 0..grid.rows {
+            let content_height =
+                (row + 1) * content_total / grid.rows - row * content_total / grid.rows;
+            let mut x = 0;
+            for column in 0..columns {
+                let pane_width = (column + 1) * grid.column_total / columns
+                    - column * grid.column_total / columns;
+                if let Some(index) = row.checked_mul(columns).map(|base| base + column)
+                    && index < self.panes.len()
+                {
+                    self.draw_pane_content(canvas, index, x, y, pane_width, content_height);
+                }
+                x += pane_width;
+                if column + 1 < columns {
+                    for line in y..(y + content_height).min(canvas.len()) {
+                        if x < canvas[line].len() {
+                            canvas[line][x] = '|';
+                        }
+                    }
+                    x += 1;
+                }
+            }
+            y += content_height;
+            if row + 1 < grid.rows || grid.rows == 1 {
+                self.draw_rule(canvas, y, &grid, row);
+                y += 1;
+            }
+        }
+    }
+
+    /// Draw one horizontal rule, naming the pane above and below per column.
+    fn draw_rule(&self, canvas: &mut [Vec<char>], y: usize, grid: &Grid, row: usize) {
+        if y >= canvas.len() {
+            return;
+        }
+        for cell in canvas[y].iter_mut().take(grid.width) {
+            *cell = '-';
+        }
+        let columns = grid.columns;
+        let mut x = 0;
+        for column in 0..columns {
+            let pane_width = (column + 1) * grid.column_total / columns
+                - column * grid.column_total / columns;
+            let end = x + pane_width;
+            let above = Some(row * columns + column).filter(|index| *index < self.panes.len());
+            let below = Some((row + 1) * columns + column)
+                .filter(|index| *index < self.panes.len() && row + 1 < grid.rows);
+            // Lay the two names out from what they need rather than by
+            // splitting the column in half: the lower name sits at the middle
+            // when both fit comfortably, and slides right only as far as a long
+            // upper name pushes it. A fixed midpoint clips a long upper name on
+            // a narrow terminal while leaving dashes to the right of a short
+            // lower one.
+            let above_span = above.map_or(0, |index| self.label_for(index, '^').chars().count());
+            let below_span = below.map_or(0, |index| self.label_for(index, 'v').chars().count());
+            let lead = usize::from(above_span + below_span + 2 <= pane_width) * 2;
+            let mut limit = end;
+            if let Some(index) = below {
+                let start = (x + pane_width / 2)
+                    .max(x + lead + above_span)
+                    .min(end.saturating_sub(below_span))
+                    .max(x);
+                self.write_label(canvas, y, start, end, 'v', index);
+                limit = start;
+            }
+            if let Some(index) = above {
+                self.write_label(canvas, y, x + lead, limit, '^', index);
+            }
+            x += pane_width;
+            if column + 1 < columns {
+                if x < canvas[y].len() {
+                    canvas[y][x] = '|';
+                }
+                x += 1;
+            }
+        }
+    }
+
+    fn label_for(&self, index: usize, marker: char) -> String {
+        let pane = &self.panes[index];
+        // The pane number leads, so it is the part that survives truncation in
+        // a narrow column: it is what Ctrl-A <n> takes, and the name after it
+        // is the reminder. No space after the marker either -- a rule carries
+        // four of these, and padding is space a name cannot use.
+        format!(
+            "{}{marker}{}{}{}",
+            index + 1,
+            pane.title,
+            if pane.alert { " !" } else { "" },
+            if index == self.focus { " *" } else { "" }
+        )
+    }
+
+    /// Write a name onto a rule, clipped to this column. Returns the column
+    /// after the text so the next name can be placed clear of it.
+    fn write_label(
+        &self,
+        canvas: &mut [Vec<char>],
+        y: usize,
+        x: usize,
+        end: usize,
+        marker: char,
+        index: usize,
+    ) -> usize {
+        let label = self.label_for(index, marker);
+        let mut column = x;
+        for character in label.chars() {
+            if column >= end || column >= canvas[y].len() {
+                break;
+            }
+            canvas[y][column] = character;
+            column += 1;
+        }
+        column
+    }
+
+    /// Pane contents, with no border of its own.
+    fn draw_pane_content(
+        &self,
+        canvas: &mut [Vec<char>],
+        index: usize,
+        x: usize,
+        y: usize,
+        width: usize,
+        height: usize,
+    ) {
+        let lines = self.panes[index].visible_lines(height);
+        let horizontal_offset = self.panes[index].horizontal_offset;
+        for (row, line) in lines.iter().take(height).enumerate() {
+            let target = y + row;
+            if target >= canvas.len() {
+                break;
+            }
+            for (column, character) in line
+                .chars()
+                .skip(horizontal_offset)
+                .take(width)
+                .enumerate()
+            {
+                let cell = x + column;
+                if cell < canvas[target].len() {
+                    canvas[target][cell] = character;
+                }
+            }
+        }
     }
 
     fn draw_pane(
@@ -568,6 +760,60 @@ mod tests {
         desktop.command(b'4');
         assert_eq!(desktop.focused_kind(), PaneKind::Resources);
         assert_eq!(desktop.command(b'd'), CommandOutcome::Detach);
+    }
+
+    #[test]
+    fn a_pane_bounds_a_line_that_never_ends() {
+        // A clock printing forever is bounded by the scrollback limit, but a
+        // program that emits no newline at all is only bounded by the line cap.
+        let mut desktop = Desktop::new(1);
+        for _ in 0..(MAX_LINE_BYTES * DEFAULT_SCROLLBACK * 2 / 1024) {
+            desktop.push_channel(0, &[b'x'; 1024]);
+        }
+        let pane = &desktop.panes[0];
+        assert!(pane.current.len() < MAX_LINE_BYTES, "{}", pane.current.len());
+        assert!(pane.lines.len() <= DEFAULT_SCROLLBACK, "{}", pane.lines.len());
+    }
+
+    #[test]
+    fn shared_rules_name_the_pane_above_and_below_and_follow_focus() {
+        // Every pane is named twice: as the lower name on the rule over it and
+        // the upper name on the rule under it. Both have to track focus, and
+        // the marker has to sit on the focused pane's own name rather than on
+        // whichever name shares its rule.
+        let mut desktop = Desktop::new(4);
+        desktop.push_channel(0, b"shell-body\n");
+        desktop.push_channel(3, b"resources-body\n");
+        let screen = desktop.render(80, 24);
+        let rules: Vec<&str> = screen
+            .lines()
+            .filter(|line| line.starts_with('-'))
+            .collect();
+
+        // Four panes in two columns need exactly one rule, between the rows.
+        assert_eq!(rules.len(), 1, "{screen}");
+        assert!(!screen.lines().next().unwrap().starts_with('-'), "{screen}");
+
+        // Row 0 is named above the rule, row 1 below it, per column.
+        let column = rules[0].find('|').expect("column separator");
+        let (left, right) = rules[0].split_at(column);
+        assert!(left.contains("1^Shell") && left.contains("3vDebugger"), "{left}");
+        assert!(
+            right.contains("2^Application") && right.contains("4vResources"),
+            "{right}"
+        );
+
+        // The marker is on Shell, which has focus, and nowhere else.
+        assert!(left.contains("1^Shell *"), "{left}");
+        assert_eq!(rules[0].matches('*').count(), 1, "{}", rules[0]);
+
+        // Focusing a pane in the lower row moves the marker to its own name.
+        desktop.command(b'4');
+        let screen = desktop.render(80, 24);
+        let rule = screen.lines().find(|line| line.starts_with('-')).unwrap();
+        assert!(rule.contains("4vResources *"), "{rule}");
+        assert!(!rule.contains("1^Shell *"), "{rule}");
+        assert_eq!(rule.matches('*').count(), 1, "{rule}");
     }
 
     #[test]
