@@ -316,7 +316,7 @@ _spawn_find_slot:
         lw      r0,24(r2)
         ceq     r0,z
         brt     _spawn_slot_found
-        add     r2,39
+        add     r2,96
         la      r1,_proc_table_end
         mov     r0,r2
         ceq     r0,r1
@@ -2230,7 +2230,7 @@ _scan_uart_batch:
         brf     _scan_uart_batch
 _scan_uart_batch_done:
         pop     r2
-        add     r2,39
+        add     r2,96
         la      r1,_proc_table_end
         mov     r0,r2
         ceq     r0,r1
@@ -2473,7 +2473,7 @@ _task_process_list_state:
         la      r2,_putchar
         jal     r1,(r2)
         pop     r2
-        add     r2,39
+        add     r2,96
         la      r1,_proc_table_end
         mov     r0,r2
         ceq     r0,r1
@@ -4636,33 +4636,39 @@ _stats_increment:
 _halt:
         bra     _halt
 
-_proc_table:
+; One 96-byte record per slot, laid out as descriptor, statistics, preemption
+; sidecar. These were three parallel arrays, which meant a descriptor pointer
+; could only reach its own statistics and sidecar through a compare chain with
+; one arm per slot -- code that grows with the table. Interleaved, each is a
+; constant offset from the descriptor: PROC_STATS at 39, PROC_PREEMPT at 63.
+;
 ; PROC_DESC ABI is declared in hal/cor24/proc-desc.toml and checked against
 ; include/swtos.msw. Offset 21 is PD_SENDER; no field is spare provider state.
+; Statistics are eight words: reserved, dispatches, yields, IPC operations,
+; reserved state transitions, reserved block count, TTY input, TTY output.
+; The sidecar is eleven: live base/words, landing, shadow, quantum, pending,
+; forced count, eligibility, IRQ-context flag, interrupted-r0 sample, and an
+; asynchronous kill request.
+_proc_table:
 _proc_a:
         .zero   39
-_proc_b:
-        .zero   39
-_proc_c:
-        .zero   39
-_proc_table_end:
-; Eight words per slot: reserved, dispatches, yields, IPC operations, reserved
-; state transitions, reserved block count, TTY input bytes, TTY output bytes.
 _proc_a_stats:
         .zero   24
-_proc_b_stats:
-        .zero   24
-_proc_c_stats:
-        .zero   24
-; Eleven words per slot: live base/words, landing, shadow, quantum, pending,
-; forced count, eligibility, IRQ-context flag, interrupted-r0 sample, and an
-; asynchronous kill request. This preserves the 39-byte process ABI.
 _proc_a_preempt:
         .zero   33
+_proc_b:
+        .zero   39
+_proc_b_stats:
+        .zero   24
 _proc_b_preempt:
         .zero   33
+_proc_c:
+        .zero   39
+_proc_c_stats:
+        .zero   24
 _proc_c_preempt:
         .zero   33
+_proc_table_end:
 ; head, tail, count, overflow, then sixteen input bytes.
 _tty_a:
         .zero   28
