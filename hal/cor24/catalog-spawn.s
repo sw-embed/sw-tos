@@ -4240,36 +4240,39 @@ _protocol_debug_registers_second_ready:
 ; Queue termination for a certified non-current leaf. The clock forces it to
 ; a complete interrupt context and the landing handler performs TASK_EXIT only
 ; after restoring its live image. Never free a process from this request path.
-_protocol_debug_kill:
-        la      r2,_PROTOCOL_RX_PAYLOAD
-        lbu     r0,1(r2)
+; _kill_endpoint(r0 = endpoint) -> r0 = 0 accepted, 1 no such endpoint or
+; protected, 2 already free. Shared by the debugger's kill command and the
+; shell's, so both agree on what may be killed and what happens to the slot.
+_kill_endpoint:
+        push    r1
+        push    r2
         lc      r1,1
         ceq     r0,r1
-        brf     _protocol_debug_kill_lookup
+        brf     _kill_endpoint_lookup
         lc      r0,1           ; the shell is protected
-        la      r2,_protocol_debug_kill_emit
+        la      r2,_kill_endpoint_done
         jmp     (r2)
-_protocol_debug_kill_lookup:
+_kill_endpoint_lookup:
         ; Any slot, not only the first two children: the table holds sixteen
         ; and the endpoint names the slot.
         la      r2,_proc_for_endpoint
         jal     r1,(r2)
         ceq     r0,z
-        brf     _protocol_debug_kill_selected
+        brf     _kill_endpoint_selected
         lc      r0,1           ; no such endpoint
-        la      r2,_protocol_debug_kill_emit
+        la      r2,_kill_endpoint_done
         jmp     (r2)
-_protocol_debug_kill_selected:
+_kill_endpoint_selected:
         la      r2,_protocol_debug_proc
         sw      r0,0(r2)
         mov     r1,r0
         lw      r0,24(r1)
         ceq     r0,z
-        brf     _protocol_debug_kill_live
+        brf     _kill_endpoint_live
         lc      r0,2           ; already free
-        la      r2,_protocol_debug_kill_emit
+        la      r2,_kill_endpoint_done
         jmp     (r2)
-_protocol_debug_kill_live:
+_kill_endpoint_live:
         ; A process the interrupt handler can reach is torn down there so it
         ; unwinds its own runway. Every other one is parked at a cooperative
         ; yield with its context saved and nothing of it on the CPU, so its
@@ -4282,19 +4285,19 @@ _protocol_debug_kill_live:
         jal     r1,(r2)
         lw      r1,21(r0)      ; certified for forced quiescence
         ceq     r1,z
-        brf     _protocol_debug_kill_queue
+        brf     _kill_endpoint_queue
         lw      r1,24(r0)      ; a runway-saved interrupt frame
         ceq     r1,z
-        brf     _protocol_debug_kill_queue
-        la      r2,_protocol_debug_kill_release
+        brf     _kill_endpoint_queue
+        la      r2,_kill_endpoint_release
         jmp     (r2)
-_protocol_debug_kill_queue:
+_kill_endpoint_queue:
         lc      r1,1
         sw      r1,30(r0)
         lc      r0,0
-        la      r2,_protocol_debug_kill_emit
+        la      r2,_kill_endpoint_done
         jmp     (r2)
-_protocol_debug_kill_release:
+_kill_endpoint_release:
         la      r2,_protocol_debug_proc
         lw      r2,0(r2)
         lc      r0,0
@@ -4302,11 +4305,11 @@ _protocol_debug_kill_release:
         la      r2,_child_count
         lbu     r0,0(r2)
         ceq     r0,z
-        brt     _protocol_debug_kill_focus
+        brt     _kill_endpoint_focus
         add     r0,-1
         sb      r0,0(r2)
         ceq     r0,z
-        brf     _protocol_debug_kill_focus
+        brf     _kill_endpoint_focus
         ; The last child releases the allocation generation, as an ordinary
         ; exit does.
         la      r2,_spawn_arena_mark
@@ -4317,7 +4320,7 @@ _protocol_debug_kill_release:
         lw      r0,0(r2)
         la      r2,_heap_next
         sw      r0,0(r2)
-_protocol_debug_kill_focus:
+_kill_endpoint_focus:
         ; Neither input focus nor the current-process pointer may be left
         ; aimed at a slot that no longer holds a process.
         la      r2,_protocol_debug_proc
@@ -4325,18 +4328,47 @@ _protocol_debug_kill_focus:
         la      r2,_tty_foreground_proc
         lw      r0,0(r2)
         ceq     r0,r1
-        brf     _protocol_debug_kill_current_ptr
+        brf     _kill_endpoint_current_ptr
         la      r0,_proc_a
         sw      r0,0(r2)
-_protocol_debug_kill_current_ptr:
+_kill_endpoint_current_ptr:
         la      r2,_current_proc
         lw      r0,0(r2)
         ceq     r0,r1
-        brf     _protocol_debug_kill_released
+        brf     _kill_endpoint_released
         la      r0,_proc_a
         sw      r0,0(r2)
-_protocol_debug_kill_released:
+_kill_endpoint_released:
         lc      r0,0
+_kill_endpoint_done:
+        pop     r2
+        pop     r1
+        jmp     (r1)
+
+; TASK_KILL(endpoint, result): end a process from PL/SW, so the shell can
+; manage processes without the debugger.
+        .globl  _TASK_KILL
+_TASK_KILL:
+        push    fp
+        push    r2
+        push    r1
+        mov     fp,sp
+        lw      r0,9(fp)
+        la      r2,_kill_endpoint
+        jal     r1,(r2)
+        lw      r1,12(fp)
+        sw      r0,0(r1)
+        mov     sp,fp
+        pop     r1
+        pop     r2
+        pop     fp
+        jmp     (r1)
+
+_protocol_debug_kill:
+        la      r2,_PROTOCOL_RX_PAYLOAD
+        lbu     r0,1(r2)
+        la      r2,_kill_endpoint
+        jal     r1,(r2)
 _protocol_debug_kill_emit:
         la      r2,_protocol_resource_payload
         lc      r1,13

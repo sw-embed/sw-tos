@@ -238,7 +238,7 @@ def render_scheduled(entries: list[dict], manifest: Path) -> str:
     image_bytes = sum(entry["image_words"] * 3 for entry in images)
     shell_strings = {
         "SHELL_DF_TEXT": f"catalog entries={len(entries)} images={len(images)} bytes={image_bytes}",
-        "SHELL_HELP_1": "help ls dir ps run bg",
+        "SHELL_HELP_1": "help ls dir ps run bg kill",
         "SHELL_HELP_2": "df du mem stat uname",
         "SHELL_UNAME_TEXT": "SWTOS COR24 0.1",
         "SHELL_CPU_HOG_NAME": HOG_NAME,

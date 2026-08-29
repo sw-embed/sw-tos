@@ -192,7 +192,30 @@ def main():
         assert not still_live, f"still running after kill: {still_live} ({after})"
         assert after.get(1), f"the shell did not survive: {after}"
 
-        print(f"PASS: debugger killed endpoints {killed} and refused the shell")
+        # The shell kills through the same kernel routine, so a person can
+        # start and stop processes without switching panes, and the slot a
+        # kill frees is the one the next run takes.
+        type_line(transport, b"run mon\r")
+        tick = pump(transport, tick, 60, output)
+        tick, started = slot_states(transport, tick)
+        reused = sorted(endpoint for endpoint, state in started.items()
+                        if endpoint != 1 and state)
+        assert reused, f"shell run started nothing: {started}"
+
+        type_line(transport, b"kill %d\r" % reused[0])
+        tick = pump(transport, tick, 60, output)
+        tick, after_shell_kill = slot_states(transport, tick)
+        assert not after_shell_kill.get(reused[0]), (
+            f"shell kill left endpoint {reused[0]} running: {after_shell_kill}")
+
+        type_line(transport, b"run mon\r")
+        tick = pump(transport, tick, 60, output)
+        tick, restarted = slot_states(transport, tick)
+        assert restarted.get(reused[0]), (
+            f"the freed slot was not reused: {restarted}")
+
+        print(f"PASS: debugger killed endpoints {killed} and refused the shell; "
+              f"the shell killed endpoint {reused[0]} and reused its slot")
     finally:
         os.close(slave)
         if proc.poll() is None:

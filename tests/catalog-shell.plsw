@@ -20,7 +20,7 @@ DCL 1 SHELL_PROGRAM_DESC BASED,
     3 SPD_STACK_WORDS INT,
     3 SPD_STATE_WORDS INT,
     3 SPD_FLAGS INT;
-DCL SHELL_HELP_1(24) CHAR INIT('help ls dir ps run bg');
+DCL SHELL_HELP_1(27) CHAR INIT('help ls dir ps run bg kill');
 DCL SHELL_HELP_2(24) CHAR INIT('df du mem stat uname');
 DCL SHELL_UNAME_TEXT(17) CHAR INIT('SWTOS COR24 0.1');
 DCL SHELL_CPU_HOG_NAME(8) CHAR INIT('cpu-hog');
@@ -625,6 +625,70 @@ SHELL_RUN_LINE: PROC(JOIN INT);
     END;
 END;
 
+SHELL_KILL_COMMAND: PROC;
+    /* "kill <endpoint>" ends a process without leaving the shell. It shares
+       the kernel routine the debugger's kill uses, so both agree on what may
+       be ended and what becomes of the slot -- which the next run reuses. */
+    DCL CH BYTE;
+    DCL VALID INT;
+    DCL ENDPOINT INT;
+    DCL DIGITS INT;
+    DCL LINE_DONE INT;
+    DCL STATUS INT;
+    VALID = 1;
+    CALL TASK_GETCHAR(ADDR(CH));
+    IF (CH = 105) THEN VALID = VALID; ELSE VALID = 0;
+    CALL TASK_GETCHAR(ADDR(CH));
+    IF (CH = 108) THEN VALID = VALID; ELSE VALID = 0;
+    CALL TASK_GETCHAR(ADDR(CH));
+    IF (CH = 108) THEN VALID = VALID; ELSE VALID = 0;
+    CALL TASK_GETCHAR(ADDR(CH));
+    IF (CH = 32) THEN VALID = VALID; ELSE VALID = 0;
+    ENDPOINT = 0;
+    DIGITS = 0;
+    LINE_DONE = 0;
+    CALL TASK_GETCHAR(ADDR(CH));
+    DO WHILE (LINE_DONE = 0);
+        IF (CH = 10) THEN LINE_DONE = 1;
+        ELSE DO;
+        IF (CH = 13) THEN LINE_DONE = 1;
+        ELSE DO;
+            IF (CH = 8) THEN DO;
+                ENDPOINT = 0;
+                DIGITS = 0;
+            END;
+            ELSE DO;
+                IF (CH = 127) THEN DO;
+                    ENDPOINT = 0;
+                    DIGITS = 0;
+                END;
+                ELSE DO;
+                    IF (CH < 48) THEN VALID = 0;
+                    ELSE DO;
+                        IF (CH < 58) THEN DO;
+                            ENDPOINT = ENDPOINT * 10 + (CH - 48);
+                            DIGITS = DIGITS + 1;
+                        END;
+                        ELSE VALID = 0;
+                    END;
+                END;
+            END;
+            CALL TASK_GETCHAR(ADDR(CH));
+        END;
+        END;
+    END;
+    IF (DIGITS = 0) THEN VALID = 0;
+    STATUS = 1;
+    IF (VALID = 1) THEN CALL TASK_KILL(ENDPOINT, ADDR(STATUS));
+    IF (STATUS = 0) THEN CALL SHELL_READY;
+    ELSE DO;
+        CALL UART_PUTCHAR(66);
+        CALL UART_PUTCHAR(65);
+        CALL UART_PUTCHAR(68);
+        CALL UART_PUTCHAR(10);
+    END;
+END;
+
 SHELL_RUN_COMMAND: PROC;
     /* "run <name>" gives the program its own terminal, which is what a
        person nearly always wants and used to need a flag to ask for. */
@@ -693,6 +757,8 @@ PLSW_LAUNCHER: PROC(STATE_PTR PTR);
         ELSE DO;
         IF (CH = 98) THEN CALL SHELL_BG_COMMAND;
         ELSE DO;
+        IF (CH = 107) THEN CALL SHELL_KILL_COMMAND;
+        ELSE DO;
         IF (CH = 49) THEN DO;
             CALL SHELL_RUN_SELECTED(PRIVATE_STATE->SPS_HELLO_DESC);
         END;
@@ -727,6 +793,7 @@ PLSW_LAUNCHER: PROC(STATE_PTR PTR);
                 END;
                 END;
             END;
+        END;
         END;
         END;
         END;
