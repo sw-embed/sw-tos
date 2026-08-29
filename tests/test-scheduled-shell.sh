@@ -14,7 +14,7 @@ output=$($EMU --load-binary "$OUT_DIR/program.bin@0" --entry 0 \
     --speed 0 -n 3000000 --quiet 2>/dev/null \
     | sed '/^Entry point:/d')
 
-for expected in 'Hello' 'B1' 'B2' 'Uptime' '00:05' '00:06' '00:07' 'Clock' '12:34:56' '12:34:57' '12:34:58' '5=Multitask' '6=UART Test' 'B1' 'C1' 'B2' 'C2' 'BAD' 'ABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789'; do
+for expected in 'Hello' 'B1' 'B2' 'Uptime' '00:05' '00:06' '00:07' 'Clock' '12:34:56' '12:34:57' '12:34:58' '5=Multitask' '6=UART Test 9=Fill' 'B1' 'C1' 'B2' 'C2' 'BAD' 'ABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789'; do
     if ! grep -q "$expected" <<<"$output"; then
         echo "FAIL: scheduled menu output missing '$expected'" >&2
         echo "$output" >&2

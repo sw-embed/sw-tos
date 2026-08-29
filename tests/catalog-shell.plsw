@@ -356,6 +356,13 @@ SHELL_MENU: PROC;
     CALL UART_PUTCHAR(101);
     CALL UART_PUTCHAR(115);
     CALL UART_PUTCHAR(116);
+    CALL UART_PUTCHAR(32);
+    CALL UART_PUTCHAR(57);
+    CALL UART_PUTCHAR(61);
+    CALL UART_PUTCHAR(70);
+    CALL UART_PUTCHAR(105);
+    CALL UART_PUTCHAR(108);
+    CALL UART_PUTCHAR(108);
     CALL UART_PUTCHAR(10);
     CALL UART_PUTCHAR(67);
     CALL UART_PUTCHAR(104);
@@ -377,6 +384,34 @@ SHELL_UART_TEST: PROC;
             CALL UART_PUTCHAR(CH);
         END;
     END;
+END;
+
+SHELL_FILL_DEMO: PROC(STATE_PTR PTR);
+    /* Spawn children until the process table refuses another, so the demo
+       does not hard-code the slot count. Uptime and Clock alternate because
+       both keep printing, which makes every pane visibly live; neither joins,
+       so the shell stays usable while they run. */
+    DCL PRIVATE_STATE PTR;
+    DCL SPAWN_STATUS INT;
+    DCL WHICH INT;
+    PRIVATE_STATE = STATE_PTR;
+    SPAWN_STATUS = 0;
+    WHICH = 0;
+    DO WHILE (SPAWN_STATUS = 0);
+        IF (WHICH = 0) THEN DO;
+            CALL TASK_SPAWN(PRIVATE_STATE->SPS_UPTIME_DESC);
+            WHICH = 1;
+        END;
+        ELSE DO;
+            CALL TASK_SPAWN(PRIVATE_STATE->SPS_CLOCK_DESC);
+            WHICH = 0;
+        END;
+        CALL TASK_SPAWN_RESULT(ADDR(SPAWN_STATUS));
+    END;
+    /* TASK_PROCESS_LIST, not SHELL_PS_COMMAND: the latter parses the typed
+       line and would block here waiting for characters nobody will send. */
+    CALL TASK_PROCESS_LIST;
+    CALL SHELL_READY;
 END;
 
 SHELL_MULTITASK_DEMO: PROC(STATE_PTR PTR);
@@ -470,6 +505,7 @@ SHELL_PS_COMMAND: PROC;
     DCL CH BYTE;
     DCL NEXT BYTE;
     DCL VALID INT;
+    DCL EP INT;
     VALID = 1;
     CALL TASK_GETCHAR(ADDR(CH));
     IF (CH = 115) THEN VALID = VALID; ELSE VALID = 0;
@@ -481,9 +517,11 @@ SHELL_PS_COMMAND: PROC;
             CALL TASK_GETCHAR(ADDR(CH)); IF (CH = 108) THEN VALID = VALID; ELSE VALID = 0;
             CALL TASK_GETCHAR(ADDR(NEXT)); IF (NEXT = 10) THEN VALID = VALID; ELSE VALID = 0;
             IF (VALID = 1) THEN DO;
-                CALL SHELL_PROCESS_LINE(1);
-                CALL SHELL_PROCESS_LINE(2);
-                CALL SHELL_PROCESS_LINE(3);
+                EP = 1;
+                DO WHILE (EP < 17);
+                    CALL SHELL_PROCESS_LINE(EP);
+                    EP = EP + 1;
+                END;
             END;
             ELSE CALL SHELL_BAD;
         END;
@@ -603,10 +641,13 @@ PLSW_LAUNCHER: PROC(STATE_PTR PTR);
                     ELSE DO;
                         IF (CH = 54) THEN CALL SHELL_UART_TEST;
                         ELSE DO;
+                        IF (CH = 57) THEN CALL SHELL_FILL_DEMO(PRIVATE_STATE);
+                        ELSE DO;
                             CALL UART_PUTCHAR(66);
                             CALL UART_PUTCHAR(65);
                             CALL UART_PUTCHAR(68);
                             CALL UART_PUTCHAR(10);
+                        END;
                         END;
                     END;
                 END;
