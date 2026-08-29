@@ -66,12 +66,23 @@ _kernel_stack_fill:
 
         ; Endpoint identities belong to process-table slots, including FREE
         ; slots, so process inspection remains stable before first spawn.
-        la      r2,_proc_b
-        lc      r0,2
+        ; Slot N holds endpoint N+1; the walk in _proc_for_endpoint reads these
+        ; rather than assuming that relationship.
+        la      r2,_proc_table
+        lc      r0,1
+        la      r1,_boot_endpoint
+        sw      r0,0(r1)
+_boot_endpoint_loop:
+        la      r1,_boot_endpoint
+        lw      r0,0(r1)
         sw      r0,18(r2)
-        la      r2,_proc_c
-        lc      r0,3
-        sw      r0,18(r2)
+        add     r0,1
+        sw      r0,0(r1)
+        add     r2,124
+        la      r1,_proc_table_end
+        mov     r0,r2
+        ceq     r0,r1
+        brf     _boot_endpoint_loop
 
         la      r0,_proc_a
         la      r2,_current_proc
@@ -330,7 +341,7 @@ _spawn_find_slot:
         lw      r0,24(r2)
         ceq     r0,z
         brt     _spawn_slot_found
-        add     r2,96
+        add     r2,124
         la      r1,_proc_table_end
         mov     r0,r2
         ceq     r0,r1
@@ -342,6 +353,11 @@ _spawn_find_slot:
 _spawn_slot_found:
         la      r1,_spawn_process
         sw      r2,0(r1)
+        ; _spawn_resident rebuilds the descriptor and clears its endpoint, so
+        ; keep the identity boot gave this slot and restore it afterwards.
+        lw      r0,18(r2)
+        la      r1,_spawn_endpoint_save
+        sw      r0,0(r1)
         mov     r0,r2
         la      r2,_stats_for_proc
         jal     r1,(r2)
@@ -362,15 +378,8 @@ _spawn_slot_found:
         brf     _spawn_child_done
         la      r2,_spawn_process
         lw      r2,0(r2)
-        la      r1,_proc_b
-        mov     r0,r2
-        ceq     r0,r1
-        brf     _spawn_endpoint_three
-        lc      r0,2
-        bra     _spawn_set_endpoint
-_spawn_endpoint_three:
-        lc      r0,3
-_spawn_set_endpoint:
+        la      r1,_spawn_endpoint_save
+        lw      r0,0(r1)
         sw      r0,18(r2)
         la      r1,_tty_foreground_proc
         sw      r2,0(r1)
@@ -2244,7 +2253,7 @@ _scan_uart_batch:
         brf     _scan_uart_batch
 _scan_uart_batch_done:
         pop     r2
-        add     r2,96
+        add     r2,124
         la      r1,_proc_table_end
         mov     r0,r2
         ceq     r0,r1
@@ -2487,7 +2496,7 @@ _task_process_list_state:
         la      r2,_putchar
         jal     r1,(r2)
         pop     r2
-        add     r2,96
+        add     r2,124
         la      r1,_proc_table_end
         mov     r0,r2
         ceq     r0,r1
@@ -2509,25 +2518,12 @@ _TASK_PROCESS_INFO:
         push    r1
         mov     fp,sp
         lw      r0,9(fp)
-        lc      r1,1
-        ceq     r0,r1
-        brt     _task_process_info_a
-        lc      r1,2
-        ceq     r0,r1
-        brt     _task_process_info_b
-        lc      r1,3
-        ceq     r0,r1
-        brf     _task_process_info_invalid
-        la      r2,_proc_c
-        la      r0,_proc_c_stats
-        bra     _task_process_info_selected
-_task_process_info_a:
-        la      r2,_proc_a
-        la      r0,_proc_a_stats
-        bra     _task_process_info_selected
-_task_process_info_b:
-        la      r2,_proc_b
-        la      r0,_proc_b_stats
+        la      r2,_proc_for_endpoint
+        jal     r1,(r2)
+        ceq     r0,z
+        brt     _task_process_info_invalid
+        mov     r2,r0
+        add     r0,39
 _task_process_info_selected:
         push    r0
         lw      r1,12(fp)
@@ -2797,7 +2793,7 @@ _TASK_MEM_INFO:
         sw      r0,18(r2)
         lc      r0,3
         sw      r0,21(r2)
-        la      r0,2814
+        la      r0,0x010000     ; 64 KB process-stack region
         sw      r0,24(r2)
         mov     sp,fp
         pop     r1
@@ -3348,28 +3344,9 @@ _protocol_tx_header:
         jmp     (r1)
 
 ; Map a process descriptor in r0 to its fixed virtual-TTY input ring.
+; Virtual TTY of the descriptor in r0, the last field of the slot record.
 _tty_for_proc:
-        push    r1
-        push    r2
-        mov     r2,r0
-        la      r1,_proc_a
-        mov     r0,r2
-        ceq     r0,r1
-        brf     _tty_for_proc_b
-        la      r0,_tty_a
-        bra     _tty_for_proc_done
-_tty_for_proc_b:
-        la      r1,_proc_b
-        mov     r0,r2
-        ceq     r0,r1
-        brf     _tty_for_proc_c
-        la      r0,_tty_b
-        bra     _tty_for_proc_done
-_tty_for_proc_c:
-        la      r0,_tty_c
-_tty_for_proc_done:
-        pop     r2
-        pop     r1
+        add     r0,96
         jmp     (r1)
 
 ; Move at most one recovery-UART byte into the foreground virtual TTY and
@@ -3667,22 +3644,17 @@ _protocol_resource_request_valid:
 _protocol_resource_process_loop:
         la      r2,_protocol_resource_endpoint
         lw      r0,0(r2)
-        lc      r1,1
-        ceq     r0,r1
-        brt     _protocol_resource_process_a
-        lc      r1,2
-        ceq     r0,r1
-        brt     _protocol_resource_process_b
-        la      r2,_proc_c
-        la      r1,_proc_c_stats
+        la      r2,_proc_for_endpoint
+        jal     r1,(r2)
+        ceq     r0,z
+        brt     _protocol_resource_process_absent
+        mov     r2,r0
+        mov     r1,r0
+        add     r1,39
         bra     _protocol_resource_process_selected
-_protocol_resource_process_a:
-        la      r2,_proc_a
-        la      r1,_proc_a_stats
-        bra     _protocol_resource_process_selected
-_protocol_resource_process_b:
-        la      r2,_proc_b
-        la      r1,_proc_b_stats
+_protocol_resource_process_absent:
+        la      r2,_protocol_resource_process_next
+        jmp     (r2)
 _protocol_resource_process_selected:
         lw      r0,24(r2)
         ceq     r0,z
@@ -4589,6 +4561,38 @@ _protocol_putchar_wait:
         pop     r1
         jmp     (r1)
 
+; Slot carrying endpoint r0, or zero when no slot does.
+;
+; Endpoint identities are assigned to slots at boot and live in the descriptor
+; at offset 18, so the table is searched rather than indexed. That keeps the
+; mapping correct however endpoints are allocated, where the compare chains
+; this replaces assumed endpoint N was the Nth slot and needed one arm per
+; slot.
+_proc_for_endpoint:
+        push    r1
+        push    r2
+        mov     r1,r0
+        la      r2,_proc_table
+_proc_for_endpoint_loop:
+        lw      r0,18(r2)
+        ceq     r0,r1
+        brt     _proc_for_endpoint_found
+        add     r2,124
+        push    r1
+        la      r1,_proc_table_end
+        mov     r0,r2
+        ceq     r0,r1
+        pop     r1
+        brf     _proc_for_endpoint_loop
+        lc      r0,0
+        bra     _proc_for_endpoint_done
+_proc_for_endpoint_found:
+        mov     r0,r2
+_proc_for_endpoint_done:
+        pop     r2
+        pop     r1
+        jmp     (r1)
+
 ; Statistics block of the descriptor in r0. Interleaved slots put it at a
 ; constant offset, so no per-slot dispatch is needed.
 _stats_for_proc:
@@ -4616,7 +4620,8 @@ _halt:
 ; sidecar. These were three parallel arrays, which meant a descriptor pointer
 ; could only reach its own statistics and sidecar through a compare chain with
 ; one arm per slot -- code that grows with the table. Interleaved, each is a
-; constant offset from the descriptor: PROC_STATS at 39, PROC_PREEMPT at 63.
+; constant offset from the descriptor: PROC_STATS at 39, PROC_PREEMPT at 63,
+; PROC_TTY at 96, for a 124-byte slot.
 ;
 ; PROC_DESC ABI is declared in hal/cor24/proc-desc.toml and checked against
 ; include/swtos.msw. Offset 21 is PD_SENDER; no field is spare provider state.
@@ -4632,26 +4637,26 @@ _proc_a_stats:
         .zero   24
 _proc_a_preempt:
         .zero   33
+_tty_a:
+        .zero   28
 _proc_b:
         .zero   39
 _proc_b_stats:
         .zero   24
 _proc_b_preempt:
         .zero   33
+_tty_b:
+        .zero   28
 _proc_c:
         .zero   39
 _proc_c_stats:
         .zero   24
 _proc_c_preempt:
         .zero   33
-_proc_table_end:
-; head, tail, count, overflow, then sixteen input bytes.
-_tty_a:
-        .zero   28
-_tty_b:
-        .zero   28
 _tty_c:
         .zero   28
+_proc_table_end:
+; Each slot's virtual TTY: head, tail, count, overflow, sixteen input bytes.
 _tty_d:
         .zero   28
 _tty_foreground_proc:
@@ -4868,6 +4873,10 @@ _embedded_bound_read:
 _spawn_status:
         .zero   3
 _spawn_arena_mark:
+        .zero   3
+_spawn_endpoint_save:
+        .zero   3
+_boot_endpoint:
         .zero   3
 _crc_cursor:
         .zero   3
