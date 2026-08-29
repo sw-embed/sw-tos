@@ -493,10 +493,9 @@ impl Desktop {
             return;
         }
 
-        // Rules sit between rows only. The top line is content, not a border,
-        // and the footer closes the bottom; a single row still needs one rule
-        // to carry its names, so it gets one beneath it.
-        let rules = if grid.rows == 1 { 1 } else { grid.rows - 1 };
+        // One rule above each row and none below the last, so a name sits over
+        // the pane it names and the footer closes the grid.
+        let rules = grid.rows;
         if height <= rules {
             return;
         }
@@ -506,6 +505,8 @@ impl Desktop {
         for row in 0..grid.rows {
             let content_height =
                 (row + 1) * content_total / grid.rows - row * content_total / grid.rows;
+            self.draw_rule(canvas, y, &grid, row);
+            y += 1;
             let mut x = 0;
             for column in 0..columns {
                 let pane_width = (column + 1) * grid.column_total / columns
@@ -526,14 +527,10 @@ impl Desktop {
                 }
             }
             y += content_height;
-            if row + 1 < grid.rows || grid.rows == 1 {
-                self.draw_rule(canvas, y, &grid, row);
-                y += 1;
-            }
         }
     }
 
-    /// Draw one horizontal rule, naming the pane above and below per column.
+    /// Draw one horizontal rule, naming the pane it sits over in each column.
     fn draw_rule(&self, canvas: &mut [Vec<char>], y: usize, grid: &Grid, row: usize) {
         if y >= canvas.len() {
             return;
@@ -546,30 +543,13 @@ impl Desktop {
         for column in 0..columns {
             let pane_width = (column + 1) * grid.column_total / columns
                 - column * grid.column_total / columns;
-            let end = x + pane_width;
-            let above = Some(row * columns + column).filter(|index| *index < self.panes.len());
-            let below = Some((row + 1) * columns + column)
-                .filter(|index| *index < self.panes.len() && row + 1 < grid.rows);
-            // Lay the two names out from what they need rather than by
-            // splitting the column in half: the lower name sits at the middle
-            // when both fit comfortably, and slides right only as far as a long
-            // upper name pushes it. A fixed midpoint clips a long upper name on
-            // a narrow terminal while leaving dashes to the right of a short
-            // lower one.
-            let above_span = above.map_or(0, |index| self.label_for(index, '^').chars().count());
-            let below_span = below.map_or(0, |index| self.label_for(index, 'v').chars().count());
-            let lead = usize::from(above_span + below_span + 2 <= pane_width) * 2;
-            let mut limit = end;
-            if let Some(index) = below {
-                let start = (x + pane_width / 2)
-                    .max(x + lead + above_span)
-                    .min(end.saturating_sub(below_span))
-                    .max(x);
-                self.write_label(canvas, y, start, end, 'v', index);
-                limit = start;
-            }
-            if let Some(index) = above {
-                self.write_label(canvas, y, x + lead, limit, '^', index);
+            // One name per column, for the pane directly beneath. Naming both
+            // neighbours would repeat every middle pane's name on two rules
+            // and leave each one half a column to fit in.
+            let index = row * columns + column;
+            if index < self.panes.len() {
+                let lead = usize::from(self.label_for(index).chars().count() + 2 <= pane_width) * 2;
+                self.write_label(canvas, y, x + lead, x + pane_width, index);
             }
             x += pane_width;
             if column + 1 < columns {
@@ -581,14 +561,13 @@ impl Desktop {
         }
     }
 
-    fn label_for(&self, index: usize, marker: char) -> String {
+    fn label_for(&self, index: usize) -> String {
         let pane = &self.panes[index];
         // The pane number leads, so it is the part that survives truncation in
         // a narrow column: it is what Ctrl-A <n> takes, and the name after it
-        // is the reminder. No space after the marker either -- a rule carries
-        // four of these, and padding is space a name cannot use.
+        // is the reminder. The marker points down at the pane being named.
         format!(
-            "{}{marker}{}{}{}",
+            "{} v {}{}{}",
             index + 1,
             pane.title,
             if pane.alert { " !" } else { "" },
@@ -597,17 +576,16 @@ impl Desktop {
     }
 
     /// Write a name onto a rule, clipped to this column. Returns the column
-    /// after the text so the next name can be placed clear of it.
+    /// after the text.
     fn write_label(
         &self,
         canvas: &mut [Vec<char>],
         y: usize,
         x: usize,
         end: usize,
-        marker: char,
         index: usize,
     ) -> usize {
-        let label = self.label_for(index, marker);
+        let label = self.label_for(index);
         let mut column = x;
         for character in label.chars() {
             if column >= end || column >= canvas[y].len() {
@@ -776,44 +754,63 @@ mod tests {
     }
 
     #[test]
-    fn shared_rules_name_the_pane_above_and_below_and_follow_focus() {
-        // Every pane is named twice: as the lower name on the rule over it and
-        // the upper name on the rule under it. Both have to track focus, and
-        // the marker has to sit on the focused pane's own name rather than on
-        // whichever name shares its rule.
+    fn each_rule_names_the_panes_beneath_it_once_and_follows_focus() {
+        // A rule names only what is directly under it, so every pane is named
+        // exactly once. Naming both neighbours would repeat each middle pane
+        // on two rules and leave every name half a column to fit in.
         let mut desktop = Desktop::new(4);
         desktop.push_channel(0, b"shell-body\n");
         desktop.push_channel(3, b"resources-body\n");
-        let screen = desktop.render(80, 24);
+        // Strip the cursor-home and clear-to-end controls so a rule is
+        // recognisable by its first character wherever it sits.
+        let plain = |desktop: &Desktop| {
+            desktop.render(80, 24).replace("\x1b[H", "").replace("\x1b[K", "")
+        };
+        let screen = plain(&desktop);
         let rules: Vec<&str> = screen
             .lines()
             .filter(|line| line.starts_with('-'))
             .collect();
 
-        // Four panes in two columns need exactly one rule, between the rows.
-        assert_eq!(rules.len(), 1, "{screen}");
-        assert!(!screen.lines().next().unwrap().starts_with('-'), "{screen}");
+        // Two rows, so two rules: one over each row, none below the last.
+        assert_eq!(rules.len(), 2, "{screen}");
+        assert!(screen.lines().next().unwrap().starts_with('-'), "{screen}");
+        assert!(!screen.lines().last().unwrap().starts_with('-'), "{screen}");
 
-        // Row 0 is named above the rule, row 1 below it, per column.
-        let column = rules[0].find('|').expect("column separator");
-        let (left, right) = rules[0].split_at(column);
-        assert!(left.contains("1^Shell") && left.contains("3vDebugger"), "{left}");
-        assert!(
-            right.contains("2^Application") && right.contains("4vResources"),
-            "{right}"
+        let split = |rule: &str| {
+            let column = rule.find('|').expect("column separator");
+            let (left, right) = rule.split_at(column);
+            (left.to_string(), right.to_string())
+        };
+        let (top_left, top_right) = split(rules[0]);
+        let (low_left, low_right) = split(rules[1]);
+        assert!(top_left.contains("1 v Shell"), "{top_left}");
+        assert!(top_right.contains("2 v Application"), "{top_right}");
+        assert!(low_left.contains("3 v Debugger"), "{low_left}");
+        assert!(low_right.contains("4 v Resources"), "{low_right}");
+
+        // No name appears twice anywhere on the screen's rules.
+        for name in ["Shell", "Application", "Debugger", "Resources"] {
+            let seen: usize = rules.iter().map(|rule| rule.matches(name).count()).sum();
+            assert_eq!(seen, 1, "{name} named {seen} times");
+        }
+
+        // The marker sits on the focused pane's own name, and only there.
+        assert!(top_left.contains("1 v Shell *"), "{top_left}");
+        assert_eq!(
+            rules.iter().map(|rule| rule.matches('*').count()).sum::<usize>(),
+            1,
+            "{screen}"
         );
 
-        // The marker is on Shell, which has focus, and nowhere else.
-        assert!(left.contains("1^Shell *"), "{left}");
-        assert_eq!(rules[0].matches('*').count(), 1, "{}", rules[0]);
-
-        // Focusing a pane in the lower row moves the marker to its own name.
         desktop.command(b'4');
-        let screen = desktop.render(80, 24);
-        let rule = screen.lines().find(|line| line.starts_with('-')).unwrap();
-        assert!(rule.contains("4vResources *"), "{rule}");
-        assert!(!rule.contains("1^Shell *"), "{rule}");
-        assert_eq!(rule.matches('*').count(), 1, "{rule}");
+        let screen = plain(&desktop);
+        let rules: Vec<&str> = screen
+            .lines()
+            .filter(|line| line.starts_with('-'))
+            .collect();
+        assert!(rules[1].contains("4 v Resources *"), "{}", rules[1]);
+        assert!(!rules[0].contains("1 v Shell *"), "{}", rules[0]);
     }
 
     #[test]

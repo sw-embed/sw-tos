@@ -187,7 +187,7 @@ def focused_label(view: str):
     for line in view.splitlines():
         if not line.startswith("-"):
             continue
-        found = re.search(r"(\d+)[\^v][^-|]*?\*", line)
+        found = re.search(r"(\d+) v [^-|]*?\*", line)
         if found:
             return int(found.group(1))
     return None
