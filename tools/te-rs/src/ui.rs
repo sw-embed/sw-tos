@@ -292,6 +292,32 @@ impl Desktop {
         self.focus
     }
 
+    /// Put back any system pane that has been closed.
+    ///
+    /// Ctrl-A x removes whatever holds focus, and closing Resources or the
+    /// debugger was otherwise unrecoverable: reloading a saved layout is the
+    /// only other route back and helps only if a layout was ever saved. Each
+    /// missing pane returns at its canonical position, so the numbering a
+    /// person has learned survives the accident.
+    pub fn restore_system_panes(&mut self) -> usize {
+        let mut restored = 0;
+        for (position, kind) in PaneKind::ALL.into_iter().enumerate() {
+            if self.panes.iter().any(|pane| pane.kind == kind) {
+                continue;
+            }
+            let at = position.min(self.panes.len());
+            self.panes.insert(
+                at,
+                Pane::new(kind, kind.default_channel(), kind.title(), DEFAULT_SCROLLBACK),
+            );
+            if self.focus >= at {
+                self.focus += 1;
+            }
+            restored += 1;
+        }
+        restored
+    }
+
     pub fn close_focused(&mut self) {
         if self.panes.len() > 1 {
             self.panes.remove(self.focus);
@@ -376,6 +402,9 @@ impl Desktop {
                 self.zoomed = !self.zoomed;
             }
             b'x' => self.close_focused(),
+            b'S' => {
+                self.restore_system_panes();
+            }
             b'y' => self.copy_mode = !self.copy_mode,
             b'w' => return CommandOutcome::Save,
             b'b' if self.broadcast_armed => {
@@ -414,7 +443,8 @@ impl Desktop {
                     title: "Help",
                     lines: &[
                         "1-9 focus  n next  p previous  z zoom  s split  x close",
-                        "y copy  b,b broadcast  w save  R restore-layout",
+                        "S restore-system-panes  y copy  b,b broadcast",
+                        "w save  R restore-layout",
                         "copy: arrows/hjkl  PgUp/PgDn  g/G  q exit",
                         "r reconnect/redraw  e target-Escape  ? help  d detach",
                         "close help: q, Escape, or ?",
@@ -477,10 +507,10 @@ impl Desktop {
     /// Boxing each pane separately spends two lines per row on borders and a
     /// column on each outer edge, which at nine rows costs half the display.
     /// Panes here share one rule per row and one rule per column boundary, and
-    /// there is no outer frame at all. A rule names the pane above it and the
-    /// pane below it in each column, so the titles cost no extra lines:
+    /// there is no outer frame at all. Each rule names the pane directly
+    /// beneath it in every column, so the titles cost no extra lines:
     ///
-    ///   -- ^ Shell ------- v Debugger ---|-- ^ TTY 2 ------ v TTY 3 -------
+    ///   --1 v Shell -------------------|--2 v Application --------------
     fn draw_grid(&self, canvas: &mut [Vec<char>], width: usize, height: usize) {
         let columns = if self.panes.len() <= 1 { 1 } else { 2 };
         let grid = Grid {
@@ -738,6 +768,28 @@ mod tests {
         desktop.command(b'4');
         assert_eq!(desktop.focused_kind(), PaneKind::Resources);
         assert_eq!(desktop.command(b'd'), CommandOutcome::Detach);
+    }
+
+    #[test]
+    fn closed_system_panes_can_be_restored() {
+        let mut desktop = Desktop::new(2);
+        desktop.command(b'4');
+        assert_eq!(desktop.focused_kind(), PaneKind::Resources);
+        desktop.command(b'x');
+        assert!(!desktop
+            .layout()
+            .iter()
+            .any(|(kind, _, _)| *kind == PaneKind::Resources));
+
+        desktop.command(b'S');
+        let layout = desktop.layout();
+        assert_eq!(layout.len(), PaneKind::ALL.len());
+        // Restored at its canonical position, so Ctrl-A 4 still reaches it.
+        desktop.command(b'4');
+        assert_eq!(desktop.focused_kind(), PaneKind::Resources);
+        // Restoring again is a no-op rather than a duplicate.
+        desktop.command(b'S');
+        assert_eq!(desktop.layout().len(), PaneKind::ALL.len());
     }
 
     #[test]

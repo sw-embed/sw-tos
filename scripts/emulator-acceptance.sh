@@ -19,6 +19,7 @@ RECIPES=(
     preemption-acceptance
     fill-demo-acceptance
     tui-soak
+    debugger-kill-acceptance
     acceptance-report-smoke
     provider-config-smoke
     proc-desc-abi-smoke

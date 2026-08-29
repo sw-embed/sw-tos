@@ -4179,56 +4179,99 @@ _protocol_debug_registers_second_ready:
 _protocol_debug_kill:
         la      r2,_PROTOCOL_RX_PAYLOAD
         lbu     r0,1(r2)
-        lc      r1,2
+        lc      r1,1
         ceq     r0,r1
-        brt     _protocol_debug_kill_b
-        lc      r1,3
-        ceq     r0,r1
-        brt     _protocol_debug_kill_c
-        lc      r0,1           ; invalid/protected endpoint
+        brf     _protocol_debug_kill_lookup
+        lc      r0,1           ; the shell is protected
         la      r2,_protocol_debug_kill_emit
         jmp     (r2)
-_protocol_debug_kill_b:
-        la      r1,_proc_b
-        bra     _protocol_debug_kill_selected
-_protocol_debug_kill_c:
-        la      r1,_proc_c
+_protocol_debug_kill_lookup:
+        ; Any slot, not only the first two children: the table holds sixteen
+        ; and the endpoint names the slot.
+        la      r2,_proc_for_endpoint
+        jal     r1,(r2)
+        ceq     r0,z
+        brf     _protocol_debug_kill_selected
+        lc      r0,1           ; no such endpoint
+        la      r2,_protocol_debug_kill_emit
+        jmp     (r2)
 _protocol_debug_kill_selected:
+        la      r2,_protocol_debug_proc
+        sw      r0,0(r2)
+        mov     r1,r0
         lw      r0,24(r1)
         ceq     r0,z
-        brf     _protocol_debug_kill_check_current
+        brf     _protocol_debug_kill_live
         lc      r0,2           ; already free
-        bra     _protocol_debug_kill_emit
-_protocol_debug_kill_check_current:
-        la      r2,_current_proc
-        lw      r0,0(r2)
-        ceq     r0,r1
-        brf     _protocol_debug_kill_check_eligible
-        ; current_proc remains the owner while its runway-saved IRQ frame is
-        ; parked in the shared scheduler/protocol path.  That state is safe to
-        ; queue; only reject a genuinely executing current process.
+        la      r2,_protocol_debug_kill_emit
+        jmp     (r2)
+_protocol_debug_kill_live:
+        ; A process the interrupt handler can reach is torn down there so it
+        ; unwinds its own runway. Every other one is parked at a cooperative
+        ; yield with its context saved and nothing of it on the CPU, so its
+        ; slot is released here. Demanding forced quiescence of those refused
+        ; every clock and uptime: they never spin, so they are never the
+        ; process the handler interrupts, and no amount of waiting made them
+        ; killable.
         mov     r0,r1
         la      r2,_preempt_for_proc
         jal     r1,(r2)
-        lw      r2,24(r0)
-        ceq     r2,z
-        brf     _protocol_debug_kill_queue
-        lc      r0,3           ; current process is not quiescent
-        bra     _protocol_debug_kill_emit
-_protocol_debug_kill_check_eligible:
-        la      r2,_protocol_debug_proc
-        sw      r1,0(r2)
-        mov     r0,r1
-        la      r2,_preempt_for_proc
-        jal     r1,(r2)
-        lw      r1,21(r0)
+        lw      r1,21(r0)      ; certified for forced quiescence
         ceq     r1,z
         brf     _protocol_debug_kill_queue
-        lc      r0,4           ; not certified for forced quiescence
-        bra     _protocol_debug_kill_emit
+        lw      r1,24(r0)      ; a runway-saved interrupt frame
+        ceq     r1,z
+        brf     _protocol_debug_kill_queue
+        la      r2,_protocol_debug_kill_release
+        jmp     (r2)
 _protocol_debug_kill_queue:
         lc      r1,1
         sw      r1,30(r0)
+        lc      r0,0
+        la      r2,_protocol_debug_kill_emit
+        jmp     (r2)
+_protocol_debug_kill_release:
+        la      r2,_protocol_debug_proc
+        lw      r2,0(r2)
+        lc      r0,0
+        sw      r0,24(r2)       ; PROC_FREE
+        la      r2,_child_count
+        lbu     r0,0(r2)
+        ceq     r0,z
+        brt     _protocol_debug_kill_focus
+        add     r0,-1
+        sb      r0,0(r2)
+        ceq     r0,z
+        brf     _protocol_debug_kill_focus
+        ; The last child releases the allocation generation, as an ordinary
+        ; exit does.
+        la      r2,_spawn_arena_mark
+        lw      r0,0(r2)
+        la      r2,_stack_next
+        sw      r0,0(r2)
+        la      r2,_spawn_heap_mark
+        lw      r0,0(r2)
+        la      r2,_heap_next
+        sw      r0,0(r2)
+_protocol_debug_kill_focus:
+        ; Neither input focus nor the current-process pointer may be left
+        ; aimed at a slot that no longer holds a process.
+        la      r2,_protocol_debug_proc
+        lw      r1,0(r2)
+        la      r2,_tty_foreground_proc
+        lw      r0,0(r2)
+        ceq     r0,r1
+        brf     _protocol_debug_kill_current_ptr
+        la      r0,_proc_a
+        sw      r0,0(r2)
+_protocol_debug_kill_current_ptr:
+        la      r2,_current_proc
+        lw      r0,0(r2)
+        ceq     r0,r1
+        brf     _protocol_debug_kill_released
+        la      r0,_proc_a
+        sw      r0,0(r2)
+_protocol_debug_kill_released:
         lc      r0,0
 _protocol_debug_kill_emit:
         la      r2,_protocol_resource_payload

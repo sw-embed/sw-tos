@@ -364,6 +364,10 @@ fill-demo-acceptance: scheduled-shell-build cor24-debugger-build
 tui-soak: scheduled-shell-build cor24-debugger-build te-rs-release
     python3 tests/test-tui-soak.py
 
+# Kill a clock, an uptime and a cpu-hog from the debugger; refuse the shell
+debugger-kill-acceptance: scheduled-shell-build cor24-debugger-build
+    python3 tests/test-debugger-kill-acceptance.py
+
 # Read a configured DS1307 RTC through the COR24 I2C HAL from PL/SW
 i2c-ds1307-smoke:
     ./tests/test-i2c-ds1307.sh
