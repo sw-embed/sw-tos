@@ -217,6 +217,10 @@ scheduled-reclaim-smoke:
 scheduled-multislot-smoke:
     ./tests/test-scheduled-multislot.sh
 
+# Fill every process-table slot, list them, and confirm the table refuses more
+scheduled-sixteen-smoke:
+    ./tests/test-scheduled-sixteen.sh
+
 # Verify host-backed eight-byte block reads through the image-provider ABI
 scheduled-block-provider-smoke: scheduled-multislot-smoke
 

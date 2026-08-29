@@ -78,7 +78,8 @@ _boot_endpoint_loop:
         sw      r0,18(r2)
         add     r0,1
         sw      r0,0(r1)
-        add     r2,124
+        lcu     r0,172          ; one slot; see the add-immediate note above
+        add     r2,r0
         la      r1,_proc_table_end
         mov     r0,r2
         ceq     r0,r1
@@ -341,7 +342,8 @@ _spawn_find_slot:
         lw      r0,24(r2)
         ceq     r0,z
         brt     _spawn_slot_found
-        add     r2,124
+        lcu     r0,172          ; one slot; see the add-immediate note above
+        add     r2,r0
         la      r1,_proc_table_end
         mov     r0,r2
         ceq     r0,r1
@@ -2253,7 +2255,8 @@ _scan_uart_batch:
         brf     _scan_uart_batch
 _scan_uart_batch_done:
         pop     r2
-        add     r2,124
+        lcu     r0,172          ; one slot; see the add-immediate note above
+        add     r2,r0
         la      r1,_proc_table_end
         mov     r0,r2
         ceq     r0,r1
@@ -2396,7 +2399,7 @@ _task_getchar_ready:
         pop     r2
         lw      r1,0(r2)
         add     r1,1
-        lc      r0,15
+        lc      r0,63
         and     r1,r0
         sw      r1,0(r2)
         lw      r1,6(r2)
@@ -2405,7 +2408,7 @@ _task_getchar_ready:
         ; Recover the byte at the previous head position.
         lw      r1,0(r2)
         add     r1,-1
-        lc      r0,15
+        lc      r0,63
         and     r1,r0
         add     r2,12
         add     r2,r1
@@ -2467,8 +2470,20 @@ _TASK_PROCESS_LIST:
         la      r2,_proc_table
 _task_process_list_next:
         lw      r0,18(r2)
-        add     r0,48
         push    r2
+        ; Endpoints run past nine now, so '0'+n would print ten as ':'. Emit a
+        ; leading digit when there is one; the table tops out well under twenty.
+        lc      r1,10
+        cls     r0,r1
+        brt     _task_process_list_units
+        push    r0
+        lc      r0,49
+        la      r2,_putchar
+        jal     r1,(r2)
+        pop     r0
+        add     r0,-10
+_task_process_list_units:
+        add     r0,48
         la      r2,_putchar
         jal     r1,(r2)
         lc      r0,32
@@ -2496,7 +2511,8 @@ _task_process_list_state:
         la      r2,_putchar
         jal     r1,(r2)
         pop     r2
-        add     r2,124
+        lcu     r0,172          ; one slot; see the add-immediate note above
+        add     r2,r0
         la      r1,_proc_table_end
         mov     r0,r2
         ceq     r0,r1
@@ -2791,7 +2807,7 @@ _TASK_MEM_INFO:
         lbu     r0,0(r1)
         add     r0,1
         sw      r0,18(r2)
-        lc      r0,3
+        lc      r0,16
         sw      r0,21(r2)
         la      r0,0x010000     ; 64 KB process-stack region
         sw      r0,24(r2)
@@ -3416,7 +3432,7 @@ _tty_enqueue_saved:
         jal     r1,(r2)
         mov     r2,r0
         lw      r0,6(r2)
-        lc      r1,16
+        lc      r1,64
         ceq     r0,r1
         brf     _tty_enqueue_store
         lw      r0,9(r2)
@@ -3433,7 +3449,7 @@ _tty_enqueue_store:
         add     r2,-12
         sub     r2,r1
         add     r1,1
-        lc      r0,15
+        lc      r0,63
         and     r1,r0
         sw      r1,3(r2)
         lw      r0,6(r2)
@@ -3617,7 +3633,7 @@ _protocol_resource_request_valid:
         lbu     r0,0(r1)
         add     r0,1
         sb      r0,14(r2)
-        lc      r0,3
+        lc      r0,16
         sb      r0,15(r2)
         ; Heap use and high water, relative to the link-time image end that is
         ; the heap's base. Without these the stack region is the only arena a
@@ -3781,7 +3797,7 @@ _protocol_resource_process_next:
         lw      r0,0(r2)
         add     r0,1
         sw      r0,0(r2)
-        lc      r1,4
+        lc      r1,17
         ceq     r0,r1
         brt     _protocol_resource_process_done
         la      r2,_protocol_resource_process_loop
@@ -4577,7 +4593,8 @@ _proc_for_endpoint_loop:
         lw      r0,18(r2)
         ceq     r0,r1
         brt     _proc_for_endpoint_found
-        add     r2,124
+        lcu     r0,172          ; one slot; see the add-immediate note above
+        add     r2,r0
         push    r1
         la      r1,_proc_table_end
         mov     r0,r2
@@ -4621,7 +4638,7 @@ _halt:
 ; could only reach its own statistics and sidecar through a compare chain with
 ; one arm per slot -- code that grows with the table. Interleaved, each is a
 ; constant offset from the descriptor: PROC_STATS at 39, PROC_PREEMPT at 63,
-; PROC_TTY at 96, for a 124-byte slot.
+; PROC_TTY at 96, for a 172-byte slot.
 ;
 ; Keep the slot at or below 127 bytes, or stride it with `lcu rN,SIZE` and
 ; `add r2,rN`. The add immediate is a signed byte and cor24-asm accepts
@@ -4646,7 +4663,7 @@ _proc_a_stats:
 _proc_a_preempt:
         .zero   33
 _tty_a:
-        .zero   28
+        .zero   76
 _proc_b:
         .zero   39
 _proc_b_stats:
@@ -4654,7 +4671,7 @@ _proc_b_stats:
 _proc_b_preempt:
         .zero   33
 _tty_b:
-        .zero   28
+        .zero   76
 _proc_c:
         .zero   39
 _proc_c_stats:
@@ -4662,11 +4679,15 @@ _proc_c_stats:
 _proc_c_preempt:
         .zero   33
 _tty_c:
-        .zero   28
+        .zero   76
+        ; Thirteen further slots. Nothing names a slot: every per-slot record
+        ; is a constant offset from the descriptor, and endpoints are found by
+        ; searching. 16 x 172 = 2752 bytes of image.
+        .zero   2236
 _proc_table_end:
-; Each slot's virtual TTY: head, tail, count, overflow, sixteen input bytes.
+; A virtual TTY: head, tail, count, overflow, then a 64-byte input ring.
 _tty_d:
-        .zero   28
+        .zero   76
 _tty_foreground_proc:
         .zero   3
 _tty_poll_proc:

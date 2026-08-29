@@ -27,7 +27,7 @@ for expected in \
     'arena=256 peak=256' \
     'arena=256 peak=640' \
     'kstack=7' \
-    'failures=0 slots=1/3' \
+    'failures=0 slots=1/16' \
     'ep=1 status=1 stack=256 state=6 total=262' \
     'ep=2 status=0 stack=0 state=0 total=0' \
     'ep=3 status=0 stack=0 state=0 total=0' \
@@ -69,7 +69,7 @@ if ! grep -q 'ERROR' <<<"$failure_output"; then
 fi
 # The stack-region peak no longer moves on a failed spawn: the state block it
 # rolls back is allocated from the SRAM heap, which mem does not yet report.
-if ! grep -q 'arena=256 peak=256.*failures=1 slots=1/3' <<<"$failure_output"; then
+if ! grep -q 'arena=256 peak=256.*failures=1 slots=1/16' <<<"$failure_output"; then
     echo "FAIL: failed spawn did not report the failure" >&2
     echo "$failure_output" >&2
     exit 1

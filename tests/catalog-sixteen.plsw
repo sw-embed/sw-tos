@@ -1,0 +1,55 @@
+/* catalog-sixteen.plsw -- fill every process-table slot and list them.
+ *
+ * The launcher spawns children until the table refuses another, so the proof
+ * does not hard-code how many slots there are: TASK_PROCESS_LIST then reports
+ * one line per slot, and every one must be RUNNABLE. Children never exit, so
+ * no slot is recycled while the table is being filled.
+ */
+
+%DEFINE LIBRARY;
+
+DCL 1 MULTI_STATE BASED,
+    3 MS_VALUE INT,
+    3 MS_COUNTER_DESC PTR,
+    3 MS_HELLO_DESC PTR,
+    3 MS_CLOCK_DESC PTR,
+    3 MS_EMBEDDED_DESC PTR;
+
+PLSW_LAUNCHER: PROC(STATE_PTR PTR);
+    DCL PRIVATE_STATE PTR;
+    DCL SPAWN_STATUS INT;
+    PRIVATE_STATE = STATE_PTR;
+    SPAWN_STATUS = 0;
+    DO WHILE (SPAWN_STATUS = 0);
+        CALL TASK_SPAWN(PRIVATE_STATE->MS_COUNTER_DESC);
+        CALL TASK_SPAWN_RESULT(ADDR(SPAWN_STATUS));
+    END;
+    CALL TASK_PROCESS_LIST;
+    CALL UART_PUTCHAR(70);
+    CALL UART_PUTCHAR(85);
+    CALL UART_PUTCHAR(76);
+    CALL UART_PUTCHAR(76);
+    CALL UART_PUTCHAR(10);
+    CALL TASK_HALT;
+END;
+
+PLSW_COUNTER: PROC(STATE_PTR PTR);
+    DCL PRIVATE_STATE PTR;
+    PRIVATE_STATE = STATE_PTR;
+    DO WHILE (1);
+        PRIVATE_STATE->MS_VALUE = PRIVATE_STATE->MS_VALUE + 1;
+        CALL TASK_STEP(PRIVATE_STATE->MS_VALUE);
+    END;
+END;
+
+PLSW_HELLO: PROC(STATE_PTR PTR);
+    CALL TASK_EXIT;
+END;
+
+PLSW_UPTIME: PROC(STATE_PTR PTR);
+    CALL TASK_EXIT;
+END;
+
+PLSW_CLOCK: PROC(STATE_PTR PTR);
+    CALL TASK_EXIT;
+END;

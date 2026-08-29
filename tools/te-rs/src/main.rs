@@ -832,6 +832,34 @@ fn wait_readable<const N: usize>(fds: [RawFd; N], timeout_ms: i32) -> io::Result
 /// was sent, whichever way it was typed.
 const ESCAPE_ECHO: &[u8] = b"Esc";
 
+/// Write what was known about the link when it was lost.
+///
+/// The frontend owns the alternate screen, so anything printed here is the
+/// operator's only record; the launcher captures it into the session log.
+/// Without it a lost transport reports a bare errno, or the generic phrase
+/// standing in for a cause that was thrown away.
+fn report_transport_loss(
+    detail: &str,
+    connection: &ConnectionDecoder,
+    resources: &SnapshotAssembler,
+    connected: Instant,
+) {
+    eprintln!("transport lost after {:.1}s: {detail}", connected.elapsed().as_secs_f32());
+    eprintln!("  negotiated mode: {:?}", connection.mode());
+    match resources.snapshot() {
+        Some(snapshot) => eprintln!(
+            "  last snapshot: generation {} uart rx={} tx={} protocol-errors={} slots={}/{}",
+            snapshot.generation,
+            snapshot.uart_rx,
+            snapshot.uart_tx,
+            snapshot.protocol_errors,
+            snapshot.memory.used_slots,
+            snapshot.memory.total_slots
+        ),
+        None => eprintln!("  last snapshot: none received"),
+    }
+}
+
 fn run_windows(options: &Options) -> io::Result<()> {
     let connected = Instant::now();
     let mut serial = OpenOptions::new()
@@ -905,21 +933,37 @@ fn run_windows(options: &Options) -> io::Result<()> {
         let mut dirty = false;
 
         if readable[0] {
-            // A hangup makes the descriptor readable; the read then reports
-            // the loss as zero bytes or as an error.
             let count = match serial.read(&mut serial_buffer) {
                 Ok(count) => count,
-                Err(error) if error.kind() == io::ErrorKind::Interrupted => continue,
-                Err(_) => 0,
+                // Transient. A descriptor can be reported readable and still
+                // have nothing to give, which Darwin does on pseudo-terminals.
+                // Retrying is correct; treating it as a hangup ends a healthy
+                // session, which is what collapsing every error into a lost
+                // transport used to do.
+                Err(error)
+                    if matches!(
+                        error.kind(),
+                        io::ErrorKind::Interrupted | io::ErrorKind::WouldBlock
+                    ) =>
+                {
+                    continue;
+                }
+                Err(error) => {
+                    let detail = format!("serial read failed: {error}");
+                    desktop.set_connected(false);
+                    desktop.set_error(Some(detail.clone()));
+                    repaint_desktop(&mut tty, &mut desktop)?;
+                    report_transport_loss(&detail, &connection, &resources, connected);
+                    return Err(io::Error::new(io::ErrorKind::UnexpectedEof, detail));
+                }
             };
             if count == 0 {
+                let detail = "serial transport closed: read returned zero".to_string();
                 desktop.set_connected(false);
-                desktop.set_error(Some("transport lost".into()));
+                desktop.set_error(Some(detail.clone()));
                 repaint_desktop(&mut tty, &mut desktop)?;
-                return Err(io::Error::new(
-                    io::ErrorKind::UnexpectedEof,
-                    "serial transport lost",
-                ));
+                report_transport_loss(&detail, &connection, &resources, connected);
+                return Err(io::Error::new(io::ErrorKind::UnexpectedEof, detail));
             }
             for item in connection.push(&serial_buffer[..count]) {
                 if matches!(&item, StreamItem::Frame(_)) && transport_decode_error {

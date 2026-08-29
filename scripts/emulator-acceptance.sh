@@ -39,6 +39,7 @@ RECIPES=(
     scheduled-memory-smoke
     scheduled-reclaim-smoke
     scheduled-multislot-smoke
+    scheduled-sixteen-smoke
     cor24-image-smoke
     cor24-loader-smoke
     cor24-storage-smoke
