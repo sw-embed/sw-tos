@@ -18,6 +18,20 @@ _kernel_stack_fill:
         add     r0,3
         ceq     r0,r2
         brf     _kernel_stack_fill
+        ; Establish the current process before anything can emit output.
+        ; The TTY path charges bytes to _current_proc's statistics, and the
+        ; boot banner below is written before the shell is spawned, so leaving
+        ; this null meant the kernel updated statistics through a null
+        ; descriptor. That wrote into low memory whenever the statistics
+        ; pointer was computed by arithmetic; the former compare chain hid it
+        ; by falling through to the last slot and corrupting its counters
+        ; instead. Boot output belongs to the shell's context.
+        la      r0,_proc_a
+        la      r2,_current_proc
+        sw      r0,0(r2)
+        la      r2,_tty_foreground_proc
+        sw      r0,0(r2)
+
         ; The heap base is a link-time address, so it cannot be a .word
         ; initializer. Establish it before the first spawn allocates.
         la      r0,_swtos_image_end
@@ -4575,53 +4589,15 @@ _protocol_putchar_wait:
         pop     r1
         jmp     (r1)
 
-; Map a process descriptor in r0 to its ABI-independent statistics sidecar.
+; Statistics block of the descriptor in r0. Interleaved slots put it at a
+; constant offset, so no per-slot dispatch is needed.
 _stats_for_proc:
-        push    r1
-        push    r2
-        la      r1,_proc_a
-        mov     r2,r0
-        mov     r0,r2
-        ceq     r0,r1
-        brf     _stats_for_proc_b
-        la      r0,_proc_a_stats
-        bra     _stats_for_proc_done
-_stats_for_proc_b:
-        la      r1,_proc_b
-        mov     r0,r2
-        ceq     r0,r1
-        brf     _stats_for_proc_c
-        la      r0,_proc_b_stats
-        bra     _stats_for_proc_done
-_stats_for_proc_c:
-        la      r0,_proc_c_stats
-_stats_for_proc_done:
-        pop     r2
-        pop     r1
+        add     r0,39
         jmp     (r1)
 
-; Map PROC_DESC pointer r0 to its private preemption sidecar.
+; Preemption sidecar of the descriptor in r0, likewise at a constant offset.
 _preempt_for_proc:
-        push    r1
-        push    r2
-        mov     r2,r0
-        la      r1,_proc_a
-        ceq     r0,r1
-        brf     _preempt_for_proc_b
-        la      r0,_proc_a_preempt
-        bra     _preempt_for_proc_done
-_preempt_for_proc_b:
-        la      r1,_proc_b
-        mov     r0,r2
-        ceq     r0,r1
-        brf     _preempt_for_proc_c
-        la      r0,_proc_b_preempt
-        bra     _preempt_for_proc_done
-_preempt_for_proc_c:
-        la      r0,_proc_c_preempt
-_preempt_for_proc_done:
-        pop     r2
-        pop     r1
+        add     r0,63
         jmp     (r1)
 
 ; Increment one 24-bit counter. Natural machine-word wraparound is deliberate.
