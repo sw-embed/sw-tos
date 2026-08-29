@@ -23,6 +23,7 @@ DCL 1 SHELL_PROGRAM_DESC BASED,
 DCL SHELL_HELP_1(21) CHAR INIT('help ls dir ps run');
 DCL SHELL_HELP_2(24) CHAR INIT('df du mem stat uname');
 DCL SHELL_UNAME_TEXT(17) CHAR INIT('SWTOS COR24 0.1');
+DCL SHELL_CPU_HOG_NAME(8) CHAR INIT('cpu-hog');
 DCL SHELL_STAT_KIND(7) CHAR INIT(' kind=');
 DCL SHELL_STAT_SOURCE(9) CHAR INIT(' source=');
 DCL SHELL_STAT_STACK(8) CHAR INIT(' stack=');
@@ -390,11 +391,31 @@ SHELL_FILL_DEMO: PROC(STATE_PTR PTR);
     /* Spawn children until the process table refuses another, so the demo
        does not hard-code the slot count. Uptime and Clock alternate because
        both keep printing, which makes every pane visibly live; neither joins,
-       so the shell stays usable while they run. */
+       so the shell stays usable while they run.
+
+       Two cpu-hogs go in first. They never yield, so the clocks that follow
+       keep printing only if forced preemption is working: the demo shows the
+       table filled and the scheduler holding up under a load that cooperative
+       scheduling alone could not survive. The hogs are found by catalog name
+       rather than held in the shell's private state, which keeps the spawn
+       state the boot code fills unchanged. */
     DCL PRIVATE_STATE PTR;
     DCL SPAWN_STATUS INT;
     DCL WHICH INT;
+    DCL HOG_DESC PTR;
     PRIVATE_STATE = STATE_PTR;
+    HOG_DESC = 0;
+    CALL TASK_CATALOG_FIND(ADDR(SHELL_CPU_HOG_NAME), ADDR(HOG_DESC));
+    IF (HOG_DESC = 0) THEN HOG_DESC = 0;
+    ELSE DO;
+        SPAWN_STATUS = 0;
+        CALL TASK_SPAWN(HOG_DESC);
+        CALL TASK_SPAWN_RESULT(ADDR(SPAWN_STATUS));
+        IF (SPAWN_STATUS = 0) THEN DO;
+            CALL TASK_SPAWN(HOG_DESC);
+            CALL TASK_SPAWN_RESULT(ADDR(SPAWN_STATUS));
+        END;
+    END;
     SPAWN_STATUS = 0;
     WHICH = 0;
     DO WHILE (SPAWN_STATUS = 0);

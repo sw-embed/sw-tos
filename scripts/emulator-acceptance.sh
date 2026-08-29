@@ -17,6 +17,7 @@ RECIPES=(
     interrupt-context-capability-smoke
     preemption-runway-smoke
     preemption-acceptance
+    fill-demo-acceptance
     acceptance-report-smoke
     provider-config-smoke
     proc-desc-abi-smoke

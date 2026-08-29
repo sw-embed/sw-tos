@@ -356,6 +356,10 @@ preemption-runway-smoke:
 preemption-acceptance: scheduled-shell-build cor24-debugger-build
     python3 tests/test-preemption-acceptance.py
 
+# Fill every process slot from the shell menu and keep the clocks running
+fill-demo-acceptance: scheduled-shell-build cor24-debugger-build
+    python3 tests/test-fill-demo-acceptance.py
+
 # Read a configured DS1307 RTC through the COR24 I2C HAL from PL/SW
 i2c-ds1307-smoke:
     ./tests/test-i2c-ds1307.sh

@@ -32,6 +32,11 @@ FLAGS = {
 }
 ENTRY_KEYS = {"name", "entry", "scheduled_entry", "stack_words", "state_words", "flags", "image_manifest"}
 
+#: Catalog entry the shell fill demo spawns to load the scheduler. The name is
+#: always emitted, including for manifests without such an entry: the demo
+#: looks it up at run time and simply spawns no hogs when it is absent.
+HOG_NAME = "cpu-hog"
+
 
 def fail(message: str) -> None:
     raise ValueError(message)
@@ -232,6 +237,7 @@ def render_scheduled(entries: list[dict], manifest: Path) -> str:
         "SHELL_HELP_1": "help ls dir ps run",
         "SHELL_HELP_2": "df du mem stat uname",
         "SHELL_UNAME_TEXT": "SWTOS COR24 0.1",
+        "SHELL_CPU_HOG_NAME": HOG_NAME,
         "SHELL_STAT_KIND": " kind=",
         "SHELL_STAT_SOURCE": " source=",
         "SHELL_STAT_STACK": " stack=",
