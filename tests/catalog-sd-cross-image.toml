@@ -30,6 +30,14 @@ stack_words = 192
 state_words = 4
 flags = ["resident", "single_instance"]
 
+[[program]]
+name = "mon"
+entry = "MON"
+scheduled_entry = "_plsw_mon_trampoline"
+stack_words = 192
+state_words = 4
+flags = ["resident"]
+
 [[service]]
 name = "shell"
 entry = "MENU"

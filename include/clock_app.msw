@@ -121,3 +121,14 @@ CLOCK: PROC;
     CALL UART_PUTS(ADDR(CLOCK_TITLE));
     CALL TIME_APP(TIME_FRAME_CLOCK);
 END;
+
+MON: PROC;
+    /* The catalog names an entry point for every program, and this image is
+       built without the scheduler the real monitor reports on. It announces
+       itself and returns, so the catalog resolves and the menu stays honest
+       about what this build can do. */
+    CALL UART_PUTCHAR(109);
+    CALL UART_PUTCHAR(111);
+    CALL UART_PUTCHAR(110);
+    CALL UART_PUTCHAR(10);
+END;

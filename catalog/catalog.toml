@@ -39,6 +39,14 @@ state_words = 4
 flags = ["resident", "single_instance"]
 
 [[program]]
+name = "mon"
+entry = "MON"
+scheduled_entry = "_plsw_mon_trampoline"
+stack_words = 192
+state_words = 4
+flags = ["resident"]
+
+[[program]]
 name = "embedded-hello"
 entry = "HELLO"
 scheduled_entry = "_embedded_loader_trampoline"

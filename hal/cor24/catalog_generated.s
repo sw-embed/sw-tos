@@ -6,6 +6,7 @@ _scheduled_catalog_table:
         .word   _scheduled_counter_descriptor
         .word   _scheduled_clock_descriptor
         .word   _scheduled_uptime_descriptor
+        .word   _scheduled_mon_descriptor
         .word   _scheduled_embedded_hello_descriptor
         .word   _scheduled_embedded_ping_descriptor
         .word   _scheduled_cpu_hog_descriptor
@@ -60,6 +61,18 @@ _scheduled_uptime_descriptor:
 _scheduled_uptime_name:
         .byte   117,112,116,105,109,101,0
 
+_scheduled_mon_descriptor:
+        .word   _scheduled_mon_name
+        .word   0
+        .word   _plsw_mon_trampoline
+        .word   0
+        .word   0
+        .word   192
+        .word   4
+        .word   1
+_scheduled_mon_name:
+        .byte   109,111,110,0
+
 _scheduled_embedded_hello_descriptor:
         .word   _scheduled_embedded_hello_name
         .word   1
@@ -109,22 +122,23 @@ _scheduled_shell_name:
         .byte   115,104,101,108,108,0
 
 _block_catalog_index:
-        .byte   8,1,83,87,84,253,152,50
+        .byte   9,1,83,87,84,195,154,42
         .byte   104,101,108,108,111,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0
         .byte   99,111,117,110,116,101,114,0,0,0,0,0,0,0,0,0,1,0,0,0,0,0,0,0
         .byte   99,108,111,99,107,0,0,0,0,0,0,0,0,0,0,0,2,0,0,0,0,0,0,0
         .byte   117,112,116,105,109,101,0,0,0,0,0,0,0,0,0,0,3,0,0,0,0,0,0,0
-        .byte   101,109,98,101,100,100,101,100,45,104,101,108,108,111,0,0,4,0,0,0,0,0,0,0
-        .byte   101,109,98,101,100,100,101,100,45,112,105,110,103,0,0,0,5,0,0,0,0,0,0,0
-        .byte   99,112,117,45,104,111,103,0,0,0,0,0,0,0,0,0,6,0,0,0,0,0,0,0
-        .byte   115,104,101,108,108,0,0,0,0,0,0,0,0,0,0,0,7,0,0,0,0,0,0,0
+        .byte   109,111,110,0,0,0,0,0,0,0,0,0,0,0,0,0,4,0,0,0,0,0,0,0
+        .byte   101,109,98,101,100,100,101,100,45,104,101,108,108,111,0,0,5,0,0,0,0,0,0,0
+        .byte   101,109,98,101,100,100,101,100,45,112,105,110,103,0,0,0,6,0,0,0,0,0,0,0
+        .byte   99,112,117,45,104,111,103,0,0,0,0,0,0,0,0,0,7,0,0,0,0,0,0,0
+        .byte   115,104,101,108,108,0,0,0,0,0,0,0,0,0,0,0,8,0,0,0,0,0,0,0
 _block_catalog_index_end:
 ; Mutable authentication workspace sized to the complete generated record region.
 _block_catalog_buffer:
-        .zero   192
+        .zero   216
 
 _SHELL_DF_TEXT:
-        .byte   99,97,116,97,108,111,103,32,101,110,116,114,105,101,115,61,56,32,105,109,97,103,101,115,61,51,32,98,121,116,101,115,61,49,49,55,0
+        .byte   99,97,116,97,108,111,103,32,101,110,116,114,105,101,115,61,57,32,105,109,97,103,101,115,61,51,32,98,121,116,101,115,61,49,49,55,0
 _SHELL_HELP_1:
         .byte   104,101,108,112,32,108,115,32,100,105,114,32,112,115,32,114,117,110,0
 _SHELL_HELP_2:

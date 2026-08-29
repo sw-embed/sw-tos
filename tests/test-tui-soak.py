@@ -290,7 +290,7 @@ def main():
         # Resources must show the hogs being forcibly preempted, and the count
         # must keep climbing: that is what keeps every other pane scheduled.
         session.command(b"4", settle=1.0)
-        require("focus:Resources" in session.screen(), "focus reaches resources",
+        require("focus:mon" in session.screen(), "focus reaches the monitor pane",
                 session.screen()[-400:])
         # Zoom first: in a shared column the process lines are cut off well
         # before the fp= field, so the unzoomed pane cannot answer this.

@@ -823,6 +823,69 @@ PLSW_TIME_APP: PROC(STATE_PTR PTR, FRAME_CODE INT);
     CALL TASK_EXIT;
 END;
 
+MON_REPORT: PROC;
+    /* One line per tick: what the table and the arena look like right now.
+       The strings are the ones the shell's own mem command uses, so a
+       monitor costs no new storage in the image. */
+    DCL 1 MEMORY_INFO,
+        3 SMI_TOTAL_WORDS INT,
+        3 SMI_IMAGE_BYTES INT,
+        3 SMI_ARENA_CURRENT_BYTES INT,
+        3 SMI_ARENA_PEAK_BYTES INT,
+        3 SMI_KERNEL_STACK_PEAK_BYTES INT,
+        3 SMI_ALLOCATION_FAILURES INT,
+        3 SMI_USED_SLOTS INT,
+        3 SMI_TOTAL_SLOTS INT,
+        3 SMI_ARENA_CAPACITY_BYTES INT;
+    CALL TASK_MEM_INFO(ADDR(MEMORY_INFO));
+    CALL UART_PUTS(ADDR(SHELL_MEM_SLOTS));
+    CALL SHELL_PRINT_INT(MEMORY_INFO.SMI_USED_SLOTS);
+    CALL UART_PUTCHAR(47);
+    CALL SHELL_PRINT_INT(MEMORY_INFO.SMI_TOTAL_SLOTS);
+    CALL UART_PUTS(ADDR(SHELL_MEM_ARENA));
+    CALL SHELL_PRINT_INT(MEMORY_INFO.SMI_ARENA_CURRENT_BYTES / 3);
+    CALL UART_PUTS(ADDR(SHELL_MEM_PEAK));
+    CALL SHELL_PRINT_INT(MEMORY_INFO.SMI_ARENA_PEAK_BYTES / 3);
+    CALL UART_PUTS(ADDR(SHELL_MEM_FAIL));
+    CALL SHELL_PRINT_INT(MEMORY_INFO.SMI_ALLOCATION_FAILURES);
+    CALL UART_PUTCHAR(10);
+END;
+
+PLSW_MON: PROC(STATE_PTR PTR);
+    /* A resource monitor as an ordinary process: several may run at once and
+       any of them can be killed, which the frontend's built-in Resources pane
+       cannot be. It refreshes on the uptime tick rather than spinning, so it
+       costs the scheduler nothing between reports, and Escape ends it like
+       the other resident apps. */
+    DCL CH BYTE;
+    DCL CODE BYTE;
+    DCL B0 BYTE;
+    DCL B1 BYTE;
+    DCL B2 BYTE;
+    DCL DONE INT;
+    CALL UART_PUTCHAR(109);
+    CALL UART_PUTCHAR(111);
+    CALL UART_PUTCHAR(110);
+    CALL UART_PUTCHAR(10);
+    DONE = 0;
+    DO WHILE (DONE = 0);
+        CALL TASK_GETCHAR(ADDR(CH));
+        IF (CH = 27) THEN DONE = 1;
+        ELSE DO;
+            IF (CH = 255) THEN DO;
+                CALL TASK_GETCHAR(ADDR(CODE));
+                IF (CODE = 1) THEN DO;
+                    CALL TIME_GET_PAYLOAD(ADDR(B0));
+                    CALL TIME_GET_PAYLOAD(ADDR(B1));
+                    CALL TIME_GET_PAYLOAD(ADDR(B2));
+                    CALL MON_REPORT;
+                END;
+            END;
+        END;
+    END;
+    CALL TASK_EXIT;
+END;
+
 PLSW_UPTIME: PROC(STATE_PTR PTR);
     CALL UART_PUTCHAR(85);
     CALL UART_PUTCHAR(112);

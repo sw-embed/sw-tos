@@ -59,7 +59,26 @@ def main() -> int:
             command = [str(frontend), "--windows", "--debug-map", str(args.debug_map)]
             command.extend(args.te_args)
             command.append(slave_name)
-            status = subprocess.call(command, stdout=log, stderr=log)
+            # Watch both. The adapter dying used to go unnoticed: the frontend
+            # kept waiting on a pseudo-terminal nobody was answering, holding
+            # the terminal in raw mode, where Ctrl-C arrives as a byte rather
+            # than a signal. That leaves no way out of the session at all.
+            session = subprocess.Popen(command, stdout=log, stderr=log)
+            while True:
+                try:
+                    status = session.wait(timeout=0.25)
+                    break
+                except subprocess.TimeoutExpired:
+                    pass
+                if proc.poll() is not None:
+                    log.write(b"adapter exited first; stopping the frontend\n")
+                    session.terminate()
+                    try:
+                        status = session.wait(timeout=5)
+                    except subprocess.TimeoutExpired:
+                        session.kill()
+                        status = session.wait()
+                    break
         finally:
             os.close(slave)
             if proc.poll() is None:

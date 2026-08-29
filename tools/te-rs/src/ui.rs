@@ -36,7 +36,8 @@ impl PaneKind {
             Self::Shell => "Shell",
             Self::Application => "Application",
             Self::Debugger => "Debugger",
-            Self::Resources => "Resources",
+            // Named for the mon program that reports the same figures.
+            Self::Resources => "mon",
         }
     }
 
@@ -839,10 +840,10 @@ mod tests {
         assert!(top_left.contains("1 v Shell"), "{top_left}");
         assert!(top_right.contains("2 v Application"), "{top_right}");
         assert!(low_left.contains("3 v Debugger"), "{low_left}");
-        assert!(low_right.contains("4 v Resources"), "{low_right}");
+        assert!(low_right.contains("4 v mon"), "{low_right}");
 
         // No name appears twice anywhere on the screen's rules.
-        for name in ["Shell", "Application", "Debugger", "Resources"] {
+        for name in ["Shell", "Application", "Debugger", "mon"] {
             let seen: usize = rules.iter().map(|rule| rule.matches(name).count()).sum();
             assert_eq!(seen, 1, "{name} named {seen} times");
         }
@@ -861,7 +862,7 @@ mod tests {
             .lines()
             .filter(|line| line.starts_with('-'))
             .collect();
-        assert!(rules[1].contains("4 v Resources *"), "{}", rules[1]);
+        assert!(rules[1].contains("4 v mon *"), "{}", rules[1]);
         assert!(!rules[0].contains("1 v Shell *"), "{}", rules[0]);
     }
 
@@ -877,7 +878,7 @@ mod tests {
         assert!(large.contains("application"));
         let small = desktop.render(40, 12);
         assert!(small.contains("Shell *"));
-        assert!(small.contains("Resources"));
+        assert!(small.contains("mon"));
     }
 
     #[test]

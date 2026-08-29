@@ -2363,6 +2363,14 @@ _plsw_uptime_trampoline:
         la      r2,_halt
         jmp     (r2)
 
+_plsw_mon_trampoline:
+        push    r0
+        la      r2,_PLSW_MON
+        jal     r1,(r2)
+        add     sp,3
+        la      r2,_halt
+        jmp     (r2)
+
 ; Call the per-process loaded entry and terminate its child process.
 _embedded_loader_trampoline:
         la      r2,_current_proc
@@ -4504,9 +4512,17 @@ _protocol_time_select:
         lc      r1,6
         ceq     r0,r1
         brf     _protocol_time_clock_kind
+        ; The monitor refreshes on the uptime tick, so that tick has two
+        ; possible consumers; the wall clock has one.
+        la      r0,_scheduled_mon_descriptor
+        la      r2,_protocol_time_descriptor_alt
+        sw      r0,0(r2)
         la      r0,_scheduled_uptime_descriptor
         bra     _protocol_time_kind_ready
 _protocol_time_clock_kind:
+        lc      r0,0
+        la      r2,_protocol_time_descriptor_alt
+        sw      r0,0(r2)
         la      r0,_scheduled_clock_descriptor
 _protocol_time_kind_ready:
         la      r2,_protocol_time_descriptor
@@ -4525,6 +4541,10 @@ _protocol_time_slot_loop:
 _protocol_time_slot_program:
         lw      r0,33(r2)
         la      r1,_protocol_time_descriptor
+        lw      r1,0(r1)
+        ceq     r0,r1
+        brt     _protocol_time_valid
+        la      r1,_protocol_time_descriptor_alt
         lw      r1,0(r1)
         ceq     r0,r1
         brt     _protocol_time_valid
@@ -4816,6 +4836,8 @@ _protocol_resource_stats:
 _protocol_payload_index:
         .zero   3
 _protocol_time_descriptor:
+        .zero   3
+_protocol_time_descriptor_alt:
         .zero   3
 _protocol_time_slot:
         .zero   3

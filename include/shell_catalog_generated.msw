@@ -3,7 +3,7 @@
 
 %DEFINE LIBRARY;
 
-DCL SHELL_DF_TEXT(37) CHAR INIT('catalog entries=8 images=3 bytes=117');
+DCL SHELL_DF_TEXT(37) CHAR INIT('catalog entries=9 images=3 bytes=117');
 DCL SHELL_DU_TEXT_0(24) CHAR INIT('embedded-hello 36 bytes');
 DCL SHELL_DU_TEXT_1(23) CHAR INIT('embedded-ping 45 bytes');
 DCL SHELL_DU_TEXT_2(17) CHAR INIT('cpu-hog 36 bytes');

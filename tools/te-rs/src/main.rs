@@ -1032,7 +1032,11 @@ fn run_windows(options: &Options) -> io::Result<()> {
                     StreamItem::Frame(frame) if frame.kind == FrameType::ResourceSnapshot => {
                         if resources.push(&frame.payload, Instant::now()) {
                             time_modes = TimeModes {
-                                uptime: resources.has_process_named("upti"),
+                                // The monitor refreshes on the uptime tick, so
+                                // it needs that tick sent even when no uptime
+                                // is running.
+                                uptime: resources.has_process_named("upti")
+                                    || resources.has_process_named("mon"),
                                 clock: resources.has_process_named("cloc"),
                             };
                             resource_lines = resources.render(Instant::now());
