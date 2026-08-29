@@ -345,7 +345,11 @@ impl DebugConsole {
             ["step"] | ["s"] => Ok(request("stepping one instruction", vec![9])),
             ["next"] | ["n"] => Ok(request("stepping over call", vec![10])),
             ["bt"] => Ok(request("requesting ABI backtrace", vec![11])),
+            // Accept the "ep=2" spelling the monitor and ps display, so a
+            // number on screen can be typed back as it appears.
             ["kill", endpoint] => endpoint
+                .strip_prefix("ep=")
+                .unwrap_or(endpoint)
                 .parse::<u8>()
                 .map(|endpoint| {
                     request(&format!("killing endpoint {endpoint}"), vec![13, endpoint])

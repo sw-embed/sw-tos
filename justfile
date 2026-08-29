@@ -368,6 +368,10 @@ tui-soak: scheduled-shell-build cor24-debugger-build te-rs-release
 debugger-kill-acceptance: scheduled-shell-build cor24-debugger-build
     python3 tests/test-debugger-kill-acceptance.py
 
+# Prove the shell keeps its prompt through unfinished arguments and typos
+shell-command-parsing: scheduled-shell-build
+    ./tests/test-shell-command-parsing.sh
+
 # Read a configured DS1307 RTC through the COR24 I2C HAL from PL/SW
 i2c-ds1307-smoke:
     ./tests/test-i2c-ds1307.sh

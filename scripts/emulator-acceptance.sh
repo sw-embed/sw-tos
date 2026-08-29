@@ -20,6 +20,7 @@ RECIPES=(
     fill-demo-acceptance
     tui-soak
     debugger-kill-acceptance
+    shell-command-parsing
     acceptance-report-smoke
     provider-config-smoke
     proc-desc-abi-smoke

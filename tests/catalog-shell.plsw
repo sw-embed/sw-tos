@@ -663,13 +663,16 @@ SHELL_KILL_COMMAND: PROC;
                     DIGITS = 0;
                 END;
                 ELSE DO;
-                    IF (CH < 48) THEN VALID = 0;
+                    /* Take the digits and ignore everything else, so the
+                       "ep=2" that mon and ps put on screen can be typed
+                       back verbatim. A line with no digits at all is the
+                       only one rejected. */
+                    IF (CH < 48) THEN ENDPOINT = ENDPOINT;
                     ELSE DO;
                         IF (CH < 58) THEN DO;
                             ENDPOINT = ENDPOINT * 10 + (CH - 48);
                             DIGITS = DIGITS + 1;
                         END;
-                        ELSE VALID = 0;
                     END;
                 END;
             END;

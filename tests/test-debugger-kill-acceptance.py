@@ -202,7 +202,9 @@ def main():
                         if endpoint != 1 and state)
         assert reused, f"shell run started nothing: {started}"
 
-        type_line(transport, b"kill %d\r" % reused[0])
+        # The "ep=N" spelling the monitor and ps display must be typeable
+        # back exactly as it appears on screen.
+        type_line(transport, b"kill ep=%d\r" % reused[0])
         tick = pump(transport, tick, 60, output)
         tick, after_shell_kill = slot_states(transport, tick)
         assert not after_shell_kill.get(reused[0]), (

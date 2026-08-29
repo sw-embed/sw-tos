@@ -1,0 +1,66 @@
+#!/bin/bash
+#
+# Shell command-line regression proofs.
+#
+# Every case here is one a person hit while using the shell, and each was a
+# way to lose the prompt entirely or to be told BAD for a line that read
+# correctly on screen. They run on the bare emulator because they are about
+# the parser, not the frontend: an unanswered prompt shows up as missing
+# output either way.
+
+set -euo pipefail
+
+ROOT_DIR="$(cd "$(dirname "$0")/.." && pwd)"
+EMU="$ROOT_DIR/scripts/swtos-emu"
+OUT_DIR="$ROOT_DIR/build/scheduled-shell"
+
+"$ROOT_DIR/scripts/catalog-spawn-link.sh" \
+    "$ROOT_DIR/tests/catalog-shell.plsw" scheduled-shell
+
+run_shell() {
+    $EMU --load-binary "$OUT_DIR/program.bin@0" --entry 0 \
+        -u "$1" --speed 0 -n 60000000 --quiet 2>/dev/null \
+        | sed '/^Entry point:/d'
+}
+
+expect() {
+    local label="$1" input="$2" needle="$3" output
+    output=$(run_shell "$input")
+    if ! printf '%s' "$output" | grep -q -- "$needle"; then
+        echo "FAIL: $label (expected '$needle')" >&2
+        printf '%s\n' "$output" >&2
+        exit 1
+    fi
+}
+
+# An argument the user never finished used to leave the shell blocked in
+# TASK_GETCHAR waiting for the rest of "--tty=new", with no way back.
+expect "an unfinished argument does not wedge the prompt" \
+    'bg x --\nuname\n' 'SWTOS COR24'
+
+# The flag is gone but old muscle memory and old scripts still type it.
+expect "the retired --tty=new flag is still accepted" \
+    'bg hello --tty=new\n' 'Hello'
+
+# Backspace used to be stored as part of the name, so every correction
+# became a lookup failure.
+expect "backspace corrects a mistyped name" \
+    'bg helloX\bo\b\n' 'Hello'
+
+# The prompt comes back after a program that waits for a key finishes.
+# (Raw input follows the newest child here, so the space dismisses hello.)
+expect "the prompt returns after bg" \
+    'bg hello\n \nuname\n' 'SWTOS COR24'
+
+# The shell may not kill itself, however it is asked.
+expect "the shell refuses to kill itself" \
+    'kill 1\n' 'BAD'
+
+# A line with no endpoint at all is rejected rather than acted on.
+expect "kill without an endpoint is rejected" \
+    'kill nothing\n' 'BAD'
+
+# The ep= spelling is proved against a live process in the framed
+# debugger-kill recipe; a bare run cannot, because raw input follows the
+# spawned child rather than staying with this shell.
+echo "PASS: shell command parsing survives unfinished arguments and corrections"
