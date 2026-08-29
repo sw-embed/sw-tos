@@ -1241,7 +1241,12 @@ cache turnover without cumulative state leakage.
 
 - **Language:** PL/SW (PL/I-inspired systems programming language for COR24)
   -- [sw-cor24-plsw](https://github.com/sw-embed/sw-cor24-plsw)
-- **Assembler:** COR24 assembler (`cor24-asm`)
+- **Assembler:** COR24 assembler (`cor24-asm`), bug-compatible with MakerLisp's
+  reference `as24`. One consequence to know: the `add` immediate is a signed
+  byte, and values 128..255 assemble without complaint and execute as
+  negatives -- `add r2,151` becomes `add r2,-105` while the listing still reads
+  151. `lc` rejects the same range with a diagnostic; `add` does not. Structures
+  strided by more than 127 bytes must use `lcu rN,SIZE` then `add r2,rN`.
 - **Emulator:** `cor24-emu` (Rust-based COR24 emulator)
 - **Compiler:** PL/SW compiler binary (`tools/plsw.lgo`, pre-built from
   sw-cor24-plsw). Runs as a COR24 program on the emulator.

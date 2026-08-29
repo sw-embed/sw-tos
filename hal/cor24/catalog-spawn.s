@@ -4623,6 +4623,14 @@ _halt:
 ; constant offset from the descriptor: PROC_STATS at 39, PROC_PREEMPT at 63,
 ; PROC_TTY at 96, for a 124-byte slot.
 ;
+; Keep the slot at or below 127 bytes, or stride it with `lcu rN,SIZE` and
+; `add r2,rN`. The add immediate is a signed byte and cor24-asm accepts
+; 128..255 silently, matching MakerLisp's reference as24: `add r2,151`
+; assembles as 0B 97 and executes as -105. The listing still prints 151, so
+; nothing warns. r0 is dead at every table-walk stride site here, being
+; overwritten by the following `mov r0,r2` comparison temporary, so it is the
+; register to borrow.
+;
 ; PROC_DESC ABI is declared in hal/cor24/proc-desc.toml and checked against
 ; include/swtos.msw. Offset 21 is PD_SENDER; no field is spare provider state.
 ; Statistics are eight words: reserved, dispatches, yields, IPC operations,
