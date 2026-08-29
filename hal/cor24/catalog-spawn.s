@@ -3299,22 +3299,15 @@ _protocol_putchar_tty:
         push    r2
         la      r2,_protocol_tx_byte
         sb      r0,0(r2)
-        lc      r0,0
-        la      r2,_protocol_tx_channel
-        sb      r0,0(r2)
+        ; The frame channel is the process's own endpoint, less one so the
+        ; shell keeps channel zero. This was a compare chain that knew only
+        ; about the first two child slots: every other process emitted on
+        ; channel zero, so a frontend folded thirteen applications' output
+        ; into the shell's pane and could not give any of them a window.
         la      r2,_current_proc
-        lw      r0,0(r2)
-        la      r1,_proc_b
-        ceq     r0,r1
-        brt     _protocol_tx_channel_b
-        la      r1,_proc_c
-        ceq     r0,r1
-        brf     _protocol_tx_header
-        lc      r0,2
-        bra     _protocol_tx_channel_store
-_protocol_tx_channel_b:
-        lc      r0,1
-_protocol_tx_channel_store:
+        lw      r2,0(r2)
+        lw      r0,18(r2)
+        add     r0,-1
         la      r2,_protocol_tx_channel
         sb      r0,0(r2)
 _protocol_tx_header:
@@ -4366,25 +4359,16 @@ _protocol_frame_tty_input:
         lbu     r0,0(r2)
         ceq     r0,z
         brt     _protocol_tty_done
+        ; Route by endpoint, the inverse of the transmit side: channel N is
+        ; endpoint N+1. This too was a chain that knew only the first three
+        ; slots, so keystrokes aimed at any later application were discarded.
         la      r2,_PROTOCOL_RX_CHANNEL
         lbu     r0,0(r2)
+        add     r0,1
+        la      r2,_proc_for_endpoint
+        jal     r1,(r2)
         ceq     r0,z
-        brt     _protocol_tty_proc_a
-        lc      r1,1
-        ceq     r0,r1
-        brt     _protocol_tty_proc_b
-        lc      r1,2
-        ceq     r0,r1
-        brt     _protocol_tty_proc_c
-        bra     _protocol_tty_done
-_protocol_tty_proc_a:
-        la      r0,_proc_a
-        bra     _protocol_tty_proc_ready
-_protocol_tty_proc_b:
-        la      r0,_proc_b
-        bra     _protocol_tty_proc_ready
-_protocol_tty_proc_c:
-        la      r0,_proc_c
+        brt     _protocol_tty_done
 _protocol_tty_proc_ready:
         la      r2,_tty_poll_proc
         sw      r0,0(r2)
