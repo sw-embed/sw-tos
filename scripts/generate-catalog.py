@@ -37,6 +37,10 @@ ENTRY_KEYS = {"name", "entry", "scheduled_entry", "stack_words", "state_words", 
 #: looks it up at run time and simply spawns no hogs when it is absent.
 HOG_NAME = "cpu-hog"
 
+#: Catalog entry the shell starts for itself at boot, so the monitor is present
+#: from the first frame and is restartable by name after being killed.
+MON_NAME = "mon"
+
 
 def fail(message: str) -> None:
     raise ValueError(message)
@@ -274,6 +278,9 @@ def render_scheduled(entries: list[dict], manifest: Path) -> str:
         "SHELL_PROC_TTY_IN": " ttyin=",
         "SHELL_PROC_TTY_OUT": " ttyout=",
         "SHELL_PROC_NONE": "none",
+        "SHELL_PROC_FORCED": " fp=",
+        "SHELL_PROC_CPU": " cpu=",
+        "SHELL_MON_NAME": MON_NAME,
     }
     for index, entry in enumerate(images):
         shell_strings[f"SHELL_DU_TEXT_{index}"] = f"{entry['name']} {entry['image_words'] * 3} bytes"

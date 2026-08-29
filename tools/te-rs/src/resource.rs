@@ -110,16 +110,21 @@ impl SnapshotAssembler {
                 process.dispatches = u24(&body[7..10]);
                 process.yields = u24(&body[10..13]);
             }
-            PROCESS_IO if body.len() == 14 => {
+            // 14 bytes is the record with a four-byte name, which a target
+            // built before the wider name field still sends.
+            PROCESS_IO if body.len() == 14 || body.len() == 18 => {
                 let endpoint = body[0];
                 let process = snapshot.processes.entry(endpoint).or_default();
                 process.endpoint = endpoint;
                 process.ipc = u24(&body[1..4]);
                 process.tty_in = u24(&body[4..7]);
                 process.tty_out = u24(&body[7..10]);
-                process.name = String::from_utf8_lossy(&body[10..14])
-                    .trim_end_matches('\0')
-                    .to_string();
+                // The name is NUL-terminated, not NUL-padded: whatever the
+                // target read past the terminator is adjacent image data, so
+                // stop there rather than trimming from the end.
+                let raw = &body[10..];
+                let end = raw.iter().position(|byte| *byte == 0).unwrap_or(raw.len());
+                process.name = String::from_utf8_lossy(&raw[..end]).to_string();
             }
             PREEMPTION if body.len() == 7 => {
                 let endpoint = body[0];
@@ -184,7 +189,10 @@ impl SnapshotAssembler {
         )];
         for process in snapshot.processes.values() {
             lines.push(format!(
-                "{} ep={} s={} b={} alloc={}/{}w d={} y={} fp={} cpu={} ipc={} io={}/{}",
+                // Pad the name so the columns after it line up. A longer name
+                // pushes its own row rather than being cut: losing the end of
+                // "embedded-hello" is what made the four-byte field useless.
+                "{:<8} ep={} s={} b={} alloc={}/{}w d={} y={} fp={} cpu={} ipc={} io={}/{}",
                 if process.name.is_empty() {
                     "-"
                 } else {
@@ -244,7 +252,7 @@ mod tests {
         assert!(
             lines
                 .iter()
-                .any(|line| line.contains("cntr ep=2 s=7 b=1 alloc=192/1w d=9"))
+                .any(|line| line.contains("cntr     ep=2 s=7 b=1 alloc=192/1w d=9"))
         );
         assert!(lines.iter().any(|line| line.contains("fp=11")));
         assert!(lines.iter().any(|line| line.contains("cpu=42")));
@@ -282,7 +290,7 @@ mod tests {
             assembler
                 .render(now)
                 .iter()
-                .any(|line| line.contains("app ep=2"))
+                .any(|line| line.contains("app      ep=2"))
         );
 
         assembler.push(&[BEGIN, 2], now);

@@ -24,6 +24,7 @@ DCL SHELL_HELP_1(21) CHAR INIT('help ls dir ps run');
 DCL SHELL_HELP_2(24) CHAR INIT('df du mem stat uname');
 DCL SHELL_UNAME_TEXT(17) CHAR INIT('SWTOS COR24 0.1');
 DCL SHELL_CPU_HOG_NAME(8) CHAR INIT('cpu-hog');
+DCL SHELL_MON_NAME(4) CHAR INIT('mon');
 DCL SHELL_STAT_KIND(7) CHAR INIT(' kind=');
 DCL SHELL_STAT_SOURCE(9) CHAR INIT(' source=');
 DCL SHELL_STAT_STACK(8) CHAR INIT(' stack=');
@@ -60,6 +61,8 @@ DCL SHELL_PROC_IPC(6) CHAR INIT(' ipc=');
 DCL SHELL_PROC_TTY_IN(9) CHAR INIT(' ttyin=');
 DCL SHELL_PROC_TTY_OUT(10) CHAR INIT(' ttyout=');
 DCL SHELL_PROC_NONE(5) CHAR INIT('none');
+DCL SHELL_PROC_FORCED(5) CHAR INIT(' fp=');
+DCL SHELL_PROC_CPU(6) CHAR INIT(' cpu=');
 
 SHELL_PRINT_INT: PROC(N INT);
     DCL D INT;
@@ -824,18 +827,28 @@ PLSW_TIME_APP: PROC(STATE_PTR PTR, FRAME_CODE INT);
 END;
 
 MON_REPORT: PROC;
-    /* A summary line and then one line per live process, which is the same
-       report the frontend's own pane draws. A summary alone repeats itself
-       whenever the totals hold still, which reads as a stuck program rather
-       than a quiet system. Free slots are skipped: sixteen "name=none" lines
-       a second bury the processes that matter. The strings are the ones the
-       shell's mem command already uses, so this costs no new storage. */
+    /* Every figure the resource snapshot carries, for every live process.
+       This is the only monitor now: the frontend no longer keeps a private
+       one, so anything missing here is not visible anywhere. Free slots are
+       skipped, since sixteen empty rows a second bury the processes that
+       matter, and the pane is cleared first so each report replaces the last
+       instead of scrolling. */
     DCL EP INT;
-    DCL 1 PROCESS_MEMORY_INFO,
-        3 SPM_STATUS INT,
-        3 SPM_STACK_WORDS INT,
-        3 SPM_STATE_WORDS INT,
-        3 SPM_TOTAL_WORDS INT;
+    DCL PROGRAM PTR;
+    DCL 1 PROC_INFO,
+        3 SPI_STATE INT,
+        3 SPI_BLOCKED INT,
+        3 SPI_STACK_WORDS INT,
+        3 SPI_STATE_WORDS INT,
+        3 SPI_DISPATCH INT,
+        3 SPI_YIELDS INT,
+        3 SPI_IPC INT,
+        3 SPI_TTY_IN INT,
+        3 SPI_TTY_OUT INT,
+        3 SPI_DESCRIPTOR PTR;
+    DCL 1 PREEMPT_INFO,
+        3 SPP_FORCED INT,
+        3 SPP_CPU INT;
     DCL 1 MEMORY_INFO,
         3 SMI_TOTAL_WORDS INT,
         3 SMI_IMAGE_BYTES INT,
@@ -856,14 +869,47 @@ MON_REPORT: PROC;
     CALL SHELL_PRINT_INT(MEMORY_INFO.SMI_ARENA_CURRENT_BYTES / 3);
     CALL UART_PUTS(ADDR(SHELL_MEM_PEAK));
     CALL SHELL_PRINT_INT(MEMORY_INFO.SMI_ARENA_PEAK_BYTES / 3);
+    CALL UART_PUTS(ADDR(SHELL_MEM_KSTACK));
+    CALL SHELL_PRINT_INT(MEMORY_INFO.SMI_KERNEL_STACK_PEAK_BYTES / 3);
     CALL UART_PUTS(ADDR(SHELL_MEM_FAIL));
     CALL SHELL_PRINT_INT(MEMORY_INFO.SMI_ALLOCATION_FAILURES);
     CALL UART_PUTCHAR(10);
     EP = 1;
     DO WHILE (EP < 17);
-        CALL TASK_MEM_PROCESS_INFO(EP, ADDR(PROCESS_MEMORY_INFO));
-        IF (PROCESS_MEMORY_INFO.SPM_STATUS = 0) THEN EP = EP;
-        ELSE CALL TASK_PROCESS_PRINT(EP);
+        CALL TASK_PROCESS_INFO(EP, ADDR(PROC_INFO));
+        IF (PROC_INFO.SPI_STATE = 0) THEN EP = EP;
+        ELSE DO;
+            CALL TASK_PROCESS_PREEMPT_INFO(EP, ADDR(PREEMPT_INFO));
+            CALL UART_PUTS(ADDR(SHELL_PROC_EP));
+            CALL SHELL_PRINT_INT(EP);
+            CALL UART_PUTS(ADDR(SHELL_PROC_NAME));
+            PROGRAM = PROC_INFO.SPI_DESCRIPTOR;
+            IF (PROGRAM = 0) THEN CALL UART_PUTS(ADDR(SHELL_PROC_NONE));
+            ELSE CALL UART_PUTS(PROGRAM->SPD_NAME);
+            CALL UART_PUTS(ADDR(SHELL_PROC_STATUS));
+            CALL SHELL_PRINT_INT(PROC_INFO.SPI_STATE);
+            CALL UART_PUTS(ADDR(SHELL_PROC_BLOCKED));
+            CALL SHELL_PRINT_INT(PROC_INFO.SPI_BLOCKED);
+            CALL UART_PUTS(ADDR(SHELL_PROC_STACK));
+            CALL SHELL_PRINT_INT(PROC_INFO.SPI_STACK_WORDS);
+            CALL UART_PUTS(ADDR(SHELL_PROC_STATE_WORDS));
+            CALL SHELL_PRINT_INT(PROC_INFO.SPI_STATE_WORDS);
+            CALL UART_PUTS(ADDR(SHELL_PROC_DISPATCH));
+            CALL SHELL_PRINT_INT(PROC_INFO.SPI_DISPATCH);
+            CALL UART_PUTS(ADDR(SHELL_PROC_YIELDS));
+            CALL SHELL_PRINT_INT(PROC_INFO.SPI_YIELDS);
+            CALL UART_PUTS(ADDR(SHELL_PROC_FORCED));
+            CALL SHELL_PRINT_INT(PREEMPT_INFO.SPP_FORCED);
+            CALL UART_PUTS(ADDR(SHELL_PROC_CPU));
+            CALL SHELL_PRINT_INT(PREEMPT_INFO.SPP_CPU);
+            CALL UART_PUTS(ADDR(SHELL_PROC_IPC));
+            CALL SHELL_PRINT_INT(PROC_INFO.SPI_IPC);
+            CALL UART_PUTS(ADDR(SHELL_PROC_TTY_IN));
+            CALL SHELL_PRINT_INT(PROC_INFO.SPI_TTY_IN);
+            CALL UART_PUTS(ADDR(SHELL_PROC_TTY_OUT));
+            CALL SHELL_PRINT_INT(PROC_INFO.SPI_TTY_OUT);
+            CALL UART_PUTCHAR(10);
+        END;
         EP = EP + 1;
     END;
 END;

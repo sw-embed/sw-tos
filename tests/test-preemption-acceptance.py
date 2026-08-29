@@ -26,10 +26,32 @@ def frame(kind: int, payload: bytes = b"", channel: int = 0) -> bytes:
 class Transport:
     def __init__(self, fd: int):
         self.fd = fd
+        os.set_blocking(fd, False)
         self.pending = b""
 
     def send(self, kind: int, payload: bytes = b"", channel: int = 0):
-        os.write(self.fd, frame(kind, payload, channel))
+        """Write a frame, reading the target while it will not accept more.
+
+        A full process table out-talks any caller that drains on its own
+        cadence: the pseudo-terminal fills and the next write blocks forever,
+        which stalls the very loop that would have emptied it. Draining on
+        EAGAIN makes the deadlock impossible regardless of how much the target
+        has to say.
+        """
+        data = frame(kind, payload, channel)
+        deadline = time.monotonic() + 10
+        while data:
+            try:
+                data = data[os.write(self.fd, data):]
+            except BlockingIOError:
+                if time.monotonic() > deadline:
+                    raise AssertionError("target stopped reading its transport")
+                ready, _, _ = select.select([self.fd], [], [], 0.02)
+                if ready:
+                    try:
+                        self.pending += os.read(self.fd, 65536)
+                    except BlockingIOError:
+                        pass
 
     def receive(self, timeout: float = 5.0):
         deadline = time.monotonic() + timeout
@@ -47,7 +69,10 @@ class Transport:
                 [self.fd], [], [], max(0, deadline - time.monotonic())
             )
             if ready:
-                self.pending += os.read(self.fd, 4096)
+                try:
+                    self.pending += os.read(self.fd, 65536)
+                except BlockingIOError:
+                    continue
         return None
 
     def debug(self, payload: bytes):
@@ -149,20 +174,59 @@ def saved_hog_r0(transport: Transport, tick: int, endpoint: int):
     return tick, int.from_bytes(first[3:6], "little")
 
 
-def kill_hog(transport: Transport, tick: int):
-    transport.send(9, b"\x0d\x02")
+def hog_endpoints(transport: Transport, tick: int, count: int = 2):
+    """Endpoints the interrupt handler is forcibly preempting.
+
+    The slots the hogs land in depend on what else booted, so they are found
+    by what only a hog does -- accumulating forced preemptions -- rather than
+    by assuming which numbers they were handed.
+    """
+    deadline = time.monotonic() + 15
+    while time.monotonic() < deadline:
+        transport.send(8)
+        forced = {}
+        generation = time.monotonic() + 5
+        while time.monotonic() < generation:
+            heartbeat(transport, tick)
+            tick += 1
+            # Drain everything between heartbeats. Reading one frame per
+            # heartbeat falls behind a full process table, the pseudo-terminal
+            # fills, and the next heartbeat blocks inside write() forever.
+            ended = False
+            while True:
+                received = transport.receive(0.02)
+                if received is None:
+                    break
+                if received[0] != 8:
+                    continue
+                payload = received[2]
+                if payload[0] == 6 and len(payload) == 9:
+                    if int.from_bytes(payload[3:6], "little"):
+                        forced[payload[2]] = True
+                elif payload[0] == 5:
+                    ended = True
+            if ended:
+                break
+        if len(forced) >= count:
+            return tick, sorted(forced)[:count]
+    raise AssertionError(f"only {sorted(forced)} were being preempted")
+
+
+def kill_hog(transport: Transport, tick: int, endpoint: int):
+    request = bytes((0x0D, endpoint))
+    transport.send(9, request)
     deadline = time.monotonic() + 3
     while time.monotonic() < deadline:
         heartbeat(transport, tick)
         tick += 1
         received = transport.receive(0.05)
-        if received is not None and received[0] == 10 and received[2][:2] == b"\x0d\x02":
-            assert received[2] == b"\x0d\x02\x00", received[2]
+        if received is not None and received[0] == 10 and received[2][:2] == request:
+            assert received[2] == request + b"\x00", received[2]
             return tick
     raise AssertionError("debugger could not kill saved cpu-hog context")
 
 
-def assert_hog_absent(transport: Transport, tick: int):
+def assert_hog_absent(transport: Transport, tick: int, killed: int, survivor: int):
     transport.send(8)
     generation_started = False
     seen_killed = False
@@ -180,11 +244,11 @@ def assert_hog_absent(transport: Transport, tick: int):
             seen_killed = False
             seen_survivor = False
         if generation_started and len(payload) >= 3 and payload[0] in (3, 4, 6):
-            seen_killed |= payload[2] == 2
-            seen_survivor |= payload[2] == 3
+            seen_killed |= payload[2] == killed
+            seen_survivor |= payload[2] == survivor
         if generation_started and payload[:1] == b"\x05":
             if not seen_killed:
-                assert seen_survivor, "surviving cpu-hog disappeared with endpoint 2"
+                assert seen_survivor, f"surviving cpu-hog disappeared with endpoint {killed}"
                 return tick
             generation_started = False
             transport.send(8)
@@ -223,15 +287,16 @@ def main():
             heartbeat(transport, tick)
             tick += 1
         try:
-            tick, first = resource_sample(transport, tick, (2, 3))
+            tick, hogs = hog_endpoints(transport, tick)
+            tick, first = resource_sample(transport, tick, tuple(hogs))
         except AssertionError as error:
             raise AssertionError(f"{error}; debug={diagnostic_state(transport)}") from error
         for _ in range(7):
             heartbeat(transport, tick)
             tick += 1
-        tick, second = resource_sample(transport, tick, (2, 3))
+        tick, second = resource_sample(transport, tick, tuple(hogs))
 
-        for endpoint in (2, 3):
+        for endpoint in hogs:
             assert first[endpoint][0] > 0, first
             assert second[endpoint][0] > first[endpoint][0], (first, second)
             assert second[endpoint][1] != first[endpoint][1], (first, second)
@@ -239,11 +304,11 @@ def main():
         # Endpoint-aware debugger reads come from the quiescent ISR stack, not
         # from the emulator's globally running CPU. Two snapshots must prove
         # that the same saved r0 resumes and advances between preemptions.
-        tick, debug_r0_first = saved_hog_r0(transport, tick, 2)
+        tick, debug_r0_first = saved_hog_r0(transport, tick, hogs[0])
         for _ in range(7):
             heartbeat(transport, tick)
             tick += 1
-        tick, debug_r0_second = saved_hog_r0(transport, tick, 2)
+        tick, debug_r0_second = saved_hog_r0(transport, tick, hogs[0])
         assert debug_r0_second != debug_r0_first, (debug_r0_first, debug_r0_second)
 
         # A debugger request must still complete while the application never
@@ -261,12 +326,12 @@ def main():
             if kind == 10 and payload[:1] == b"\x01":
                 response = payload
         assert response is not None, "debugger stopped responding under cpu-hog"
-        tick = kill_hog(transport, tick)
-        tick = assert_hog_absent(transport, tick)
+        tick = kill_hog(transport, tick, hogs[0])
+        tick = assert_hog_absent(transport, tick, hogs[0], hogs[1])
         print(
             "PASS: cpu-hog advanced under forced preemption "
-            f"(ep2 forced {first[2][0]}->{second[2][0]}, "
-            f"ep3 forced {first[3][0]}->{second[3][0]}, "
+            f"(ep{hogs[0]} forced {first[hogs[0]][0]}->{second[hogs[0]][0]}, "
+            f"ep{hogs[1]} forced {first[hogs[1]][0]}->{second[hogs[1]][0]}, "
             f"debug r0 {debug_r0_first}->{debug_r0_second}) and was killed safely"
         )
     finally:

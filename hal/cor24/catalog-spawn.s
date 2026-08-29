@@ -2808,6 +2808,62 @@ _stats_div10_done:
         pop     r1
         jmp     (r1)
 
+; TASK_CLAIM_FOREGROUND(): make the caller the process raw terminal input
+; reaches. A spawn hands input focus to the new child, which is what a user
+; wants when launching something interactive and exactly wrong for a service
+; started on the caller's behalf: the shell would spawn its monitor and then
+; never see another keystroke on a bare UART.
+        .globl  _TASK_CLAIM_FOREGROUND
+_TASK_CLAIM_FOREGROUND:
+        push    r0
+        push    r1
+        push    r2
+        la      r2,_current_proc
+        lw      r0,0(r2)
+        la      r2,_tty_foreground_proc
+        sw      r0,0(r2)
+        pop     r2
+        pop     r1
+        pop     r0
+        jmp     (r1)
+
+; TASK_PROCESS_PREEMPT_INFO(endpoint, result): forced-preemption count and the
+; last interrupted-r0 sample. These are the two figures the resource snapshot
+; reports that TASK_PROCESS_INFO does not, and they live in the preemption
+; record rather than the descriptor. Kept as a separate call so adding them
+; cannot overrun the result structure an existing caller declared.
+        .globl  _TASK_PROCESS_PREEMPT_INFO
+_TASK_PROCESS_PREEMPT_INFO:
+        push    fp
+        push    r2
+        push    r1
+        mov     fp,sp
+        lw      r0,9(fp)
+        la      r2,_proc_for_endpoint
+        jal     r1,(r2)
+        ceq     r0,z
+        brt     _task_process_preempt_none
+        la      r2,_preempt_for_proc
+        jal     r1,(r2)
+        mov     r2,r0
+        lw      r1,12(fp)
+        lw      r0,18(r2)
+        sw      r0,0(r1)
+        lw      r0,27(r2)
+        sw      r0,3(r1)
+        bra     _task_process_preempt_done
+_task_process_preempt_none:
+        lw      r1,12(fp)
+        lc      r0,0
+        sw      r0,0(r1)
+        sw      r0,3(r1)
+_task_process_preempt_done:
+        mov     sp,fp
+        pop     r1
+        pop     r2
+        pop     fp
+        jmp     (r1)
+
 ; TASK_MEM_INFO(result): snapshot fixed and runtime memory accounting.
 ; Result words: total words, image bytes, arena current bytes, arena peak
 ; bytes, kernel-stack peak bytes, allocation failures, used slots, total
@@ -3595,8 +3651,8 @@ _protocol_frame_done:
         jmp     (r1)
 
 ; An empty channel-zero RESOURCE_SNAPSHOT frame requests a fresh, complete
-; generation. Each response record is at most the decoder's sixteen-byte
-; bound. The host publishes a generation only after its matching end record.
+; generation. Each response record fits the shared payload buffer below. The
+; host publishes a generation only after its matching end record.
 _protocol_frame_resource:
         la      r2,_protocol_framed_mode
         lbu     r0,0(r2)
@@ -3770,6 +3826,10 @@ _protocol_resource_not_blocked:
         sw      r0,6(r2)
         lw      r0,21(r1)
         sw      r0,9(r2)
+        ; Eight name bytes, not four: "embedded-hello" and "embedded-ping"
+        ; were indistinguishable, and so were "clock" and "cpu-hog" at a
+        ; glance. The descriptor's name field is sixteen NUL-padded bytes, and
+        ; the reader trims the padding.
         la      r1,_protocol_resource_proc
         lw      r1,0(r1)
         lw      r1,33(r1)
@@ -3782,7 +3842,15 @@ _protocol_resource_not_blocked:
         sb      r0,14(r2)
         lbu     r0,3(r1)
         sb      r0,15(r2)
-        lc      r0,16
+        lbu     r0,4(r1)
+        sb      r0,16(r2)
+        lbu     r0,5(r1)
+        sb      r0,17(r2)
+        lbu     r0,6(r1)
+        sb      r0,18(r2)
+        lbu     r0,7(r1)
+        sb      r0,19(r2)
+        lc      r0,20
         la      r2,_protocol_resource_length
         sw      r0,0(r2)
         la      r2,_protocol_emit_resource_record
@@ -4060,28 +4128,18 @@ _protocol_debug_checksum_emit:
         jmp     (r2)
 
 _protocol_debug_registers:
+        ; Any slot, not just the first three. Naming three of sixteen meant
+        ; "regs 4" answered nothing at all, however many processes were live.
         la      r2,_PROTOCOL_RX_PAYLOAD
         lbu     r0,1(r2)
-        lc      r1,1
-        ceq     r0,r1
-        brt     _protocol_debug_registers_a
-        lc      r1,2
-        ceq     r0,r1
-        brt     _protocol_debug_registers_b
-        lc      r1,3
-        ceq     r0,r1
-        brt     _protocol_debug_registers_c
+        la      r2,_proc_for_endpoint
+        jal     r1,(r2)
+        ceq     r0,z
+        brf     _protocol_debug_registers_selected
         la      r2,_protocol_debug_invalid
         jmp     (r2)
-_protocol_debug_registers_c:
-        la      r1,_proc_c
-        bra     _protocol_debug_registers_selected
-_protocol_debug_registers_a:
-        la      r1,_proc_a
-        bra     _protocol_debug_registers_selected
-_protocol_debug_registers_b:
-        la      r1,_proc_b
 _protocol_debug_registers_selected:
+        mov     r1,r0
         lw      r0,24(r1)
         ceq     r0,z
         brf     _protocol_debug_registers_active

@@ -36,10 +36,32 @@ def frame(kind: int, payload: bytes = b"", channel: int = 0) -> bytes:
 class Transport:
     def __init__(self, fd: int):
         self.fd = fd
+        os.set_blocking(fd, False)
         self.pending = b""
 
     def send(self, kind: int, payload: bytes = b"", channel: int = 0):
-        os.write(self.fd, frame(kind, payload, channel))
+        """Write a frame, reading the target while it will not accept more.
+
+        A full process table out-talks any caller that drains on its own
+        cadence: the pseudo-terminal fills and the next write blocks forever,
+        which stalls the very loop that would have emptied it. Draining on
+        EAGAIN makes the deadlock impossible regardless of how much the target
+        has to say.
+        """
+        data = frame(kind, payload, channel)
+        deadline = time.monotonic() + 10
+        while data:
+            try:
+                data = data[os.write(self.fd, data):]
+            except BlockingIOError:
+                if time.monotonic() > deadline:
+                    raise AssertionError("target stopped reading its transport")
+                ready, _, _ = select.select([self.fd], [], [], 0.02)
+                if ready:
+                    try:
+                        self.pending += os.read(self.fd, 65536)
+                    except BlockingIOError:
+                        pass
 
     def receive(self, timeout: float = 5.0):
         deadline = time.monotonic() + timeout
@@ -57,7 +79,10 @@ class Transport:
                 [self.fd], [], [], max(0, deadline - time.monotonic())
             )
             if ready:
-                self.pending += os.read(self.fd, 4096)
+                try:
+                    self.pending += os.read(self.fd, 65536)
+                except BlockingIOError:
+                    continue
         return None
 
 

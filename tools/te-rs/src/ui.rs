@@ -24,6 +24,13 @@ pub enum PaneKind {
 }
 
 impl PaneKind {
+    /// Panes the frontend creates for itself.
+    ///
+    /// Resources is the frontend's own monitor, always present because it
+    /// needs no slot and cannot be killed by accident. The `mon` program
+    /// reports the same figures as an ordinary process, so several can run at
+    /// once and any of them can be killed; this pane is the one that is
+    /// simply always there.
     pub const ALL: [Self; 4] = [
         Self::Shell,
         Self::Application,
@@ -282,6 +289,26 @@ impl Desktop {
             pane.push(bytes);
             if index != self.focus {
                 pane.alert = true;
+            }
+        }
+    }
+
+    /// Name a pane after the process occupying its channel.
+    ///
+    /// A pane is opened before anything is known about what will speak on it,
+    /// so it starts as "Application" or "TTY n". The resource snapshot names
+    /// the process behind every endpoint, which is the only way a pane opened
+    /// by a boot-time spawn ever learns what it is showing.
+    pub fn name_channel(&mut self, channel: u8, title: &str) {
+        if title.is_empty() {
+            return;
+        }
+        for pane in &mut self.panes {
+            if pane.channel == channel
+                && pane.kind == PaneKind::Application
+                && pane.title != title
+            {
+                pane.title = title.to_string();
             }
         }
     }
@@ -603,13 +630,20 @@ impl Desktop {
 
     fn label_for(&self, index: usize) -> String {
         let pane = &self.panes[index];
-        // The pane number leads, so it is the part that survives truncation in
-        // a narrow column: it is what Ctrl-A <n> takes, and the name after it
-        // is the reminder. The marker points down at the pane being named.
+        // Two numbers matter and they are not the same: Ctrl-A takes the pane
+        // number, while the debugger, mon and ps all take the endpoint. Naming
+        // only the first invites killing endpoint 12 while watching pane 12,
+        // which shows a different process. The pane number leads because it
+        // survives truncation in a narrow column; the endpoint follows for
+        // panes that have one.
         format!(
-            "{} v {}{}{}",
+            "{} v {}{}{}{}",
             index + 1,
             pane.title,
+            match pane.kind {
+                PaneKind::Application => format!(" ep={}", u16::from(pane.channel) + 1),
+                _ => String::new(),
+            },
             if pane.alert { " !" } else { "" },
             if index == self.focus { " *" } else { "" }
         )
@@ -934,7 +968,7 @@ mod tests {
         assert_eq!(desktop.pane_count(), 5);
         desktop.command(b'1');
         desktop.push_channel(7, b"count 1\ncount 2\n");
-        assert!(desktop.render(80, 24).contains("Counter !"));
+        assert!(desktop.render(80, 24).contains("Counter ep=8 !"));
         desktop.command(b'5');
         assert!(desktop.search("count 1"));
         assert!(!desktop.broadcast_enabled());

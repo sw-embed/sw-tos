@@ -1039,6 +1039,16 @@ fn run_windows(options: &Options) -> io::Result<()> {
                                     || resources.has_process_named("mon"),
                                 clock: resources.has_process_named("cloc"),
                             };
+                            // Channel N carries endpoint N+1, so this is what
+                            // teaches a pane the name of the program on it.
+                            if let Some(snapshot) = resources.snapshot() {
+                                for process in snapshot.processes.values() {
+                                    if process.endpoint > 0 {
+                                        desktop
+                                            .name_channel(process.endpoint - 1, &process.name);
+                                    }
+                                }
+                            }
                             resource_lines = resources.render(Instant::now());
                             desktop.set_resources(&resource_lines);
                         }

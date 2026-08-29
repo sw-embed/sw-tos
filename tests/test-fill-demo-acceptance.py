@@ -41,10 +41,32 @@ def frame(kind: int, payload: bytes = b"", channel: int = 0) -> bytes:
 class Transport:
     def __init__(self, fd: int):
         self.fd = fd
+        os.set_blocking(fd, False)
         self.pending = b""
 
     def send(self, kind: int, payload: bytes = b"", channel: int = 0):
-        os.write(self.fd, frame(kind, payload, channel))
+        """Write a frame, reading the target while it will not accept more.
+
+        A full process table out-talks any caller that drains on its own
+        cadence: the pseudo-terminal fills and the next write blocks forever,
+        which stalls the very loop that would have emptied it. Draining on
+        EAGAIN makes the deadlock impossible regardless of how much the target
+        has to say.
+        """
+        data = frame(kind, payload, channel)
+        deadline = time.monotonic() + 10
+        while data:
+            try:
+                data = data[os.write(self.fd, data):]
+            except BlockingIOError:
+                if time.monotonic() > deadline:
+                    raise AssertionError("target stopped reading its transport")
+                ready, _, _ = select.select([self.fd], [], [], 0.02)
+                if ready:
+                    try:
+                        self.pending += os.read(self.fd, 65536)
+                    except BlockingIOError:
+                        pass
 
     def receive(self, timeout: float = 5.0):
         deadline = time.monotonic() + timeout
@@ -62,7 +84,10 @@ class Transport:
                 [self.fd], [], [], max(0, deadline - time.monotonic())
             )
             if ready:
-                self.pending += os.read(self.fd, 4096)
+                try:
+                    self.pending += os.read(self.fd, 65536)
+                except BlockingIOError:
+                    continue
         return None
 
 
@@ -96,18 +121,21 @@ def forced_counts(transport: Transport, tick: int):
     while time.monotonic() < deadline:
         heartbeat(transport, tick)
         tick += 1
-        received = transport.receive(0.05)
-        if received is None:
-            continue
-        kind, _, payload = received
-        if kind != 8 or len(payload) < 2:
-            continue
-        if payload[0] == 6 and len(payload) == 9:
-            counts[payload[2]] = int.from_bytes(payload[3:6], "little")
-        elif payload[0] == 5:
-            if len(counts) >= SLOTS:
-                return tick, counts
-            counts.clear()
+        # Drain everything between heartbeats: a single frame per heartbeat
+        # cannot keep up with a full table and never sees a whole generation.
+        while True:
+            received = transport.receive(0.02)
+            if received is None:
+                break
+            kind, _, payload = received
+            if kind != 8 or len(payload) < 2:
+                continue
+            if payload[0] == 6 and len(payload) == 9:
+                counts[payload[2]] = int.from_bytes(payload[3:6], "little")
+            elif payload[0] == 5:
+                if len(counts) >= SLOTS:
+                    return tick, counts
+                counts.clear()
     raise AssertionError(f"no complete resource generation; saw {counts}")
 
 
@@ -166,7 +194,10 @@ def main():
             f"channels={advancing}"
         )
         tick, first = forced_counts(transport, tick)
-        for _ in range(10):
+        # Beat, do not sleep: the handler only forces a preemption when a
+        # heartbeat arrives, so a quiet gap advances nothing and the second
+        # sample matches the first.
+        for _ in range(60):
             heartbeat(transport, tick)
             tick += 1
         _, second = forced_counts(transport, tick)

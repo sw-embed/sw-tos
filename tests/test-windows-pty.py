@@ -347,11 +347,11 @@ def normal_path():
     os.write(tty_master, b"\x01y")
 
     os.write(serial_master, frame(3, 2, b"Counter"))
-    assert b"Counter *" in read_until(tty_master, b"Counter *"), "dynamic channel open"
+    assert b"Counter ep=3 *" in read_until(tty_master, b"Counter ep=3 *"), "dynamic channel open"
     os.write(tty_master, b"\x011")
     assert b"Shell *" in read_until(tty_master, b"Shell *"), "focus before background output"
     os.write(serial_master, frame(2, 2, b"count 1\n"))
-    assert b"Counter !" in read_until(tty_master, b"Counter !"), "background input alert"
+    assert b"Counter ep=3 !" in read_until(tty_master, b"Counter ep=3 !"), "background input alert"
 
     # One broadcast command only arms the dangerous operation. An intervening
     # focus command cancels it, so ordinary input remains exclusive.
@@ -380,12 +380,14 @@ def normal_path():
     os.write(serial_master, frame(4, 2, b""))
     time.sleep(0.1)
     os.write(tty_master, b"\x012")
-    read_until(tty_master, b"Application *")
+    read_until(tty_master, b"Application ep=2 *")
 
     read_until(tty_master, b"never-present", 0.1)
     fcntl.ioctl(tty_slave, termios.TIOCSWINSZ, struct.pack("HHHH", 16, 50, 0, 0))
-    resized = read_until(tty_master, b"Application *", 2.0)
-    assert b"Application" in resized and b"mon" in resized, "resize/focus render"
+    # Fifty columns leaves twenty-five per pane, so a long name and its
+    # endpoint cannot both survive; the pane numbers must.
+    resized = read_until(tty_master, b"1 v Shell", 2.0)
+    assert b"1 v Shell" in resized and b"4 v mon" in resized, "resize/focus render"
     os.write(tty_master, b"\x01z\x01?\x01?\x01z")
     time.sleep(0.1)
     os.write(tty_master, b"\x01d")
