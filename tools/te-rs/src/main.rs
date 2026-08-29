@@ -1202,11 +1202,17 @@ fn run_windows(options: &Options) -> io::Result<()> {
                     if desktop.focused_kind() == PaneKind::Shell {
                         match byte {
                             b'\r' | b'\n' => {
-                                let command = shell_input.strip_suffix(" --tty=new");
-                                if let Some(command) = command {
-                                    desktop.claim_application(
-                                        command.strip_prefix("run ").unwrap_or(command),
-                                    );
+                                // "run <name>" gives the program its own
+                                // terminal now; the old --tty=new spelling is
+                                // still accepted and ignored by the target, so
+                                // both name the pane here.
+                                let line = shell_input.trim_end();
+                                let line = line.strip_suffix(" --tty=new").unwrap_or(line);
+                                if let Some(name) = line.strip_prefix("run ") {
+                                    let name = name.trim();
+                                    if !name.is_empty() {
+                                        desktop.claim_application(name);
+                                    }
                                 }
                                 shell_input.clear();
                             }

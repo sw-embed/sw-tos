@@ -20,7 +20,7 @@ DCL 1 SHELL_PROGRAM_DESC BASED,
     3 SPD_STACK_WORDS INT,
     3 SPD_STATE_WORDS INT,
     3 SPD_FLAGS INT;
-DCL SHELL_HELP_1(21) CHAR INIT('help ls dir ps run');
+DCL SHELL_HELP_1(24) CHAR INIT('help ls dir ps run bg');
 DCL SHELL_HELP_2(24) CHAR INIT('df du mem stat uname');
 DCL SHELL_UNAME_TEXT(17) CHAR INIT('SWTOS COR24 0.1');
 DCL SHELL_CPU_HOG_NAME(8) CHAR INIT('cpu-hog');
@@ -559,62 +559,63 @@ SHELL_PS_COMMAND: PROC;
     END;
 END;
 
-SHELL_RUN_COMMAND: PROC;
+SHELL_RUN_LINE: PROC(JOIN INT);
+    /* Read a program name, then ignore the rest of the line.
+       The old parser demanded the exact characters "--tty=new" after a
+       space, so a line that stopped early left the shell blocked in
+       TASK_GETCHAR waiting for the ones that never came -- typing "run x --"
+       and pressing Enter hung it. A new terminal is the default now, so the
+       flag is accepted and ignored rather than required. Backspace edits the
+       name: it used to be stored as part of it, which made every correction
+       a lookup failure. */
     DCL CH BYTE;
     DCL VALID INT;
     DCL POS INT;
+    DCL IN_ARGS INT;
     DCL LINE_DONE INT;
     DCL DESC_PTR PTR;
     DCL RUN_NAME(17) CHAR;
-    DCL NEW_TTY INT;
     VALID = 1;
-    CALL TASK_GETCHAR(ADDR(CH));
-    IF (CH = 117) THEN VALID = VALID; ELSE VALID = 0;
-    CALL TASK_GETCHAR(ADDR(CH));
-    IF (CH = 110) THEN VALID = VALID; ELSE VALID = 0;
-    CALL TASK_GETCHAR(ADDR(CH));
-    IF (CH = 32) THEN VALID = VALID; ELSE VALID = 0;
     POS = 0;
-    NEW_TTY = 0;
+    IN_ARGS = 0;
     LINE_DONE = 0;
     CALL TASK_GETCHAR(ADDR(CH));
     DO WHILE (LINE_DONE = 0);
         IF (CH = 10) THEN LINE_DONE = 1;
         ELSE DO;
-            IF (CH = 13) THEN LINE_DONE = 1;
+        IF (CH = 13) THEN LINE_DONE = 1;
+        ELSE DO;
+            IF (CH = 32) THEN IN_ARGS = 1;
             ELSE DO;
-                IF (CH = 32) THEN DO;
-                    NEW_TTY = 1;
-                    CALL TASK_GETCHAR(ADDR(CH)); IF (CH = 45) THEN VALID = VALID; ELSE VALID = 0;
-                    CALL TASK_GETCHAR(ADDR(CH)); IF (CH = 45) THEN VALID = VALID; ELSE VALID = 0;
-                    CALL TASK_GETCHAR(ADDR(CH)); IF (CH = 116) THEN VALID = VALID; ELSE VALID = 0;
-                    CALL TASK_GETCHAR(ADDR(CH)); IF (CH = 116) THEN VALID = VALID; ELSE VALID = 0;
-                    CALL TASK_GETCHAR(ADDR(CH)); IF (CH = 121) THEN VALID = VALID; ELSE VALID = 0;
-                    CALL TASK_GETCHAR(ADDR(CH)); IF (CH = 61) THEN VALID = VALID; ELSE VALID = 0;
-                    CALL TASK_GETCHAR(ADDR(CH)); IF (CH = 110) THEN VALID = VALID; ELSE VALID = 0;
-                    CALL TASK_GETCHAR(ADDR(CH)); IF (CH = 101) THEN VALID = VALID; ELSE VALID = 0;
-                    CALL TASK_GETCHAR(ADDR(CH)); IF (CH = 119) THEN VALID = VALID; ELSE VALID = 0;
-                    CALL TASK_GETCHAR(ADDR(CH)); IF (CH = 10) THEN LINE_DONE = 1; ELSE DO;
-                        IF (CH = 13) THEN LINE_DONE = 1; ELSE VALID = 0;
+                IF (IN_ARGS = 0) THEN DO;
+                    IF (CH = 8) THEN DO;
+                        IF (POS = 0) THEN POS = POS; ELSE POS = POS - 1;
                     END;
-                END;
-                ELSE DO;
-                    IF (POS < 16) THEN DO;
-                        RUN_NAME(POS) = CH;
-                        POS = POS + 1;
+                    ELSE DO;
+                        IF (CH = 127) THEN DO;
+                            IF (POS = 0) THEN POS = POS; ELSE POS = POS - 1;
+                        END;
+                        ELSE DO;
+                            IF (POS < 16) THEN DO;
+                                RUN_NAME(POS) = CH;
+                                POS = POS + 1;
+                            END;
+                        END;
                     END;
-                    CALL TASK_GETCHAR(ADDR(CH));
                 END;
             END;
+            CALL TASK_GETCHAR(ADDR(CH));
+        END;
         END;
     END;
     RUN_NAME(POS) = 0;
+    IF (POS = 0) THEN VALID = 0;
     DESC_PTR = 0;
     IF (VALID = 1) THEN CALL TASK_CATALOG_FIND(ADDR(RUN_NAME), ADDR(DESC_PTR));
     IF (DESC_PTR = 0) THEN VALID = 0;
     IF (VALID = 1) THEN DO;
-        IF (NEW_TTY = 1) THEN CALL SHELL_RUN_SELECTED_NEW_TTY(DESC_PTR);
-        ELSE CALL SHELL_RUN_SELECTED(DESC_PTR);
+        IF (JOIN = 1) THEN CALL SHELL_RUN_SELECTED(DESC_PTR);
+        ELSE CALL SHELL_RUN_SELECTED_NEW_TTY(DESC_PTR);
     END;
     IF (VALID = 0) THEN DO;
         CALL UART_PUTCHAR(66);
@@ -623,6 +624,47 @@ SHELL_RUN_COMMAND: PROC;
         CALL UART_PUTCHAR(10);
     END;
 END;
+
+SHELL_RUN_COMMAND: PROC;
+    /* "run <name>" gives the program its own terminal, which is what a
+       person nearly always wants and used to need a flag to ask for. */
+    DCL CH BYTE;
+    DCL VALID INT;
+    VALID = 1;
+    CALL TASK_GETCHAR(ADDR(CH));
+    IF (CH = 117) THEN VALID = VALID; ELSE VALID = 0;
+    CALL TASK_GETCHAR(ADDR(CH));
+    IF (CH = 110) THEN VALID = VALID; ELSE VALID = 0;
+    CALL TASK_GETCHAR(ADDR(CH));
+    IF (CH = 32) THEN VALID = VALID; ELSE VALID = 0;
+    IF (VALID = 1) THEN CALL SHELL_RUN_LINE(0);
+    ELSE DO;
+        CALL UART_PUTCHAR(66);
+        CALL UART_PUTCHAR(65);
+        CALL UART_PUTCHAR(68);
+        CALL UART_PUTCHAR(10);
+    END;
+END;
+
+SHELL_BG_COMMAND: PROC;
+    /* "bg <name>" shares this terminal and waits for the program, which is
+       what plain "run" used to do. */
+    DCL CH BYTE;
+    DCL VALID INT;
+    VALID = 1;
+    CALL TASK_GETCHAR(ADDR(CH));
+    IF (CH = 103) THEN VALID = VALID; ELSE VALID = 0;
+    CALL TASK_GETCHAR(ADDR(CH));
+    IF (CH = 32) THEN VALID = VALID; ELSE VALID = 0;
+    IF (VALID = 1) THEN CALL SHELL_RUN_LINE(1);
+    ELSE DO;
+        CALL UART_PUTCHAR(66);
+        CALL UART_PUTCHAR(65);
+        CALL UART_PUTCHAR(68);
+        CALL UART_PUTCHAR(10);
+    END;
+END;
+
 
 PLSW_LAUNCHER: PROC(STATE_PTR PTR);
     DCL PRIVATE_STATE PTR;
@@ -648,6 +690,8 @@ PLSW_LAUNCHER: PROC(STATE_PTR PTR);
         IF (CH = 112) THEN CALL SHELL_PS_COMMAND;
         ELSE DO;
         IF (CH = 114) THEN CALL SHELL_RUN_COMMAND;
+        ELSE DO;
+        IF (CH = 98) THEN CALL SHELL_BG_COMMAND;
         ELSE DO;
         IF (CH = 49) THEN DO;
             CALL SHELL_RUN_SELECTED(PRIVATE_STATE->SPS_HELLO_DESC);
@@ -683,6 +727,7 @@ PLSW_LAUNCHER: PROC(STATE_PTR PTR);
                 END;
                 END;
             END;
+        END;
         END;
         END;
         END;
