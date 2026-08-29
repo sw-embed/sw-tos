@@ -42,6 +42,32 @@ enum TimeMode {
     Clock,
 }
 
+/// Which time services currently have a consumer running.
+///
+/// Both kinds can run at once, and each app advances only on the tick for its
+/// own program, so a single active mode is not enough: sending only uptime
+/// ticks leaves every spawned clock waiting forever.
+#[derive(Clone, Copy, Debug, Default, PartialEq)]
+struct TimeModes {
+    uptime: bool,
+    clock: bool,
+}
+
+impl TimeModes {
+    fn any(self) -> bool {
+        self.uptime || self.clock
+    }
+
+    fn active(self) -> impl Iterator<Item = TimeMode> {
+        [
+            self.uptime.then_some(TimeMode::Uptime),
+            self.clock.then_some(TimeMode::Clock),
+        ]
+        .into_iter()
+        .flatten()
+    }
+}
+
 #[derive(Deserialize, Serialize)]
 struct SavedPane {
     kind: PaneKind,
@@ -906,7 +932,7 @@ fn run_windows(options: &Options) -> io::Result<()> {
     let mut next_scheduler_heartbeat = Instant::now();
     let mut next_hello_retry = Instant::now() + Duration::from_millis(250);
     let mut next_time_frames = Instant::now();
-    let mut time_mode = None;
+    let mut time_modes = TimeModes::default();
 
     // Nothing precedes this frontend on a first attach, so the target's boot
     // output is not stale: render it instead of dropping it.
@@ -1005,12 +1031,9 @@ fn run_windows(options: &Options) -> io::Result<()> {
                     }
                     StreamItem::Frame(frame) if frame.kind == FrameType::ResourceSnapshot => {
                         if resources.push(&frame.payload, Instant::now()) {
-                            time_mode = if resources.has_process_named("upti") {
-                                Some(TimeMode::Uptime)
-                            } else if resources.has_process_named("cloc") {
-                                Some(TimeMode::Clock)
-                            } else {
-                                None
+                            time_modes = TimeModes {
+                                uptime: resources.has_process_named("upti"),
+                                clock: resources.has_process_named("cloc"),
                             };
                             resource_lines = resources.render(Instant::now());
                             desktop.set_resources(&resource_lines);
@@ -1240,15 +1263,14 @@ fn run_windows(options: &Options) -> io::Result<()> {
             serial.flush()?;
             next_hello_retry = now + Duration::from_millis(250);
         }
-        if connection.mode() == Mode::Framed
-            && let Some(mode) = time_mode
-            && now >= next_time_frames
-        {
-            let tick = match mode {
-                TimeMode::Uptime => connected.elapsed().as_millis() as u32 / 10,
-                TimeMode::Clock => wall_centiseconds(),
-            } & 0x00ff_ffff;
-            serial.write_all(&multiplexed_time_frame(mode, tick))?;
+        if connection.mode() == Mode::Framed && time_modes.any() && now >= next_time_frames {
+            for mode in time_modes.active() {
+                let tick = match mode {
+                    TimeMode::Uptime => connected.elapsed().as_millis() as u32 / 10,
+                    TimeMode::Clock => wall_centiseconds(),
+                } & 0x00ff_ffff;
+                serial.write_all(&multiplexed_time_frame(mode, tick))?;
+            }
             serial.flush()?;
             next_time_frames = now + Duration::from_secs(1);
         }

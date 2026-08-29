@@ -2496,10 +2496,16 @@ _task_process_list_units:
         lc      r1,1
         ceq     r0,r1
         brt     _task_process_list_runnable
+        lc      r1,7
+        ceq     r0,r1
+        brt     _task_process_list_blocked
         la      r0,_state_unknown
         bra     _task_process_list_state
 _task_process_list_free:
         la      r0,_state_free
+        bra     _task_process_list_state
+_task_process_list_blocked:
+        la      r0,_state_blocked
         bra     _task_process_list_state
 _task_process_list_runnable:
         la      r0,_state_runnable
@@ -4421,31 +4427,47 @@ _protocol_time_check_length:
         lw      r0,0(r2)
         lc      r1,3
         ceq     r0,r1
-        brt     _protocol_time_check_foreground
+        brt     _protocol_time_select
         la      r2,_protocol_time_done
         jmp     (r2)
-_protocol_time_check_foreground:
-        la      r2,_tty_foreground_proc
-        lw      r2,0(r2)
-        lw      r0,33(r2)
+; Every process running the named program receives the tick, not just the one
+; in the foreground pane. These apps are driven entirely by TASK_GETCHAR, so
+; delivering only to the focused pane left every other spawned clock blocked
+; in the kernel forever and only one pane ever advanced.
+_protocol_time_select:
         la      r2,_PROTOCOL_RX_TYPE
-        lbu     r1,0(r2)
-        lc      r2,6
-        ceq     r1,r2
-        brf     _protocol_time_check_clock_proc
-        la      r2,_scheduled_uptime_descriptor
-        ceq     r0,r2
-        brt     _protocol_time_valid
-        la      r2,_protocol_time_done
+        lbu     r0,0(r2)
+        lc      r1,6
+        ceq     r0,r1
+        brf     _protocol_time_clock_kind
+        la      r0,_scheduled_uptime_descriptor
+        bra     _protocol_time_kind_ready
+_protocol_time_clock_kind:
+        la      r0,_scheduled_clock_descriptor
+_protocol_time_kind_ready:
+        la      r2,_protocol_time_descriptor
+        sw      r0,0(r2)
+        la      r0,_proc_table
+        la      r2,_protocol_time_slot
+        sw      r0,0(r2)
+_protocol_time_slot_loop:
+        la      r2,_protocol_time_slot
+        lw      r2,0(r2)
+        lw      r0,24(r2)
+        ceq     r0,z
+        brf     _protocol_time_slot_program
+        la      r2,_protocol_time_slot_next
         jmp     (r2)
-_protocol_time_check_clock_proc:
-        la      r2,_scheduled_clock_descriptor
-        ceq     r0,r2
+_protocol_time_slot_program:
+        lw      r0,33(r2)
+        la      r1,_protocol_time_descriptor
+        lw      r1,0(r1)
+        ceq     r0,r1
         brt     _protocol_time_valid
-        la      r2,_protocol_time_done
+        la      r2,_protocol_time_slot_next
         jmp     (r2)
 _protocol_time_valid:
-        la      r2,_tty_foreground_proc
+        la      r2,_protocol_time_slot
         lw      r0,0(r2)
         la      r2,_tty_poll_proc
         sw      r0,0(r2)
@@ -4477,7 +4499,10 @@ _protocol_time_payload_loop:
         mov     r0,r1
         lc      r1,3
         ceq     r0,r1
-        brt     _protocol_time_done
+        brf     _protocol_time_payload_byte
+        la      r2,_protocol_time_slot_next
+        jmp     (r2)
+_protocol_time_payload_byte:
         la      r2,_protocol_payload_index
         lw      r1,0(r2)
         la      r2,_PROTOCOL_RX_PAYLOAD
@@ -4512,6 +4537,18 @@ _protocol_time_payload_next:
         add     r0,1
         sw      r0,0(r2)
         bra     _protocol_time_payload_loop
+_protocol_time_slot_next:
+        la      r2,_protocol_time_slot
+        lw      r0,0(r2)
+        lcu     r1,172          ; one slot; see the add-immediate note above
+        add     r0,r1
+        la      r1,_proc_table_end
+        ceq     r0,r1
+        brt     _protocol_time_done
+        la      r2,_protocol_time_slot
+        sw      r0,0(r2)
+        la      r2,_protocol_time_slot_loop
+        jmp     (r2)
 _protocol_time_done:
         pop     r2
         pop     r1
@@ -4713,6 +4750,10 @@ _protocol_resource_proc:
 _protocol_resource_stats:
         .zero   3
 _protocol_payload_index:
+        .zero   3
+_protocol_time_descriptor:
+        .zero   3
+_protocol_time_slot:
         .zero   3
 _protocol_tx_byte:
         .byte   0
@@ -4926,6 +4967,8 @@ _state_free:
         .byte   70,82,69,69,0
 _state_runnable:
         .byte   82,85,78,78,65,66,76,69,0
+_state_blocked:
+        .byte   66,76,79,67,75,69,68,0
 _state_unknown:
         .byte   85,78,75,78,79,87,78,0
 _provider_bounds_message:
