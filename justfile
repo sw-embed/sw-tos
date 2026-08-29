@@ -360,6 +360,10 @@ preemption-acceptance: scheduled-shell-build cor24-debugger-build
 fill-demo-acceptance: scheduled-shell-build cor24-debugger-build
     python3 tests/test-fill-demo-acceptance.py
 
+# Drive a live windowed session through many interactions and require it to survive
+tui-soak: scheduled-shell-build cor24-debugger-build te-rs-release
+    python3 tests/test-tui-soak.py
+
 # Read a configured DS1307 RTC through the COR24 I2C HAL from PL/SW
 i2c-ds1307-smoke:
     ./tests/test-i2c-ds1307.sh

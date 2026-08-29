@@ -393,19 +393,25 @@ SHELL_FILL_DEMO: PROC(STATE_PTR PTR);
        both keep printing, which makes every pane visibly live; neither joins,
        so the shell stays usable while they run.
 
-       Two cpu-hogs go in first. They never yield, so the clocks that follow
-       keep printing only if forced preemption is working: the demo shows the
-       table filled and the scheduler holding up under a load that cooperative
-       scheduling alone could not survive. The hogs are found by catalog name
-       rather than held in the shell's private state, which keeps the spawn
-       state the boot code fills unchanged. */
+       Two cpu-hogs go in first, but only when a framed frontend is attached.
+       They never yield, so the clocks that follow keep printing only if
+       forced preemption is working, and forced preemption needs the heartbeat
+       that only such a frontend sends. Under a bare UART the same two
+       processes would take the CPU and never give it back, so there the table
+       fills with clocks alone. The hogs are found by catalog name rather than
+       held in the shell's private state, which keeps the spawn state the boot
+       code fills unchanged. */
     DCL PRIVATE_STATE PTR;
     DCL SPAWN_STATUS INT;
     DCL WHICH INT;
     DCL HOG_DESC PTR;
+    DCL FRAMED INT;
     PRIVATE_STATE = STATE_PTR;
     HOG_DESC = 0;
-    CALL TASK_CATALOG_FIND(ADDR(SHELL_CPU_HOG_NAME), ADDR(HOG_DESC));
+    FRAMED = 0;
+    CALL TASK_FRONTEND_ATTACHED(ADDR(FRAMED));
+    IF (FRAMED = 0) THEN HOG_DESC = 0;
+    ELSE CALL TASK_CATALOG_FIND(ADDR(SHELL_CPU_HOG_NAME), ADDR(HOG_DESC));
     IF (HOG_DESC = 0) THEN HOG_DESC = 0;
     ELSE DO;
         SPAWN_STATUS = 0;

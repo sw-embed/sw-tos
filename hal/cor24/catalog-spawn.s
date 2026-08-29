@@ -414,6 +414,27 @@ _TASK_SPAWN_RESULT:
         pop     fp
         jmp     (r1)
 
+; TASK_FRONTEND_ATTACHED(destination): report whether a framed frontend drives
+; this target (1) or it is running on a bare UART (0). Only a framed frontend
+; sends the heartbeat, and the heartbeat is what forces preemption, so a
+; process that never yields is survivable in the first case and fatal in the
+; second.
+        .globl  _TASK_FRONTEND_ATTACHED
+_TASK_FRONTEND_ATTACHED:
+        push    fp
+        push    r2
+        push    r1
+        mov     fp,sp
+        la      r2,_protocol_framed_mode
+        lbu     r0,0(r2)
+        lw      r2,9(fp)
+        sw      r0,0(r2)
+        mov     sp,fp
+        pop     r1
+        pop     r2
+        pop     fp
+        jmp     (r1)
+
 ; Test assertion for the two-child SPI proof: each live process must retain its
 ; own descriptor snapshot, and those snapshots must describe distinct extents.
         .globl  _TASK_DESCRIPTOR_SNAPSHOT_VERIFY

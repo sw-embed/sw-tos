@@ -18,6 +18,7 @@ RECIPES=(
     preemption-runway-smoke
     preemption-acceptance
     fill-demo-acceptance
+    tui-soak
     acceptance-report-smoke
     provider-config-smoke
     proc-desc-abi-smoke
