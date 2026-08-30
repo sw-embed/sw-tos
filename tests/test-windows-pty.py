@@ -347,7 +347,11 @@ def normal_path():
     os.write(tty_master, b"\x01y")
 
     os.write(serial_master, frame(3, 2, b"Counter"))
-    assert b"Counter ep=3 *" in read_until(tty_master, b"Counter ep=3 *"), "dynamic channel open"
+    # The pane appears without taking focus: a launch must leave the keyboard
+    # where it was, or the next command goes into the new program's pane.
+    opened = read_until(tty_master, b"Counter ep=3")
+    assert b"Counter ep=3" in opened, "dynamic channel open"
+    assert b"Counter ep=3 *" not in opened, "a new pane must not steal focus"
     os.write(tty_master, b"\x011")
     assert b"Shell *" in read_until(tty_master, b"Shell *"), "focus before background output"
     os.write(serial_master, frame(2, 2, b"count 1\n"))
@@ -387,7 +391,7 @@ def normal_path():
     # Fifty columns leaves twenty-five per pane, so a long name and its
     # endpoint cannot both survive; the pane numbers must.
     resized = read_until(tty_master, b"1 v Shell", 2.0)
-    assert b"1 v Shell" in resized and b"4 v mon" in resized, "resize/focus render"
+    assert b"1 v Shell" in resized and b"4 v Resources" in resized, "resize/focus render"
     os.write(tty_master, b"\x01z\x01?\x01?\x01z")
     time.sleep(0.1)
     os.write(tty_master, b"\x01d")

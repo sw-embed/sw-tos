@@ -17,7 +17,7 @@ Run one with `just <recipe>`.
 | Fill every process slot | menu `9` | `fill-demo-acceptance`, `scheduled-sixteen-smoke` |
 | Refuse a spawn with no free slot | `run` on a full table | `scheduled-sixteen-smoke` |
 | Kill a process from the shell | `kill <ep>`, `kill ep=<n>` | `debugger-kill-acceptance` |
-| Kill a process from the debugger | `kill <ep>` | `debugger-kill-acceptance` |
+| Kill a process from the debugger | `!kill <ep>` | `tui-soak` |
 | Reuse the slot a kill freed | `run` after `kill` | `debugger-kill-acceptance` |
 | Refuse to kill the shell | `kill 1` | `debugger-kill-acceptance`, `test-shell-command-parsing` |
 | Stop an app from its pane | Escape | `tui-soak` |
@@ -73,6 +73,7 @@ Run one with `just <recipe>`.
 | Registers of any endpoint | `regs <ep>` | `emulator-debugger-smoke` |
 | Breakpoints, stepping, backtrace | `break` `step` `next` `bt` | `emulator-debugger-smoke` |
 | Read memory | `x <addr>` | `emulator-debugger-smoke` |
+| Run any shell command from the debugger | `!ps -l`, `!bg mon`, `!kill 3` | `tui-soak` |
 | Memory map | `map hw|plan|live` | `debug-info-smoke` |
 | Symbols and source | `sym`, `list`, `dis` | `debug-info-smoke` |
 
@@ -101,6 +102,15 @@ No recipe covers these yet. They are real behaviours, not hypotheticals.
   image.
 - **Transport-loss reporting.** The frontend's crash report and session log are
   not asserted anywhere.
+- **Typed commands can be dropped by the frontend.** Several commands typed
+  in quick succession sometimes reach the target as one: at the protocol level
+  three consecutive `bg` commands all start, through te-rs sometimes only one
+  does. The shell is not at fault; the loss is in the frontend's input path.
+- **No line editing except in a name.** `run`, `bg` and `kill` honour
+  backspace, but the other commands still match character by character as they
+  arrive, so a typo in `ps -l` or `stat hello` cannot be corrected. The fix is
+  for the shell to read a whole line into a buffer, edit it, and only then
+  dispatch.
 - **No blocking launch.** Every launch returns to the prompt, so there is no
   way to say "run this and tell me when it is done". `run` and `bg` are
   synonyms; a waiting form would be a new `fg`.

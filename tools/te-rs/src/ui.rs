@@ -43,8 +43,9 @@ impl PaneKind {
             Self::Shell => "Shell",
             Self::Application => "Application",
             Self::Debugger => "Debugger",
-            // Named for the mon program that reports the same figures.
-            Self::Resources => "mon",
+            // Not "mon": that is the program, which holds a slot and can be
+            // killed. Two things with one name on screen is one too many.
+            Self::Resources => "Resources",
         }
     }
 
@@ -313,10 +314,15 @@ impl Desktop {
         }
     }
 
+    /// Open (or rename) the pane for a channel, without taking focus.
+    ///
+    /// A new pane used to grab focus, which made launching two programs in a
+    /// row impossible: the second command was typed into the first program's
+    /// pane. Background means the prompt keeps the keyboard, so the pane
+    /// appears and the user decides when to look at it.
     pub fn add_application(&mut self, channel: u8, title: impl Into<String>) -> usize {
         if let Some(index) = self.panes.iter().position(|pane| pane.channel == channel) {
             self.panes[index].title = title.into();
-            self.focus = index;
             return index;
         }
         self.panes.push(Pane::new(
@@ -325,8 +331,7 @@ impl Desktop {
             title,
             DEFAULT_SCROLLBACK,
         ));
-        self.focus = self.panes.len() - 1;
-        self.focus
+        self.panes.len() - 1
     }
 
     /// Put back any system pane that has been closed.
@@ -894,10 +899,10 @@ mod tests {
         assert!(top_left.contains("1 v Shell"), "{top_left}");
         assert!(top_right.contains("2 v Application"), "{top_right}");
         assert!(low_left.contains("3 v Debugger"), "{low_left}");
-        assert!(low_right.contains("4 v mon"), "{low_right}");
+        assert!(low_right.contains("4 v Resources"), "{low_right}");
 
         // No name appears twice anywhere on the screen's rules.
-        for name in ["Shell", "Application", "Debugger", "mon"] {
+        for name in ["Shell", "Application", "Debugger", "Resources"] {
             let seen: usize = rules.iter().map(|rule| rule.matches(name).count()).sum();
             assert_eq!(seen, 1, "{name} named {seen} times");
         }
@@ -916,7 +921,7 @@ mod tests {
             .lines()
             .filter(|line| line.starts_with('-'))
             .collect();
-        assert!(rules[1].contains("4 v mon *"), "{}", rules[1]);
+        assert!(rules[1].contains("4 v Resources *"), "{}", rules[1]);
         assert!(!rules[0].contains("1 v Shell *"), "{}", rules[0]);
     }
 
@@ -932,7 +937,7 @@ mod tests {
         assert!(large.contains("application"));
         let small = desktop.render(40, 12);
         assert!(small.contains("Shell *"));
-        assert!(small.contains("mon"));
+        assert!(small.contains("Resources"));
     }
 
     #[test]

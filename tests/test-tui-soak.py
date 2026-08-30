@@ -232,6 +232,31 @@ def main():
 
         # Fill every slot, then require the frontend to have opened a pane per
         # process rather than folding them together.
+        # Several launches in a row, typed at the prompt without touching the
+        # keyboard focus in between. A new pane used to take focus, so the
+        # second command went into the first program's pane and only one
+        # program ever started.
+        # Wait for the monitor's first report: it proves the target is up and
+        # exchanging snapshots, which is when typed input starts landing.
+        session.wait_for("ep=2", timeout=30)
+        # The monitor's first report says the link is up; give it a moment to
+        # be reading input as well before typing at it.
+        time.sleep(3)
+        # A launch must leave the keyboard where it was. A new pane used to
+        # take focus, so a second command went into the first program's pane
+        # and never reached the shell at all.
+        before_panes = session.panes()
+        session.send(b"bg clock\r", settle=8.0)
+        grew = time.monotonic() + 20
+        while session.panes() <= before_panes and time.monotonic() < grew:
+            require(session.running(), "bg launch")
+            time.sleep(0.2)
+        require(session.panes() > before_panes, "bg opens a pane",
+                f"panes stayed at {session.panes()}")
+        require("focus:Shell" in session.screen(), "bg leaves the prompt focused",
+                session.screen()[-400:])
+        step("bg leaves the prompt focused")
+
         # Four base panes plus one per process that prints. The hogs never
         # print, so they are the two slots without a pane of their own.
         #
@@ -300,10 +325,26 @@ def main():
         session.send(b"regs 2\r", settle=2.0)
         step("debugger regs")
 
+        # "!<command>" hands a line to the shell, so process management has
+        # one spelling rather than two kept in step by hand. ps is the right
+        # probe here: the table is full by now, so anything that needs a slot
+        # would be refused for reasons of its own.
+        session.send(b"!ps\r", settle=5.0)
+        answered = re.compile(r"\d+ (RUNNABLE|BLOCKED|FREE)")
+        seen = time.monotonic() + 20
+        while not answered.search(session.screen()) and time.monotonic() < seen:
+            require(session.running(), "debugger ! escape")
+            time.sleep(0.2)
+        require(answered.search(session.screen()), "debugger ! escape reaches the shell",
+                session.screen()[-600:])
+        require("focus:Debugger" in session.screen(), "! leaves the debugger focused",
+                session.screen()[-400:])
+        step("debugger ! escape")
+
         # Resources must show the hogs being forcibly preempted, and the count
         # must keep climbing: that is what keeps every other pane scheduled.
         session.command(b"4", settle=1.0)
-        require("focus:mon" in session.screen(), "focus reaches the monitor pane",
+        require("focus:Resources" in session.screen(), "focus reaches the monitor pane",
                 session.screen()[-400:])
         # Zoom first: in a shared column the process lines are cut off well
         # before the fp= field, so the unzoomed pane cannot answer this.

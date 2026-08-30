@@ -931,6 +931,10 @@ fn run_windows(options: &Options) -> io::Result<()> {
     let mut next_resource_request = Instant::now();
     let mut next_scheduler_heartbeat = Instant::now();
     let mut next_hello_retry = Instant::now() + Duration::from_millis(250);
+    //: Characters still to type on the shell's behalf, one per pass. A burst
+    //: overruns the target's input ring and is dropped without trace; this
+    //: loop's own cadence is the pacing a person would have provided.
+    let mut injected: Vec<u8> = Vec::new();
     let mut next_time_frames = Instant::now();
     let mut time_modes = TimeModes::default();
 
@@ -1176,6 +1180,26 @@ fn run_windows(options: &Options) -> io::Result<()> {
                     match byte {
                         b'\r' | b'\n' => {
                             desktop.push_channel(254, b"\n");
+                            // "!<command>" is the shell, so process management
+                            // lives in one place instead of being spelled
+                            // differently in two. The reply appears in the
+                            // shell's pane, which is where that shell's output
+                            // has always gone.
+                            if let Some(command) = debug_input.strip_prefix('!') {
+                                let command = command.trim().to_string();
+                                let note = if command.is_empty() {
+                                    "usage: !<shell command>, e.g. !ps -l".to_string()
+                                } else {
+                                    injected = command.into_bytes();
+                                    injected.push(b'\n');
+                                    "sent to the shell; its reply is in the shell pane"
+                                        .to_string()
+                                };
+                                desktop.push_channel(254, format!("{note}\n").as_bytes());
+                                debug_input.clear();
+                                dirty = true;
+                                continue;
+                            }
                             let result = debugger.command(&debug_input, resources.snapshot());
                             debug_input.clear();
                             for line in result.lines {
@@ -1293,6 +1317,11 @@ fn run_windows(options: &Options) -> io::Result<()> {
             }
             serial.flush()?;
             next_time_frames = now + Duration::from_secs(1);
+        }
+        if connection.mode() == Mode::Framed && !injected.is_empty() {
+            let byte = injected.remove(0);
+            serial.write_all(&multiplexed_input_frame(0, &[byte]))?;
+            serial.flush()?;
         }
         if connection.mode() == Mode::Framed && !debug_identity_sent {
             serial.write_all(&debug_request_frame(identity_request()))?;

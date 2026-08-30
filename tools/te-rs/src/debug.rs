@@ -345,19 +345,13 @@ impl DebugConsole {
             ["step"] | ["s"] => Ok(request("stepping one instruction", vec![9])),
             ["next"] | ["n"] => Ok(request("stepping over call", vec![10])),
             ["bt"] => Ok(request("requesting ABI backtrace", vec![11])),
-            // Accept the "ep=2" spelling the monitor and ps display, so a
-            // number on screen can be typed back as it appears.
-            ["kill", endpoint] => endpoint
-                .strip_prefix("ep=")
-                .unwrap_or(endpoint)
-                .parse::<u8>()
-                .map(|endpoint| {
-                    request(&format!("killing endpoint {endpoint}"), vec![13, endpoint])
-                })
-                .map_err(|_| "endpoint must be decimal".to_string()),
+            // kill is the shell's, reached from here as "!kill <ep>". One
+            // spelling for managing processes beats two that must be kept in
+            // step with each other.
+            ["kill", ..] => Ok(text("use !kill <endpoint>, which the shell answers")),
             ["detach"] => Ok(request("detaching from emulator", vec![12])),
             ["help"] | [] => Ok(text(
-                "map [hw|plan|live] | sym NAME | list LOC | dis LOC [N] | regs [EP] | x ADDR [N] | kill EP | pause | continue | break LOC | bl | delete LOC | step | next | bt | detach",
+                "map [hw|plan|live] | sym NAME | list LOC | dis LOC [N] | regs [EP] | x ADDR [N] | pause | continue | break LOC | bl | delete LOC | step | next | bt | detach | !<shell command>",
             )),
             _ => Err("unknown debugger command; use help".into()),
         };
