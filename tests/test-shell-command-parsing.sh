@@ -47,9 +47,11 @@ expect "the retired --tty=new flag is still accepted" \
 expect "backspace corrects a mistyped name" \
     'bg helloX\bo\b\n' 'Hello'
 
-# The prompt comes back after a program that waits for a key finishes.
-# (Raw input follows the newest child here, so the space dismisses hello.)
-expect "the prompt returns after bg" \
+# bg is the ampersand: the program gets its own terminal and the prompt
+# stays free. hello sits waiting for a key in its pane, and the shell must
+# answer the next command anyway. (Raw input follows the newest child here,
+# so the space is what hello is waiting for.)
+expect "bg leaves the prompt free" \
     'bg hello\n \nuname\n' 'SWTOS COR24'
 
 # The shell may not kill itself, however it is asked.

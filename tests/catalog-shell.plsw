@@ -559,7 +559,7 @@ SHELL_PS_COMMAND: PROC;
     END;
 END;
 
-SHELL_RUN_LINE: PROC(JOIN INT);
+SHELL_RUN_LINE: PROC;
     /* Read a program name, then ignore the rest of the line.
        The old parser demanded the exact characters "--tty=new" after a
        space, so a line that stopped early left the shell blocked in
@@ -613,10 +613,7 @@ SHELL_RUN_LINE: PROC(JOIN INT);
     DESC_PTR = 0;
     IF (VALID = 1) THEN CALL TASK_CATALOG_FIND(ADDR(RUN_NAME), ADDR(DESC_PTR));
     IF (DESC_PTR = 0) THEN VALID = 0;
-    IF (VALID = 1) THEN DO;
-        IF (JOIN = 1) THEN CALL SHELL_RUN_SELECTED(DESC_PTR);
-        ELSE CALL SHELL_RUN_SELECTED_NEW_TTY(DESC_PTR);
-    END;
+    IF (VALID = 1) THEN CALL SHELL_RUN_SELECTED_NEW_TTY(DESC_PTR);
     IF (VALID = 0) THEN DO;
         CALL UART_PUTCHAR(66);
         CALL UART_PUTCHAR(65);
@@ -742,8 +739,11 @@ SHELL_KILL_COMMAND: PROC;
 END;
 
 SHELL_RUN_COMMAND: PROC;
-    /* "run <name>" gives the program its own terminal, which is what a
-       person nearly always wants and used to need a flag to ask for. */
+    /* "run <name>" gives the program its own terminal and returns to the
+       prompt. Nothing waits: a launch used to block the shell until the
+       program exited, which with a pane per process only meant the prompt
+       looked wedged while the program sat in its own pane waiting for a
+       key. */
     DCL CH BYTE;
     DCL VALID INT;
     VALID = 1;
@@ -753,7 +753,7 @@ SHELL_RUN_COMMAND: PROC;
     IF (CH = 110) THEN VALID = VALID; ELSE VALID = 0;
     CALL TASK_GETCHAR(ADDR(CH));
     IF (CH = 32) THEN VALID = VALID; ELSE VALID = 0;
-    IF (VALID = 1) THEN CALL SHELL_RUN_LINE(0);
+    IF (VALID = 1) THEN CALL SHELL_RUN_LINE;
     ELSE DO;
         CALL UART_PUTCHAR(66);
         CALL UART_PUTCHAR(65);
@@ -763,8 +763,14 @@ SHELL_RUN_COMMAND: PROC;
 END;
 
 SHELL_BG_COMMAND: PROC;
-    /* "bg <name>" shares this terminal and waits for the program, which is
-       what plain "run" used to do. */
+    /* "bg <name>" is the ampersand: the program gets a terminal of its own
+       and the prompt stays free. A program that waits for a key blocks its
+       own pane, which is where the key belongs, and never this one.
+
+       It is a synonym for "run", because that is now true of every launch.
+       A launch used to block the shell until the program exited, which only
+       made the prompt look wedged while the program sat in another pane
+       waiting for input nobody could send it there. */
     DCL CH BYTE;
     DCL VALID INT;
     VALID = 1;
@@ -772,7 +778,7 @@ SHELL_BG_COMMAND: PROC;
     IF (CH = 103) THEN VALID = VALID; ELSE VALID = 0;
     CALL TASK_GETCHAR(ADDR(CH));
     IF (CH = 32) THEN VALID = VALID; ELSE VALID = 0;
-    IF (VALID = 1) THEN CALL SHELL_RUN_LINE(1);
+    IF (VALID = 1) THEN CALL SHELL_RUN_LINE;
     ELSE DO;
         CALL UART_PUTCHAR(66);
         CALL UART_PUTCHAR(65);

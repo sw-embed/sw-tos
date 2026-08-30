@@ -12,7 +12,7 @@ Run one with `just <recipe>`.
 | --- | --- | --- |
 | See what programs exist | `ls`, `stat <name>`, `df`, `du` | `scheduled-catalog-smoke` |
 | Run a program in its own pane | `run <name>` | `debugger-kill-acceptance`, `scheduled-shell-smoke` |
-| Run a program and wait for it | `bg <name>` | `test-shell-command-parsing`, `catalog-run-smoke` |
+| Start a program without blocking the prompt | `bg <name>` (same as `run`) | `test-shell-command-parsing`, `catalog-run-smoke` |
 | Launch from the menu | keys `1`-`6` | `scheduled-shell-smoke` |
 | Fill every process slot | menu `9` | `fill-demo-acceptance`, `scheduled-sixteen-smoke` |
 | Refuse a spawn with no free slot | `run` on a full table | `scheduled-sixteen-smoke` |
@@ -101,6 +101,6 @@ No recipe covers these yet. They are real behaviours, not hypotheticals.
   image.
 - **Transport-loss reporting.** The frontend's crash report and session log are
   not asserted anywhere.
-- **`bg` naming.** `bg` waits for the program and `run` does not, which is the
-  opposite of the usual meaning; every process has its own channel now, so the
-  two differ only in whether the shell blocks.
+- **No blocking launch.** Every launch returns to the prompt, so there is no
+  way to say "run this and tell me when it is done". `run` and `bg` are
+  synonyms; a waiting form would be a new `fg`.
