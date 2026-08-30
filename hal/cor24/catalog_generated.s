@@ -69,7 +69,7 @@ _scheduled_mon_descriptor:
         .word   0
         .word   256
         .word   4
-        .word   1
+        .word   9
 _scheduled_mon_name:
         .byte   109,111,110,0
 
@@ -231,3 +231,5 @@ _SHELL_DU_TEXT_1:
         .byte   101,109,98,101,100,100,101,100,45,112,105,110,103,32,52,53,32,98,121,116,101,115,0
 _SHELL_DU_TEXT_2:
         .byte   99,112,117,45,104,111,103,32,51,54,32,98,121,116,101,115,0
+_SHELL_AUTOSTART_NAME_0:
+        .byte   109,111,110,0

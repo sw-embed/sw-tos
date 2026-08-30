@@ -165,7 +165,16 @@ def main():
         transport.send(12, b"SWT1")
         assert transport.receive() == (13, 0, b"SWT1"), "adapter did not greet"
 
-        tick = 1
+        # The monitor starts itself when a frontend attaches, with nothing
+        # typed. Nothing at boot can know one is coming, so the kernel wakes
+        # the shell on HELLO and the shell runs its startup list.
+        tick = pump(transport, tick_start := 1, 200, output)
+        assert tick_start == 1
+        tick, booted = slot_states(transport, tick)
+        assert booted.get(2), f"the monitor did not start itself: {booted}"
+        assert b"mon" in bytes(output.get(1, b"")), (
+            f"the monitor produced nothing: {bytes(output.get(1, b''))!r}")
+
         for command in (b"run clock --tty=new\r", b"run uptime --tty=new\r",
                         b"run cpu-hog --tty=new\r"):
             type_line(transport, command)

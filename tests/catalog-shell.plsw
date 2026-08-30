@@ -625,6 +625,55 @@ SHELL_RUN_LINE: PROC(JOIN INT);
     END;
 END;
 
+SHELL_STARTUP_NOTHING: PROC;
+    /* No program in this catalog asks to be started. */
+    DCL IGNORED INT;
+    IGNORED = 0;
+END;
+
+SHELL_START_ONCE: PROC(NAME_PTR PTR);
+    /* Start a catalog program unless it is already running.
+       Idempotent on purpose: this runs whenever a frontend attaches, and a
+       reconnect must not stack a second copy on the first. */
+    DCL DESC_PTR PTR;
+    DCL EP INT;
+    DCL RUNNING INT;
+    DCL SPAWN_STATUS INT;
+    DCL 1 PROC_INFO,
+        3 SPI_STATE INT,
+        3 SPI_BLOCKED INT,
+        3 SPI_STACK_WORDS INT,
+        3 SPI_STATE_WORDS INT,
+        3 SPI_DISPATCH INT,
+        3 SPI_YIELDS INT,
+        3 SPI_IPC INT,
+        3 SPI_TTY_IN INT,
+        3 SPI_TTY_OUT INT,
+        3 SPI_DESCRIPTOR PTR;
+    DESC_PTR = 0;
+    CALL TASK_CATALOG_FIND(NAME_PTR, ADDR(DESC_PTR));
+    IF (DESC_PTR = 0) THEN DESC_PTR = 0;
+    ELSE DO;
+        RUNNING = 0;
+        EP = 1;
+        DO WHILE (EP < 17);
+            CALL TASK_PROCESS_INFO(EP, ADDR(PROC_INFO));
+            IF (PROC_INFO.SPI_STATE = 0) THEN EP = EP;
+            ELSE DO;
+                IF (PROC_INFO.SPI_DESCRIPTOR = DESC_PTR) THEN RUNNING = 1;
+            END;
+            EP = EP + 1;
+        END;
+        IF (RUNNING = 0) THEN DO;
+            CALL TASK_SPAWN(DESC_PTR);
+            CALL TASK_SPAWN_RESULT(ADDR(SPAWN_STATUS));
+            /* A spawn hands input focus to the child. Nobody asked for this
+               one, so the prompt keeps it. */
+            CALL TASK_CLAIM_FOREGROUND;
+        END;
+    END;
+END;
+
 SHELL_KILL_COMMAND: PROC;
     /* "kill <endpoint>" ends a process without leaving the shell. It shares
        the kernel routine the debugger's kill uses, so both agree on what may
@@ -742,6 +791,11 @@ PLSW_LAUNCHER: PROC(STATE_PTR PTR);
     DO WHILE (DONE = 0);
         CALL SHELL_MENU;
         CALL TASK_GETCHAR(ADDR(CH));
+        /* A bare newline is how the kernel wakes this prompt when a frontend
+           attaches, which is the first moment anything can know one exists.
+           Typing Enter does the same and is harmless. */
+        IF (CH = 10) THEN CALL SHELL_GENERATED_AUTOSTART;
+        ELSE DO;
         IF (CH = 104) THEN CALL SHELL_HELP_COMMAND;
         ELSE DO;
         IF (CH = 100) THEN CALL SHELL_D_COMMAND;
@@ -796,6 +850,7 @@ PLSW_LAUNCHER: PROC(STATE_PTR PTR);
                 END;
                 END;
             END;
+        END;
         END;
         END;
         END;

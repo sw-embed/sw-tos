@@ -37,8 +37,9 @@ MAP = ROOT / "build/scheduled-shell/program.debug.json"
 
 ROWS, COLUMNS = 50, 200
 #: Shell, Application, Debugger and the monitor pane, plus one per printing
-#: child. The two cpu-hogs print nothing, so they contribute no pane.
-EXPECTED_PANES = 4 + 13
+#: child beyond the monitor, which starts itself into the Application pane.
+#: The two cpu-hogs print nothing, so they contribute no pane.
+EXPECTED_PANES = 4 + 12
 PREFIX = b"\x01"  # Ctrl-A
 #: Whole session budget. A hang is a failure, not something to wait out.
 BUDGET = 300

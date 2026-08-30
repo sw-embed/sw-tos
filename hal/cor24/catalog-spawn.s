@@ -3642,6 +3642,17 @@ _protocol_ack_loop:
         add     r1,-1
         ceq     r1,z
         brf     _protocol_ack_loop
+        ; Wake the shell with a newline so it can run its startup programs.
+        ; Nothing at boot can know a frontend is coming -- the target is
+        ; running long before one opens the port -- and this is the moment it
+        ; becomes true. The shell treats a bare newline as "check my startup
+        ; list", which is idempotent, so a reconnect costs nothing.
+        la      r0,_proc_a
+        la      r2,_tty_poll_proc
+        sw      r0,0(r2)
+        lc      r0,10
+        la      r2,_protocol_enqueue_value
+        jal     r1,(r2)
         bra     _protocol_frame_done
 
 _protocol_frame_done:

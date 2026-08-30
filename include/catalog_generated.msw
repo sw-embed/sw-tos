@@ -100,7 +100,7 @@ CATALOG_INIT: PROC;
         'sw      r0,15(r2)';
         'la      r0,4';
         'sw      r0,18(r2)';
-        'la      r0,1';
+        'la      r0,9';
         'sw      r0,21(r2)';
         'add     r2,24';
         'la      r0,_CATALOG_NAME_5';

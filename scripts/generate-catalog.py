@@ -284,6 +284,14 @@ def render_scheduled(entries: list[dict], manifest: Path) -> str:
     }
     for index, entry in enumerate(images):
         shell_strings[f"SHELL_DU_TEXT_{index}"] = f"{entry['name']} {entry['image_words'] * 3} bytes"
+    # Names the shell starts for itself; the PL/SW side declares them, the
+    # storage lives here with every other shell string.
+    startup = [
+        entry for entry in entries
+        if entry["kind"] == "IMAGE_PROGRAM" and "autostart" in entry["flags"]
+    ]
+    for index, entry in enumerate(startup):
+        shell_strings[f"SHELL_AUTOSTART_NAME_{index}"] = entry["name"]
     for label, value in shell_strings.items():
         encoded = ",".join(str(byte) for byte in value.encode("ascii"))
         lines.extend([f"_{label}:", f"        .byte   {encoded},0"])
@@ -313,6 +321,27 @@ def render_shell(entries: list[dict], manifest: Path) -> str:
                 f"    CALL UART_PUTS(ADDR(SHELL_DU_TEXT_{index}));",
                 "    CALL UART_PUTCHAR(10);",
             ]
+        )
+    lines.extend(["END;", ""])
+
+    # Programs the shell starts for itself once a frontend appears. A service
+    # is excluded: the shell is flagged autostart because the boot code
+    # launches it, and it must not launch itself.
+    startup = [
+        entry for entry in entries
+        if entry["kind"] == "IMAGE_PROGRAM" and "autostart" in entry["flags"]
+    ]
+    for index, entry in enumerate(startup):
+        name = entry["name"]
+        lines.append(
+            f"DCL SHELL_AUTOSTART_NAME_{index}({len(name) + 1}) CHAR INIT('{name}');"
+        )
+    lines.extend(["", "SHELL_GENERATED_AUTOSTART: PROC;"])
+    if not startup:
+        lines.append("    CALL SHELL_STARTUP_NOTHING;")
+    for index in range(len(startup)):
+        lines.append(
+            f"    CALL SHELL_START_ONCE(ADDR(SHELL_AUTOSTART_NAME_{index}));"
         )
     lines.extend(["END;", ""])
     return "\n".join(lines)

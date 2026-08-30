@@ -27,7 +27,7 @@ SYNC = b"\xa5\x5a"
 #: Slots the demo fills, and the clock and uptime children among them.
 SLOTS = 16
 HOGS = 2
-TIME_APPS = SLOTS - HOGS - 1  # less the shell and the hogs
+TIME_APPS = SLOTS - HOGS - 2  # less the shell, the monitor and the hogs
 #: Distinct printed times each of those children must reach.
 TICKS = 3
 

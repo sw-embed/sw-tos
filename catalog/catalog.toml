@@ -44,7 +44,7 @@ entry = "MON"
 scheduled_entry = "_plsw_mon_trampoline"
 stack_words = 256
 state_words = 4
-flags = ["resident"]
+flags = ["resident", "autostart"]
 
 [[program]]
 name = "embedded-hello"
