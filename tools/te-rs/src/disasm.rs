@@ -42,17 +42,9 @@ fn table() -> [Option<(Opcode, u8, u8)>; 256] {
 }
 
 
-/// Register names as the assembler writes them.
-///
-/// The ISA crate's REG_NAMES calls six and seven "r6" and "r7" while its own
-/// parser accepts "ir" for seven, and listings use "iv" and "ir"; those two
-/// are spelled here so disassembly reads back as source.
+/// The ISA crate's own names, so the two cannot drift apart.
 fn register(index: u8) -> &'static str {
-    match index & 0x07 {
-        6 => "iv",
-        7 => "ir",
-        other => cor24_isa::register::REG_NAMES[usize::from(other)],
-    }
+    cor24_isa::register::reg_name(index)
 }
 
 /// Decode one instruction from `bytes`, which begins at the instruction.
