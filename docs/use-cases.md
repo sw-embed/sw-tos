@@ -51,6 +51,8 @@ Run one with `just <recipe>`.
 | Reach panes past nine | `Ctrl-A n` / `p` / `Tab` | `tui-soak` |
 | Zoom, help, copy mode, broadcast | `Ctrl-A z ? y b,b` | `tui-soak`, `windows-smoke` |
 | Close a pane and put it back | `Ctrl-A x`, `Ctrl-A S` | `tui-soak` |
+| Clear a pane, keeping it open | `Ctrl-A l` | unit test |
+| A reused pane starts empty | any relaunch on a freed slot | unit test |
 | Save and restore a layout | `Ctrl-A w` / `R` | `windows-smoke` |
 | Detach without killing the target | `Ctrl-A d` | `windows-smoke` |
 | Survive a long interactive session | 118 interactions | `tui-soak` |
@@ -106,11 +108,10 @@ No recipe covers these yet. They are real behaviours, not hypotheticals.
   in quick succession sometimes reach the target as one: at the protocol level
   three consecutive `bg` commands all start, through te-rs sometimes only one
   does. The shell is not at fault; the loss is in the frontend's input path.
-- **No line editing except in a name.** `run`, `bg` and `kill` honour
-  backspace, but the other commands still match character by character as they
-  arrive, so a typo in `ps -l` or `stat hello` cannot be corrected. The fix is
-  for the shell to read a whole line into a buffer, edit it, and only then
-  dispatch.
+- **Arguments are still read character by character.** The command word is
+  now a line and editable, but an argument -- the `-l` of `ps -l`, the name in
+  `stat hello` -- is still matched as it arrives, so a typo there cannot be
+  taken back.
 - **No blocking launch.** Every launch returns to the prompt, so there is no
   way to say "run this and tell me when it is done". `run` and `bg` are
   synonyms; a waiting form would be a new `fg`.

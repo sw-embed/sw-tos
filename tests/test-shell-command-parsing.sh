@@ -43,9 +43,24 @@ expect "the retired --tty=new flag is still accepted" \
     'bg hello --tty=new\n' 'Hello'
 
 # Backspace used to be stored as part of the name, so every correction
-# became a lookup failure.
+# became a lookup failure. printf puts a real 0x08 in the stream; the
+# emulator does not translate a backslash escape.
+BS=$(printf '\b')
 expect "backspace corrects a mistyped name" \
-    'bg helloX\bo\b\n' 'Hello'
+    "bg helloX${BS}${BS}o\n" 'Hello'
+
+# The command word is read as a line too, so a typo in the command itself is
+# correctable. It used to be matched letter by letter as it arrived.
+expect "backspace corrects a mistyped command" \
+    "halp${BS}${BS}${BS}elp\n" 'help ls dir ps run bg kill'
+
+# A digit is a command like any other: it takes effect on Enter, not on the
+# keypress. Reacting to the digit itself made it the one thing that could
+# not be taken back. "1x" is therefore a word, not a launch and a keystroke.
+expect "a bare menu digit does not act" \
+    '1x\n' 'BAD'
+expect "a menu digit acts on Enter" \
+    '1\nx' 'Hello'
 
 # bg is the ampersand: the program gets its own terminal and the prompt
 # stays free. hello sits waiting for a key in its pane, and the shell must

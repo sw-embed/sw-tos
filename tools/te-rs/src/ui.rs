@@ -360,6 +360,27 @@ impl Desktop {
         restored
     }
 
+    /// Empty a pane, keeping it open.
+    ///
+    /// A pane accumulates whatever its channel has ever said, which is not
+    /// what a person wants when they start a new program on a channel some
+    /// earlier one used, or when they simply want to read what happens next
+    /// without the last hour above it.
+    pub fn clear(&mut self, index: usize) {
+        if let Some(pane) = self.panes.get_mut(index) {
+            pane.lines.clear();
+            pane.current.clear();
+            pane.scroll_offset = 0;
+            pane.alert = false;
+        }
+    }
+
+    pub fn clear_channel(&mut self, channel: u8) {
+        if let Some(index) = self.panes.iter().position(|pane| pane.channel == channel) {
+            self.clear(index);
+        }
+    }
+
     pub fn close_focused(&mut self) {
         if self.panes.len() > 1 {
             self.panes.remove(self.focus);
@@ -444,6 +465,7 @@ impl Desktop {
                 self.zoomed = !self.zoomed;
             }
             b'x' => self.close_focused(),
+            b'l' => self.clear(self.focus),
             b'S' => {
                 self.restore_system_panes();
             }
@@ -485,7 +507,8 @@ impl Desktop {
                     title: "Help",
                     lines: &[
                         "1-9 focus  n next  p previous  z zoom  s split  x close",
-                        "S restore-system-panes  y copy  b,b broadcast",
+                        "l clear pane  S restore-system-panes  y copy",
+                        "b,b broadcast",
                         "w save  R restore-layout",
                         "copy: arrows/hjkl  PgUp/PgDn  g/G  q exit",
                         "r reconnect/redraw  e target-Escape  ? help  d detach",
@@ -839,6 +862,22 @@ mod tests {
         // Restoring again is a no-op rather than a duplicate.
         desktop.command(b'S');
         assert_eq!(desktop.layout().len(), PaneKind::ALL.len());
+    }
+
+    #[test]
+    fn a_pane_can_be_cleared_and_stays_open() {
+        let mut desktop = Desktop::new(10);
+        desktop.push_channel(0, b"old output\n");
+        assert!(desktop.render(80, 24).contains("old output"));
+        desktop.command(b'l');
+        let screen = desktop.render(80, 24);
+        assert!(!screen.contains("old output"), "{screen}");
+        assert!(screen.contains("1 v Shell"), "the pane must stay open: {screen}");
+
+        // Reusing a channel starts the new program's pane empty.
+        desktop.push_channel(0, b"newer output\n");
+        desktop.clear_channel(0);
+        assert!(!desktop.render(80, 24).contains("newer output"));
     }
 
     #[test]

@@ -1011,6 +1011,10 @@ fn run_windows(options: &Options) -> io::Result<()> {
                     }
                     StreamItem::Frame(frame) if frame.kind == FrameType::ChannelOpen => {
                         let title = String::from_utf8_lossy(&frame.payload);
+                        // A channel is reused when a slot is: start the new
+                        // program's pane empty rather than under whatever the
+                        // last one left there.
+                        desktop.clear_channel(frame.channel);
                         desktop.add_application(
                             frame.channel,
                             if title.is_empty() {

@@ -257,6 +257,29 @@ def main():
                 session.screen()[-400:])
         step("bg leaves the prompt focused")
 
+        # "!<command>" hands a line to the shell, so process management has
+        # one spelling rather than two kept in step by hand. This runs while
+        # the table is small: with sixteen panes the shell's own pane is two
+        # lines tall and its reply scrolls away unread.
+        session.command(b"3", settle=1.0)
+        session.send(b"!ps\r", settle=5.0)
+        answered = re.compile(r"\d+ (RUNNABLE|BLOCKED|FREE)")
+        seen = time.monotonic() + 20
+        while not answered.search(session.screen()) and time.monotonic() < seen:
+            require(session.running(), "debugger ! escape")
+            time.sleep(0.2)
+        require(answered.search(session.screen()), "debugger ! escape reaches the shell",
+                session.screen()[-600:])
+        require("focus:Debugger" in session.screen(), "! leaves the debugger focused",
+                session.screen()[-400:])
+        step("debugger ! escape")
+
+        # Back to the shell: the menu key below is typed, and typing goes to
+        # whichever pane holds focus.
+        session.command(b"1", settle=1.0)
+        require("focus:Shell" in session.screen(), "focus returns to the shell",
+                session.screen()[-400:])
+
         # Four base panes plus one per process that prints. The hogs never
         # print, so they are the two slots without a pane of their own.
         #
@@ -264,7 +287,7 @@ def main():
         # prompt appears before that point, so ask again rather than assume
         # the first one landed. Repeating is harmless once the table is full.
         for _ in range(5):
-            session.send(b"9", settle=4.0)
+            session.send(b"9\r", settle=4.0)
             settle = time.monotonic() + 15
             while session.panes() < EXPECTED_PANES and time.monotonic() < settle:
                 require(session.running(), "menu 9")
@@ -325,21 +348,7 @@ def main():
         session.send(b"regs 2\r", settle=2.0)
         step("debugger regs")
 
-        # "!<command>" hands a line to the shell, so process management has
-        # one spelling rather than two kept in step by hand. ps is the right
-        # probe here: the table is full by now, so anything that needs a slot
-        # would be refused for reasons of its own.
-        session.send(b"!ps\r", settle=5.0)
-        answered = re.compile(r"\d+ (RUNNABLE|BLOCKED|FREE)")
-        seen = time.monotonic() + 20
-        while not answered.search(session.screen()) and time.monotonic() < seen:
-            require(session.running(), "debugger ! escape")
-            time.sleep(0.2)
-        require(answered.search(session.screen()), "debugger ! escape reaches the shell",
-                session.screen()[-600:])
-        require("focus:Debugger" in session.screen(), "! leaves the debugger focused",
-                session.screen()[-400:])
-        step("debugger ! escape")
+
 
         # Resources must show the hogs being forcibly preempted, and the count
         # must keep climbing: that is what keeps every other pane scheduled.

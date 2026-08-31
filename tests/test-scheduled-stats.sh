@@ -10,7 +10,7 @@ EMU="$ROOT_DIR/scripts/swtos-emu"
     "$ROOT_DIR/tests/catalog-shell.plsw" scheduled-stats
 
 output=$($EMU --load-binary "$OUT_DIR/program.bin@0" --entry 0 \
-    -u '2stat 2\nps -l\n' --speed 0 -n 1000000 --quiet 2>/dev/null \
+    -u '2\nstat 2\nps -l\n' --speed 0 -n 1000000 --quiet 2>/dev/null \
     | sed '/^Entry point:/d')
 
 counter_line='ep=2 name=counter state=0 blocked=0 stack=192 statew=1 dispatch=3 yields=2 ipc=0 ttyin=0 ttyout=6'
@@ -20,7 +20,9 @@ if ! grep -q "$counter_line" <<<"$output"; then
     exit 1
 fi
 
-if ! grep -q 'ep=1 name=shell state=1 blocked=0 stack=256 statew=6 dispatch=16 yields=17 ipc=2' <<<"$output"; then
+# The shell reads a whole line before acting, so it is dispatched once more
+# than when it acted on each character as it arrived.
+if ! grep -q 'ep=1 name=shell state=1 blocked=0 stack=256 statew=6 dispatch=17 yields=18 ipc=2' <<<"$output"; then
     echo "FAIL: detailed ps did not report shell scheduling and IPC operations" >&2
     echo "$output" >&2
     exit 1
