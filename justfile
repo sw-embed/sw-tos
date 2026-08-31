@@ -376,6 +376,10 @@ shell-command-parsing: scheduled-shell-build
 shell-restart: scheduled-shell-build
     ./tests/test-shell-restart.sh
 
+# Keep the keyboard at the prompt when background programs come and go
+shell-foreground: scheduled-shell-build
+    ./tests/test-shell-foreground.sh
+
 # Read a configured DS1307 RTC through the COR24 I2C HAL from PL/SW
 i2c-ds1307-smoke:
     ./tests/test-i2c-ds1307.sh

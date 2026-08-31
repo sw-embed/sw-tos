@@ -3567,6 +3567,8 @@ _TASK_HALT:
 _TASK_EXIT:
         la      r2,_current_proc
         lw      r2,0(r2)
+        la      r1,_exit_proc
+        sw      r2,0(r1)
         lbu     r0,18(r2)
         lc      r1,1
         ceq     r0,r1
@@ -3593,20 +3595,22 @@ _task_exit_keep_arena:
         la      r2,_proc_a
         la      r1,_current_proc
         sw      r2,0(r1)
-        ; Keep input focus on a surviving child. This lets two independent
-        ; blocked readers drain their own foreground input in turn.
-        la      r2,_proc_b
-        lw      r0,24(r2)
-        ceq     r0,z
-        brf     _task_exit_set_foreground
-        la      r2,_proc_c
-        lw      r0,24(r2)
-        ceq     r0,z
-        brf     _task_exit_set_foreground
-        la      r2,_proc_a
-_task_exit_set_foreground:
-        la      r1,_tty_foreground_proc
-        sw      r2,0(r1)
+        ; The terminal goes back to the prompt, and only if the process that
+        ; just exited held it. It used to pass to whichever of the first two
+        ; child slots was occupied, which handed it to the monitor -- and a
+        ; monitor blocks reading its own terminal, waiting for clock ticks
+        ; rather than for a person, so the prompt never saw another keystroke.
+        ; Being blocked on input does not mean wanting the keyboard. A program
+        ; that wants it asks, with TASK_CLAIM_FOREGROUND.
+        la      r2,_exit_proc
+        lw      r1,0(r2)
+        la      r2,_tty_foreground_proc
+        lw      r0,0(r2)
+        ceq     r0,r1
+        brf     _task_exit_focus_kept
+        la      r0,_proc_a
+        sw      r0,0(r2)
+_task_exit_focus_kept:
         la      r2,_proc_a
         lw      r0,9(r2)
         mov     sp,r0
@@ -5477,6 +5481,10 @@ _child_count:
 ; rewinds the process to exactly this address, so it never allocates again and
 ; repeated restarts cannot leak the stack arena.
 _shell_stack_top:
+        .zero   3
+; The process that called TASK_EXIT, retained across the slot release so the
+; terminal can be handed on only by the process that actually held it.
+_exit_proc:
         .zero   3
 ; Raised by the UART ISR, which is the only code that runs while a wedged shell
 ; spins. The kernel acts on it at its next entry from the shell.

@@ -22,6 +22,7 @@ RECIPES=(
     debugger-kill-acceptance
     shell-command-parsing
     shell-restart
+    shell-foreground
     acceptance-report-smoke
     provider-config-smoke
     proc-desc-abi-smoke

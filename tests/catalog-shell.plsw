@@ -458,6 +458,9 @@ SHELL_RUN_SELECTED_NEW_TTY: PROC(DESC_PTR PTR);
     DCL SPAWN_STATUS INT;
     CALL TASK_SPAWN(DESC_PTR);
     CALL TASK_SPAWN_RESULT(ADDR(SPAWN_STATUS));
+    /* A spawn hands input focus to the child. This one runs in the
+       background, so the next thing typed belongs to the prompt. */
+    CALL TASK_CLAIM_FOREGROUND;
     IF (SPAWN_STATUS = 0) THEN CALL SHELL_READY;
     ELSE DO;
         CALL UART_PUTCHAR(69);

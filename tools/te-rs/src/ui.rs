@@ -74,6 +74,8 @@ pub struct Pane {
     ran: bool,
     /// That process has since gone.
     ended: bool,
+    /// Consecutive snapshots that did not list this channel's endpoint.
+    absent: u8,
     scroll_offset: usize,
     horizontal_offset: usize,
     search: Option<String>,
@@ -87,6 +89,7 @@ impl Pane {
             title: title.into(),
             lines: VecDeque::new(),
             current: String::new(),
+            absent: 0,
             scrollback_limit,
             alert: false,
             ran: false,
@@ -289,6 +292,13 @@ impl Desktop {
         if let Some(index) = self.panes.iter().position(|pane| pane.channel == channel) {
             let pane = &mut self.panes[index];
             pane.push(bytes);
+            // Output is proof a process held this channel, and better proof
+            // than the resource snapshot: a program that starts and finishes
+            // between two snapshots is never seen running by either of them,
+            // and its pane would otherwise never be able to say it had ended.
+            if pane.kind == PaneKind::Application {
+                pane.ran = true;
+            }
             if index != self.focus {
                 pane.alert = true;
             }
@@ -311,8 +321,14 @@ impl Desktop {
             if running {
                 pane.ran = true;
                 pane.ended = false;
+                pane.absent = 0;
             } else if pane.ran {
-                pane.ended = true;
+                // Two snapshots, not one. Output can reach a pane before the
+                // snapshot that first lists its process as running, and a pane
+                // that flickered to (ended) while its program was starting up
+                // would be worse than one that takes a moment to notice.
+                pane.absent = pane.absent.saturating_add(1);
+                pane.ended = pane.absent >= 2;
             }
         }
     }
@@ -350,6 +366,10 @@ impl Desktop {
                 && pane.title != title
             {
                 pane.title = title.to_string();
+                // A different program on the same channel is a different
+                // process. Whatever the last one did, this one has not ended.
+                pane.ended = false;
+                pane.absent = 0;
             }
         }
     }
@@ -899,6 +919,42 @@ mod tests {
     }
 
     #[test]
+    fn a_short_lived_process_still_marks_its_pane_ended() {
+        // Nothing catches this one running. The multitask demo's workers print
+        // their four lines and exit between two resource snapshots, so a pane
+        // that waited to see its process listed as live would wait forever and
+        // could never be reclaimed. Its output is the evidence instead.
+        let mut desktop = Desktop::new(10);
+        desktop.add_application(5, "counter");
+        desktop.mark_live_endpoints(&[1, 2]);
+        desktop.push_channel(5, b"C1\nC2\n");
+        desktop.mark_live_endpoints(&[1, 2]);
+        desktop.mark_live_endpoints(&[1, 2]);
+        let screen = desktop.render(100, 24);
+        assert!(screen.contains("counter ep=6 (ended)"), "{screen}");
+
+        // Saying so is what makes the space reclaimable.
+        assert_eq!(desktop.close_ended(), 1);
+        assert!(!desktop.render(100, 24).contains("counter"));
+    }
+
+    #[test]
+    fn a_reused_pane_is_not_still_ended() {
+        let mut desktop = Desktop::new(10);
+        desktop.add_application(5, "counter");
+        desktop.push_channel(5, b"C1\n");
+        desktop.mark_live_endpoints(&[1]);
+        desktop.mark_live_endpoints(&[1]);
+        assert!(desktop.render(100, 24).contains("(ended)"));
+
+        // The slot comes back as something else. That process has not ended.
+        desktop.name_channel(5, "clock");
+        let screen = desktop.render(100, 24);
+        assert!(screen.contains("clock ep=6"), "{screen}");
+        assert!(!screen.contains("(ended)"), "{screen}");
+    }
+
+    #[test]
     fn a_pane_says_when_its_process_has_ended_and_can_be_reclaimed() {
         let mut desktop = Desktop::new(10);
         desktop.add_application(4, "clock");
@@ -910,7 +966,12 @@ mod tests {
         assert!(screen.contains("clock ep=5"), "{screen}");
         assert!(!screen.contains("(ended)"), "{screen}");
 
-        // It exits. The pane keeps what it printed and says so.
+        // It exits. One snapshot without it is not yet proof -- output can
+        // arrive before the snapshot that first lists a process as running.
+        desktop.mark_live_endpoints(&[1]);
+        assert!(!desktop.render(100, 24).contains("(ended)"));
+
+        // The second one is. The pane keeps what it printed and says so.
         desktop.mark_live_endpoints(&[1]);
         let screen = desktop.render(100, 24);
         assert!(screen.contains("clock ep=5 (ended)"), "{screen}");
