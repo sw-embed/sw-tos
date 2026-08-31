@@ -5333,8 +5333,12 @@ _state_free:
         .byte   70,82,69,69,0
 _state_runnable:
         .byte   82,85,78,78,65,66,76,69,0
+; "WAITING", not "BLOCKED": the process is alive and parked in TASK_GETCHAR
+; until something arrives on its own terminal -- the next time frame for a
+; clock, a keystroke for the shell. Blocked reads like a fault; this is the
+; ordinary state of a program with nothing to do yet.
 _state_blocked:
-        .byte   66,76,79,67,75,69,68,0
+        .byte   87,65,73,84,73,78,71,0
 _state_unknown:
         .byte   85,78,75,78,79,87,78,0
 _provider_bounds_message:

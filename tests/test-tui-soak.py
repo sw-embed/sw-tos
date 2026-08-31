@@ -263,7 +263,7 @@ def main():
         # lines tall and its reply scrolls away unread.
         session.command(b"3", settle=1.0)
         session.send(b"!ps\r", settle=5.0)
-        answered = re.compile(r"\d+ (RUNNABLE|BLOCKED|FREE)")
+        answered = re.compile(r"\d+ (RUNNABLE|WAITING|FREE)")
         seen = time.monotonic() + 20
         while not answered.search(session.screen()) and time.monotonic() < seen:
             require(session.running(), "debugger ! escape")
@@ -423,7 +423,7 @@ def main():
         # Any slot state will do. With the table full the children sit blocked
         # in TASK_GETCHAR waiting for their next tick, so requiring RUNNABLE
         # here would be asserting the wrong end of a working system.
-        listing = re.compile(r"\d+ (RUNNABLE|BLOCKED|FREE)")
+        listing = re.compile(r"\d+ (RUNNABLE|WAITING|FREE)")
         answered = False
         for _ in range(3):
             session.send(b"ps\r", settle=4.0)
