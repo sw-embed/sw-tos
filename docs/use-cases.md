@@ -26,7 +26,7 @@ Run one with `just <recipe>`.
 
 | Use case | Recipe |
 | --- | --- |
-| Correct a typo with backspace | `test-shell-command-parsing` |
+| Correct a typo anywhere in a line | `test-shell-command-parsing` |
 | Leave an argument unfinished (`run x --`) without losing the prompt | `test-shell-command-parsing` |
 | Old `--tty=new` spelling still accepted | `test-shell-command-parsing` |
 | Reject a `kill` with no endpoint | `test-shell-command-parsing` |
@@ -108,10 +108,6 @@ No recipe covers these yet. They are real behaviours, not hypotheticals.
   in quick succession sometimes reach the target as one: at the protocol level
   three consecutive `bg` commands all start, through te-rs sometimes only one
   does. The shell is not at fault; the loss is in the frontend's input path.
-- **Arguments are still read character by character.** The command word is
-  now a line and editable, but an argument -- the `-l` of `ps -l`, the name in
-  `stat hello` -- is still matched as it arrives, so a typo there cannot be
-  taken back.
 - **No blocking launch.** Every launch returns to the prompt, so there is no
   way to say "run this and tell me when it is done". `run` and `bg` are
   synonyms; a waiting form would be a new `fg`.

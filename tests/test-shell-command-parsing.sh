@@ -54,6 +54,14 @@ expect "backspace corrects a mistyped name" \
 expect "backspace corrects a mistyped command" \
     "halp${BS}${BS}${BS}elp\n" 'help ls dir ps run bg kill'
 
+# A correction applies anywhere in the line, not only in the command word.
+# Arguments used to be matched as they arrived, so a typo in an option or a
+# name was as final as one in the command.
+expect "backspace corrects an option" \
+    "ps -x${BS}l\n" 'ep=1 name=shell'
+expect "backspace corrects an argument name" \
+    "stat hellp${BS}o\n" 'hello kind=program'
+
 # A digit is a command like any other: it takes effect on Enter, not on the
 # keypress. Reacting to the digit itself made it the one thing that could
 # not be taken back. "1x" is therefore a word, not a launch and a keystroke.
