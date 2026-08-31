@@ -380,6 +380,10 @@ shell-restart: scheduled-shell-build
 shell-foreground: scheduled-shell-build
     ./tests/test-shell-foreground.sh
 
+# Run a program in the shell itself when every process slot is taken
+shell-sync-run: scheduled-shell-build
+    ./tests/test-shell-sync-run.sh
+
 # Read a configured DS1307 RTC through the COR24 I2C HAL from PL/SW
 i2c-ds1307-smoke:
     ./tests/test-i2c-ds1307.sh

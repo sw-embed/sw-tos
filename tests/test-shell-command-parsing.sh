@@ -62,7 +62,7 @@ expect "backspace corrects a mistyped name" \
 # The command word is read as a line too, so a typo in the command itself is
 # correctable. It used to be matched letter by letter as it arrived.
 expect "backspace corrects a mistyped command" \
-    "halp${BS}${BS}${BS}elp\n" 'help ls dir ps run bg kill'
+    "halp${BS}${BS}${BS}elp\n" 'help ls dir ps run bg sync kill'
 
 # A correction applies anywhere in the line, not only in the command word.
 # Arguments used to be matched as they arrived, so a typo in an option or a

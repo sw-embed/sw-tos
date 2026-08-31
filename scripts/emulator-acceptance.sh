@@ -23,6 +23,7 @@ RECIPES=(
     shell-command-parsing
     shell-restart
     shell-foreground
+    shell-sync-run
     acceptance-report-smoke
     provider-config-smoke
     proc-desc-abi-smoke

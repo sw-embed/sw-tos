@@ -238,7 +238,7 @@ def render_scheduled(entries: list[dict], manifest: Path) -> str:
     image_bytes = sum(entry["image_words"] * 3 for entry in images)
     shell_strings = {
         "SHELL_DF_TEXT": f"catalog entries={len(entries)} images={len(images)} bytes={image_bytes}",
-        "SHELL_HELP_1": "help ls dir ps run bg kill",
+        "SHELL_HELP_1": "help ls dir ps run bg sync kill",
         "SHELL_HELP_2": "df du mem stat uname",
         "SHELL_UNAME_TEXT": "SWTOS COR24 0.1",
         "SHELL_CPU_HOG_NAME": HOG_NAME,
@@ -303,6 +303,9 @@ def render_scheduled(entries: list[dict], manifest: Path) -> str:
         "SHELL_PROC_FORCED": " fp=",
         "SHELL_PROC_CPU": " cpu=",
         "SHELL_MON_NAME": MON_NAME,
+        "SHELL_SYNC_NOTE": "no free slot: running it here",
+        "SHELL_SYNC_NEEDS_SLOT": "needs a slot of its own",
+        "SHELL_TOPIC_SYNC": "sync NAME runs it here, without a slot",
     }
     for index, entry in enumerate(images):
         shell_strings[f"SHELL_DU_TEXT_{index}"] = f"{entry['name']} {entry['image_words'] * 3} bytes"

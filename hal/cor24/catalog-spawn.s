@@ -183,6 +183,9 @@ _restart_shell:
         lc      r0,0
         la      r2,_shell_restart_pending
         sw      r0,0(r2)
+        ; Whatever was running in the shell's context goes with the context.
+        la      r2,_sync_active
+        sw      r0,0(r2)
 
         ; Fabricate the same initial context _spawn_resident builds, at the
         ; same stack top, reusing the private state that is already allocated.
@@ -3562,6 +3565,84 @@ _TASK_HALT:
         la      r2,_halt
         jmp     (r2)
 
+; TASK_RUN_SYNC(descriptor, result): run a program to completion in the
+; caller's own context, on the caller's stack, instead of in a process of its
+; own. This is what the shell falls back to when every slot is taken.
+;
+; It is deliberately narrow. Only a resident program can be run this way: an
+; embedded one has to be loaded into memory owned by a process, and a process
+; is the thing there is none of. Its state comes from one scratch block rather
+; than the arena, so a shell that does this all day allocates nothing.
+;
+; The caller gives up the CPU for the duration. Nothing can preempt a program
+; running here -- it is the shell, and the shell is not preemptible -- so a
+; program that never finishes takes the session with it, and the way back is
+; the restart escape.
+;
+; Status 0 ran, 1 needs a process of its own, 2 wants more state than the
+; scratch block holds.
+        .globl  _TASK_RUN_SYNC
+_TASK_RUN_SYNC:
+        push    fp
+        push    r2
+        push    r1
+        mov     fp,sp
+        lw      r0,9(fp)
+        la      r2,_sync_descriptor
+        sw      r0,0(r2)
+        lw      r1,3(r0)        ; PROGRAM_DESC kind
+        ceq     r1,z
+        brt     _task_run_sync_resident
+        lc      r0,1
+        la      r2,_task_run_sync_status
+        jmp     (r2)
+_task_run_sync_resident:
+        lw      r0,18(r0)       ; PROGRAM_DESC state_words
+        lc      r1,8            ; _sync_state capacity
+        clu     r1,r0
+        brf     _task_run_sync_zero_state
+        lc      r0,2
+        la      r2,_task_run_sync_status
+        jmp     (r2)
+_task_run_sync_zero_state:
+        la      r2,_sync_state
+_task_run_sync_zero:
+        ceq     r0,z
+        brt     _task_run_sync_enter
+        lc      r1,0
+        sw      r1,0(r2)
+        add     r2,3
+        add     r0,-1
+        bra     _task_run_sync_zero
+_task_run_sync_enter:
+        ; Where to come back to. A program may finish by returning or by
+        ; calling TASK_EXIT, and TASK_EXIT never returns to its caller.
+        ; Nothing has been pushed since fp was set, so one word covers both.
+        mov     r0,sp
+        la      r2,_sync_return_sp
+        sw      r0,0(r2)
+        lc      r0,1
+        la      r2,_sync_active
+        sw      r0,0(r2)
+        la      r2,_sync_descriptor
+        lw      r2,0(r2)
+        lw      r2,6(r2)        ; direct resident entry
+        la      r0,_sync_state
+        jal     r1,(r2)
+_task_run_sync_returned:
+        lc      r0,0
+        la      r2,_sync_active
+        sw      r0,0(r2)
+        lc      r0,0
+_task_run_sync_status:
+        lw      r1,12(fp)
+        sw      r0,0(r1)
+        mov     sp,fp
+        pop     r1
+        pop     r2
+        pop     fp
+        jmp     (r1)
+
 ; TASK_EXIT(): terminate a child slot and resume the persistent shell.
         .globl  _TASK_EXIT
 _TASK_EXIT:
@@ -3569,10 +3650,36 @@ _TASK_EXIT:
         lw      r2,0(r2)
         la      r1,_exit_proc
         sw      r2,0(r1)
+        ; A program running synchronously in the shell exits like any other,
+        ; but it has no slot to release and the shell must survive it. Guarded
+        ; on the shell being current, so a child of a synchronous program still
+        ; exits as a process.
+        la      r1,_proc_a
+        mov     r0,r2
+        ceq     r0,r1
+        brf     _task_exit_process
+        la      r2,_sync_active
+        lw      r0,0(r2)
+        ceq     r0,z
+        brt     _task_exit_process
+        lc      r0,0
+        sw      r0,0(r2)
+        la      r2,_sync_return_sp
+        lw      r0,0(r2)
+        mov     sp,r0
+        mov     fp,sp
+        la      r2,_task_run_sync_returned
+        jmp     (r2)
+_task_exit_process:
+        la      r2,_exit_proc
+        lw      r2,0(r2)
         lbu     r0,18(r2)
         lc      r1,1
         ceq     r0,r1
-        brt     _TASK_HALT
+        brf     _task_exit_release
+        la      r2,_TASK_HALT
+        jmp     (r2)
+_task_exit_release:
         mov     r0,r2
         la      r2,_release_slot
         jal     r1,(r2)
@@ -5486,6 +5593,18 @@ _shell_stack_top:
 ; terminal can be handed on only by the process that actually held it.
 _exit_proc:
         .zero   3
+; A program running in the shell's own context: where to resume when it ends,
+; whether one is running, which one, and the one state block they share. Eight
+; words covers every resident program; TASK_RUN_SYNC refuses anything larger
+; rather than writing past it.
+_sync_return_sp:
+        .zero   3
+_sync_active:
+        .zero   3
+_sync_descriptor:
+        .zero   3
+_sync_state:
+        .zero   24
 ; Raised by the UART ISR, which is the only code that runs while a wedged shell
 ; spins. The kernel acts on it at its next entry from the shell.
 _shell_restart_pending:

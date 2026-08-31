@@ -20,11 +20,14 @@ DCL 1 SHELL_PROGRAM_DESC BASED,
     3 SPD_STACK_WORDS INT,
     3 SPD_STATE_WORDS INT,
     3 SPD_FLAGS INT;
-DCL SHELL_HELP_1(27) CHAR INIT('help ls dir ps run bg kill');
+DCL SHELL_HELP_1(32) CHAR INIT('help ls dir ps run bg sync kill');
 DCL SHELL_HELP_2(24) CHAR INIT('df du mem stat uname');
 DCL SHELL_UNAME_TEXT(17) CHAR INIT('SWTOS COR24 0.1');
 DCL SHELL_CPU_HOG_NAME(8) CHAR INIT('cpu-hog');
 DCL SHELL_MON_NAME(4) CHAR INIT('mon');
+DCL SHELL_SYNC_NOTE(30) CHAR INIT('no free slot: running it here');
+DCL SHELL_SYNC_NEEDS_SLOT(25) CHAR INIT('needs a slot of its own');
+DCL SHELL_TOPIC_SYNC(38) CHAR INIT('sync NAME runs it here, without a slot');
 DCL SHELL_STAT_KIND(7) CHAR INIT(' kind=');
 DCL SHELL_STAT_SOURCE(9) CHAR INIT(' source=');
 DCL SHELL_STAT_STACK(8) CHAR INIT(' stack=');
@@ -138,7 +141,10 @@ SHELL_HELP_COMMAND: PROC(A0 BYTE, A1 BYTE, ALEN INT);
         IF (A0 = 98) THEN DO; CALL SHELL_TOPIC_LINE(ADDR(SHELL_TOPIC_BG)); FOUND = 1; END;
         IF (A0 = 107) THEN DO; CALL SHELL_TOPIC_LINE(ADDR(SHELL_TOPIC_KILL)); FOUND = 1; END;
         IF (A0 = 109) THEN DO; CALL SHELL_TOPIC_LINE(ADDR(SHELL_TOPIC_MEM)); FOUND = 1; END;
-        IF (A0 = 115) THEN DO; CALL SHELL_TOPIC_LINE(ADDR(SHELL_TOPIC_STAT)); FOUND = 1; END;
+        IF (A0 = 115) THEN DO;
+            IF (A1 = 116) THEN DO; CALL SHELL_TOPIC_LINE(ADDR(SHELL_TOPIC_STAT)); FOUND = 1; END;
+            IF (A1 = 121) THEN DO; CALL SHELL_TOPIC_LINE(ADDR(SHELL_TOPIC_SYNC)); FOUND = 1; END;
+        END;
         IF (A0 = 117) THEN DO; CALL SHELL_TOPIC_LINE(ADDR(SHELL_TOPIC_UNAME)); FOUND = 1; END;
         IF (A0 = 100) THEN DO;
             IF (A1 = 105) THEN DO; CALL SHELL_TOPIC_LINE(ADDR(SHELL_TOPIC_LS)); FOUND = 1; END;
@@ -454,6 +460,19 @@ SHELL_RUN_SELECTED: PROC(DESC_PTR PTR);
     END;
 END;
 
+SHELL_SYNC_RUN: PROC(DESC_PTR PTR);
+    /* Run a program here, in the shell itself, with no process of its own.
+       The prompt is gone until it finishes, so it had better finish; if it
+       does not, the restart escape is the way back. */
+    DCL SYNC_STATUS INT;
+    CALL TASK_RUN_SYNC(DESC_PTR, ADDR(SYNC_STATUS));
+    IF (SYNC_STATUS = 0) THEN CALL SHELL_READY;
+    ELSE DO;
+        CALL UART_PUTS(ADDR(SHELL_SYNC_NEEDS_SLOT));
+        CALL UART_PUTCHAR(10);
+    END;
+END;
+
 SHELL_RUN_SELECTED_NEW_TTY: PROC(DESC_PTR PTR);
     DCL SPAWN_STATUS INT;
     CALL TASK_SPAWN(DESC_PTR);
@@ -463,12 +482,21 @@ SHELL_RUN_SELECTED_NEW_TTY: PROC(DESC_PTR PTR);
     CALL TASK_CLAIM_FOREGROUND;
     IF (SPAWN_STATUS = 0) THEN CALL SHELL_READY;
     ELSE DO;
-        CALL UART_PUTCHAR(69);
-        CALL UART_PUTCHAR(82);
-        CALL UART_PUTCHAR(82);
-        CALL UART_PUTCHAR(79);
-        CALL UART_PUTCHAR(82);
-        CALL UART_PUTCHAR(10);
+        /* Status 2 is a full process table. Refusing was the honest answer
+           when there was nowhere else to run it; there is now. */
+        IF (SPAWN_STATUS = 2) THEN DO;
+            CALL UART_PUTS(ADDR(SHELL_SYNC_NOTE));
+            CALL UART_PUTCHAR(10);
+            CALL SHELL_SYNC_RUN(DESC_PTR);
+        END;
+        ELSE DO;
+            CALL UART_PUTCHAR(69);
+            CALL UART_PUTCHAR(82);
+            CALL UART_PUTCHAR(82);
+            CALL UART_PUTCHAR(79);
+            CALL UART_PUTCHAR(82);
+            CALL UART_PUTCHAR(10);
+        END;
     END;
 END;
 
@@ -483,6 +511,14 @@ SHELL_PS_COMMAND: PROC(DETAILED INT);
        running, which is what mon reports, from the same code. */
     IF (DETAILED = 0) THEN CALL TASK_PROCESS_LIST;
     ELSE CALL SHELL_REPORT;
+END;
+
+SHELL_SYNC_NAMED: PROC(NAME_PTR PTR);
+    DCL DESC_PTR PTR;
+    DESC_PTR = 0;
+    CALL TASK_CATALOG_FIND(NAME_PTR, ADDR(DESC_PTR));
+    IF (DESC_PTR = 0) THEN CALL SHELL_BAD;
+    ELSE CALL SHELL_SYNC_RUN(DESC_PTR);
 END;
 
 SHELL_RUN_NAMED: PROC(NAME_PTR PTR);
@@ -749,6 +785,15 @@ PLSW_LAUNCHER: PROC(STATE_PTR PTR);
                     IF (WLEN = 2) THEN DO;
                         IF (ALEN = 0) THEN CALL SHELL_BAD;
                         ELSE CALL SHELL_RUN_NAMED(ADDR(CARG));
+                        MATCHED = 1;
+                    END;
+                END;
+            END;
+            IF (CWORD(0) = 115) THEN DO;
+                IF (CWORD(1) = 121) THEN DO;
+                    IF (WLEN = 4) THEN DO;
+                        IF (ALEN = 0) THEN CALL SHELL_BAD;
+                        ELSE CALL SHELL_SYNC_NAMED(ADDR(CARG));
                         MATCHED = 1;
                     END;
                 END;

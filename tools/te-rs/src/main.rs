@@ -8,7 +8,7 @@ use std::process::ExitCode;
 use std::thread;
 use std::time::{Duration, Instant, SystemTime, UNIX_EPOCH};
 use te_rs::debug::{DebugConsole, DebugMap, identity_request};
-use te_rs::protocol::{ConnectionDecoder, Frame, FrameType, Mode, StreamItem, hello};
+use te_rs::protocol::{ConnectionDecoder, Frame, FrameType, Mode, StreamItem, VERSION, hello};
 use te_rs::resource::SnapshotAssembler;
 use te_rs::ui::{CommandOutcome, Desktop, PaneKind};
 
@@ -619,12 +619,39 @@ fn time_frame(mode: TimeMode, tick: u32) -> Vec<u8> {
 
 /// Ask the target to restart its shell.
 ///
-/// This is written unframed, straight past the multiplexer, because it exists
-/// for the case where nothing on the target is reading framed input any more:
-/// a command running in the shell's own context that will not give the CPU
-/// back. The target's UART interrupt handler is then the only code still
-/// running, and this is the one thing it listens for.
+/// These two bytes are read by the target's UART interrupt handler, not by
+/// anything downstream of it, because this exists for the case where nothing
+/// on the target is reading input any more: a command running in the shell's
+/// own context that will not give the CPU back. The handler is then the only
+/// code still running, and this is the one thing it listens for.
 const SHELL_RESTART: [u8; 2] = [0xff, 4];
+
+/// The adapter's passthrough frame type, which is not one of the protocol's
+/// own: it asks for its payload to be put on the target's UART verbatim.
+const PASSTHROUGH: u8 = 0xfe;
+
+/// Wrap bytes so they survive the debug adapter.
+///
+/// Written raw they do not: once the link is framed the adapter reads frames,
+/// and anything that is not one is discarded before it reaches the target.
+fn passthrough_frame(payload: &[u8]) -> Vec<u8> {
+    let length = payload.len() as u16;
+    let mut bytes = vec![VERSION, PASSTHROUGH, 0, length as u8, (length >> 8) as u8];
+    bytes.extend_from_slice(payload);
+    let sum = bytes.iter().fold(0_u8, |sum, byte| sum.wrapping_add(*byte));
+    let mut framed = vec![0xa5, 0x5a];
+    framed.append(&mut bytes);
+    framed.push(sum);
+    framed
+}
+
+/// The restart request, addressed to whatever is on the other end of the link.
+fn shell_restart_request(mode: Mode) -> Vec<u8> {
+    match mode {
+        Mode::Framed => passthrough_frame(&SHELL_RESTART),
+        Mode::Plain => SHELL_RESTART.to_vec(),
+    }
+}
 
 fn scheduler_heartbeat(tick: u32) -> [u8; 5] {
     [0xff, 1, tick as u8, (tick >> 8) as u8, (tick >> 16) as u8]
@@ -1156,7 +1183,7 @@ fn run_windows(options: &Options) -> io::Result<()> {
                             next_hello_retry = Instant::now() + Duration::from_millis(250);
                         }
                         b'k' => {
-                            serial.write_all(&SHELL_RESTART)?;
+                            serial.write_all(&shell_restart_request(connection.mode()))?;
                             serial.flush()?;
                             desktop.push_channel(254, b"restarting the shell\n");
                         }
@@ -1220,7 +1247,9 @@ fn run_windows(options: &Options) -> io::Result<()> {
                                     // and a request to kill it is most often
                                     // made because it has stopped reading what
                                     // it would be injected into.
-                                    serial.write_all(&SHELL_RESTART)?;
+                                    serial.write_all(
+                                        &shell_restart_request(connection.mode()),
+                                    )?;
                                     serial.flush()?;
                                     "restarting the shell".to_string()
                                 } else {
@@ -1797,6 +1826,25 @@ mod tests {
             multiplexed_time_frame(TimeMode::Clock, 1),
             vec![0xa5, 0x5a, 1, 7, 0, 3, 0, 1, 0, 0, 12]
         );
+    }
+
+    #[test]
+    fn the_restart_request_is_wrapped_once_the_link_is_framed() {
+        // Raw on a plain link, because there is nothing in the way.
+        assert_eq!(shell_restart_request(Mode::Plain), vec![0xff, 4]);
+
+        // Wrapped once the adapter is reading frames, because it discards
+        // anything that is not one -- and the two bytes still reach the
+        // target's interrupt handler, which is the only reader that matters
+        // when this is needed.
+        let framed = shell_restart_request(Mode::Framed);
+        assert_eq!(&framed[..2], &[0xa5, 0x5a]);
+        assert_eq!(framed[3], PASSTHROUGH);
+        assert_eq!(&framed[7..9], &SHELL_RESTART);
+        let sum = framed[2..framed.len() - 1]
+            .iter()
+            .fold(0_u8, |sum, byte| sum.wrapping_add(*byte));
+        assert_eq!(*framed.last().expect("a frame has a checksum"), sum);
     }
 
     #[test]

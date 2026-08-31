@@ -384,17 +384,36 @@ def main():
         session.command(b"z", settle=1.0)
         step("monitor reports every live process")
 
-        # A full table refuses a launch rather than wedging or silently
-        # doing nothing, and says so where the command was typed.
+        # With every slot taken, a launch says so and runs the program in the
+        # shell's own context instead of refusing. A clock never finishes, so
+        # this is the case the restart escape exists for: the shell is now
+        # occupied by it and Ctrl-A k is the way back.
         session.command(b"1", settle=1.0)
-        refused = False
+        # Zoomed: with fifteen panes open the shell shows about four lines, and
+        # the menu a restart reprints is longer than that.
+        session.command(b"z", settle=1.0)
+        fell_back = False
         for _ in range(3):
             session.send(b"bg clock\r", settle=4.0)
-            if "ERROR" in session.screen():
-                refused = True
+            if "no free slot" in session.screen():
+                fell_back = True
                 break
-        require(refused, "a full table refuses a launch", session.screen()[-800:])
-        step("full table refuses a launch")
+        require(fell_back, "a full table runs the program in the shell",
+                session.screen()[-800:])
+        step("full table falls back to the shell")
+
+        # And the shell comes back, on demand, from a program that was never
+        # going to give it up.
+        session.command(b"k", settle=3.0)
+        require("SHELL RESTARTED" in session.wait_for("SHELL RESTARTED", timeout=15),
+                "the restart escape reaches an occupied shell",
+                session.screen()[-800:])
+        session.send(b"mem\r", settle=3.0)
+        require("total=" in session.wait_for("total=", timeout=15),
+                "the restarted shell runs commands again",
+                session.screen()[-800:])
+        session.command(b"z", settle=1.0)
+        step("restart escape recovers an occupied shell")
 
         # Killing processes must free their slots and let their panes be
         # reclaimed: a long session should not end up mostly finished

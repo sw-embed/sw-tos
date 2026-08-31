@@ -15,7 +15,9 @@ Run one with `just <recipe>`.
 | Start a program without blocking the prompt | `bg <name>` (same as `run`) | `test-shell-command-parsing`, `catalog-run-smoke` |
 | Launch from the menu | keys `1`-`5`, `9` | `scheduled-shell-smoke` |
 | Fill every process slot | menu `9` | `fill-demo-acceptance`, `scheduled-sixteen-smoke` |
-| Refuse a spawn with no free slot | `run` on a full table | `tui-soak`, `scheduled-sixteen-smoke` |
+| Run a program with no free slot | `run`/`bg` on a full table falls back to the shell's own context | `shell-sync-run` |
+| Run a program here on purpose | `sync <name>` | `shell-sync-run` |
+| Refuse to run an embedded program without a slot | `sync cpu-hog` | `shell-sync-run` |
 | Kill a process from the shell | `kill <ep>`, `kill ep=<n>` | `debugger-kill-acceptance` |
 | Kill a process from the debugger | `!kill <ep>` | `tui-soak` |
 | Reuse the slot a kill freed | `run` after `kill` | `debugger-kill-acceptance` |
@@ -53,8 +55,10 @@ Run one with `just <recipe>`.
 | Zoom, help, copy mode, broadcast | `Ctrl-A z ? y b,b` | `tui-soak`, `windows-smoke` |
 | Close a pane and put it back | `Ctrl-A x`, `Ctrl-A S` | `tui-soak` |
 | Clear a pane, keeping it open | `Ctrl-A l` | unit test |
-| See that a pane's process has ended | `(ended)` in its name | `tui-soak`, unit test |
+| See that a pane's process has ended | `(ended)` in its name, including a program too short-lived for any snapshot to catch | `tui-soak`, unit test |
 | Reclaim the space of finished programs | `Ctrl-A c` | `tui-soak`, unit test |
+| Get back a shell that has stopped responding | `Ctrl-A k`, debugger `!kill 1`, or `kill 1` at a working prompt | `shell-restart`, `debugger-kill-acceptance` |
+| Keep the keyboard at the prompt when a program starts or exits | any `bg`, and any child exiting while the monitor runs | `shell-foreground` |
 | A reused pane starts empty | any relaunch on a freed slot | unit test |
 | Save and restore a layout | `Ctrl-A w` / `R` | `windows-smoke` |
 | Detach without killing the target | `Ctrl-A d` | `windows-smoke` |
@@ -97,10 +101,12 @@ Run one with `just <recipe>`.
 
 No recipe covers these yet. They are real behaviours, not hypotheticals.
 
-- **Startup commands.** Nothing runs `mon` for you when the frontend attaches;
-  it has to be typed. The design is a catalog `autostart` flag acted on when
-  the protocol enters framed mode, so the shell starts it once and reprints
-  the menu.
+- **A synchronous program that is silent, deaf and never yields.** The restart
+  escape is raised by the UART interrupt handler but acted on by the kernel at
+  its next entry from the shell, because COR24 cannot load an interrupted PC.
+  A program that never reads, writes or yields reaches none of those entries.
+  That is the same limit every process on this target has, and lifting it needs
+  the ISA to make `ir` readable and writable.
 - **The launcher's adapter watchdog.** `swtos-emulator-debug.py` now exits when
   the adapter dies, which was verified by hand but has no recipe.
 - **Source lines inside a spawned process.** `dis` now decodes any address by
