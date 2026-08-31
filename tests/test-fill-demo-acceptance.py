@@ -194,15 +194,21 @@ def main():
             f"channels={advancing}"
         )
         tick, first = forced_counts(transport, tick)
-        # Beat, do not sleep: the handler only forces a preemption when a
-        # heartbeat arrives, so a quiet gap advances nothing and the second
-        # sample matches the first.
-        for _ in range(60):
-            heartbeat(transport, tick)
-            tick += 1
-        _, second = forced_counts(transport, tick)
         preempted = {endpoint: count for endpoint, count in first.items() if count}
         assert len(preempted) == HOGS, f"expected {HOGS} preempted hogs, saw {first}"
+
+        # Beat until every hog has advanced, rather than sampling twice and
+        # hoping. The handler forces a preemption only when a heartbeat
+        # arrives, and which process it interrupts in any given window is not
+        # ours to choose; over enough windows it must be each of them.
+        second = first
+        for _ in range(12):
+            for _ in range(40):
+                heartbeat(transport, tick)
+                tick += 1
+            tick, second = forced_counts(transport, tick)
+            if all(second[endpoint] > count for endpoint, count in preempted.items()):
+                break
         for endpoint, count in preempted.items():
             assert second[endpoint] > count, (first, second)
 

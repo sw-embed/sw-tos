@@ -2808,6 +2808,101 @@ _stats_div10_done:
         pop     r1
         jmp     (r1)
 
+; TASK_PRINT_UNSIGNED(value): print a 24-bit value as an unsigned decimal.
+;
+; PL/SW's own printer loops while the value is greater than zero, so anything
+; with the top bit set printed nothing at all -- an interrupted-r0 sample is
+; an arbitrary word and half of them look negative.
+        .globl  _TASK_PRINT_UNSIGNED
+_TASK_PRINT_UNSIGNED:
+        push    fp
+        push    r2
+        push    r1
+        mov     fp,sp
+        lw      r0,9(fp)
+        la      r2,_print_stat_int
+        jal     r1,(r2)
+        mov     sp,fp
+        pop     r1
+        pop     r2
+        pop     fp
+        jmp     (r1)
+
+; TASK_HEAP_INFO(result): bytes handed out of the loaded-image heap, and the
+; most ever handed out. TASK_MEM_INFO reports the stack arena; these are the
+; other half of the picture and appending them there would overrun the result
+; structures callers have already declared.
+        .globl  _TASK_HEAP_INFO
+_TASK_HEAP_INFO:
+        push    fp
+        push    r2
+        push    r1
+        mov     fp,sp
+        la      r2,_heap_next
+        lw      r0,0(r2)
+        la      r2,_swtos_image_end
+        sub     r0,r2
+        lw      r1,9(fp)
+        sw      r0,0(r1)
+        la      r2,_heap_peak_next
+        lw      r0,0(r2)
+        la      r2,_swtos_image_end
+        sub     r0,r2
+        lw      r1,9(fp)
+        sw      r0,3(r1)
+        mov     sp,fp
+        pop     r1
+        pop     r2
+        pop     fp
+        jmp     (r1)
+
+; TASK_PRINT_PADDED(text, width): print a NUL-terminated string and pad it
+; with spaces to `width`, so a column of them lines up. A caller in PL/SW
+; cannot do this for itself: it has a pointer and no way to measure what it
+; points at.
+        .globl  _TASK_PRINT_PADDED
+_TASK_PRINT_PADDED:
+        push    fp
+        push    r2
+        push    r1
+        mov     fp,sp
+        lw      r2,9(fp)        ; text
+        lw      r1,12(fp)       ; remaining width
+_task_print_padded_next:
+        lbu     r0,0(r2)
+        ceq     r0,z
+        brt     _task_print_padded_fill
+        push    r1
+        push    r2
+        la      r2,_putchar
+        jal     r1,(r2)
+        pop     r2
+        pop     r1
+        add     r2,1
+        add     r1,-1
+        bra     _task_print_padded_next
+_task_print_padded_fill:
+        ; A name longer than the column is left whole; the row is wider than
+        ; the others, which reads better than a truncated name.
+        lc      r0,0
+        cls     r1,r0
+        brt     _task_print_padded_done
+        ceq     r1,z
+        brt     _task_print_padded_done
+        push    r1
+        lc      r0,32
+        la      r2,_putchar
+        jal     r1,(r2)
+        pop     r1
+        add     r1,-1
+        bra     _task_print_padded_fill
+_task_print_padded_done:
+        mov     sp,fp
+        pop     r1
+        pop     r2
+        pop     fp
+        jmp     (r1)
+
 ; TASK_SPAWN_ENDPOINT(result): the endpoint the last spawn was given, so a
 ; caller can wait for that one child rather than for every child there is.
         .globl  _TASK_SPAWN_ENDPOINT
