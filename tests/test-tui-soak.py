@@ -384,6 +384,36 @@ def main():
         session.command(b"z", settle=1.0)
         step("monitor reports every live process")
 
+        # A full table refuses a launch rather than wedging or silently
+        # doing nothing, and says so where the command was typed.
+        session.command(b"1", settle=1.0)
+        refused = False
+        for _ in range(3):
+            session.send(b"bg clock\r", settle=4.0)
+            if "ERROR" in session.screen():
+                refused = True
+                break
+        require(refused, "a full table refuses a launch", session.screen()[-800:])
+        step("full table refuses a launch")
+
+        # Killing processes must free their slots and let their panes be
+        # reclaimed: a long session should not end up mostly finished
+        # programs holding the screen.
+        panes_full = session.panes()
+        session.command(b"3", settle=1.0)
+        for endpoint in (b"8", b"10", b"12"):
+            session.send(b"!kill " + endpoint + b"\r", settle=3.0)
+        ended = time.monotonic() + 25
+        while "(ended)" not in session.screen() and time.monotonic() < ended:
+            require(session.running(), "killed panes report their end")
+            time.sleep(0.3)
+        require("(ended)" in session.screen(), "a killed process's pane says so",
+                session.screen()[-800:])
+        session.command(b"c", settle=2.0)
+        require(session.panes() < panes_full, "ended panes are reclaimed",
+                f"panes stayed at {session.panes()}")
+        step("panes shrink with the process table")
+
         # The shell must still take a command with the table full. Focus has
         # to be checked, not assumed: every new pane takes it, so after the
         # fill the keyboard is aimed at the last clock rather than the shell.

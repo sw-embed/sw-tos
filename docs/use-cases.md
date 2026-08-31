@@ -15,7 +15,7 @@ Run one with `just <recipe>`.
 | Start a program without blocking the prompt | `bg <name>` (same as `run`) | `test-shell-command-parsing`, `catalog-run-smoke` |
 | Launch from the menu | keys `1`-`6` | `scheduled-shell-smoke` |
 | Fill every process slot | menu `9` | `fill-demo-acceptance`, `scheduled-sixteen-smoke` |
-| Refuse a spawn with no free slot | `run` on a full table | `scheduled-sixteen-smoke` |
+| Refuse a spawn with no free slot | `run` on a full table | `tui-soak`, `scheduled-sixteen-smoke` |
 | Kill a process from the shell | `kill <ep>`, `kill ep=<n>` | `debugger-kill-acceptance` |
 | Kill a process from the debugger | `!kill <ep>` | `tui-soak` |
 | Reuse the slot a kill freed | `run` after `kill` | `debugger-kill-acceptance` |
@@ -52,6 +52,8 @@ Run one with `just <recipe>`.
 | Zoom, help, copy mode, broadcast | `Ctrl-A z ? y b,b` | `tui-soak`, `windows-smoke` |
 | Close a pane and put it back | `Ctrl-A x`, `Ctrl-A S` | `tui-soak` |
 | Clear a pane, keeping it open | `Ctrl-A l` | unit test |
+| See that a pane's process has ended | `(ended)` in its name | `tui-soak`, unit test |
+| Reclaim the space of finished programs | `Ctrl-A c` | `tui-soak`, unit test |
 | A reused pane starts empty | any relaunch on a freed slot | unit test |
 | Save and restore a layout | `Ctrl-A w` / `R` | `windows-smoke` |
 | Detach without killing the target | `Ctrl-A d` | `windows-smoke` |

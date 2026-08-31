@@ -70,6 +70,10 @@ pub struct Pane {
     current: String,
     scrollback_limit: usize,
     alert: bool,
+    /// A process held this channel at some point.
+    ran: bool,
+    /// That process has since gone.
+    ended: bool,
     scroll_offset: usize,
     horizontal_offset: usize,
     search: Option<String>,
@@ -85,6 +89,8 @@ impl Pane {
             current: String::new(),
             scrollback_limit,
             alert: false,
+            ran: false,
+            ended: false,
             scroll_offset: 0,
             horizontal_offset: 0,
             search: None,
@@ -289,6 +295,45 @@ impl Desktop {
         }
     }
 
+    /// Note which endpoints are running, so a pane whose process has gone
+    /// says so instead of looking like one that simply has nothing to add.
+    ///
+    /// Only a pane that has held a process can end. The Application pane
+    /// exists before anything runs on it, and an empty pane is not a dead
+    /// one.
+    pub fn mark_live_endpoints(&mut self, live: &[u8]) {
+        for pane in &mut self.panes {
+            if pane.kind != PaneKind::Application {
+                continue;
+            }
+            let endpoint = u16::from(pane.channel) + 1;
+            let running = u8::try_from(endpoint).is_ok_and(|value| live.contains(&value));
+            if running {
+                pane.ran = true;
+                pane.ended = false;
+            } else if pane.ran {
+                pane.ended = true;
+            }
+        }
+    }
+
+    /// Close every pane whose process has ended, and return how many went.
+    ///
+    /// A long session leaves the grid full of finished programs, each taking
+    /// a share of the screen from the ones still running.
+    pub fn close_ended(&mut self) -> usize {
+        let focused = self.panes.get(self.focus).map(|pane| pane.channel);
+        let before = self.panes.len();
+        self.panes.retain(|pane| !pane.ended);
+        if self.panes.is_empty() {
+            self.restore_system_panes();
+        }
+        self.focus = focused
+            .and_then(|channel| self.panes.iter().position(|pane| pane.channel == channel))
+            .unwrap_or(0);
+        before - self.panes.len()
+    }
+
     /// Name a pane after the process occupying its channel.
     ///
     /// A pane is opened before anything is known about what will speak on it,
@@ -454,6 +499,9 @@ impl Desktop {
             b'S' => {
                 self.restore_system_panes();
             }
+            b'c' => {
+                self.close_ended();
+            }
             b'y' => self.copy_mode = !self.copy_mode,
             b'w' => return CommandOutcome::Save,
             b'b' if self.broadcast_armed => {
@@ -492,7 +540,8 @@ impl Desktop {
                     title: "Help",
                     lines: &[
                         "1-9 focus  n next  p previous  z zoom  s split  x close",
-                        "l clear pane  S restore-system-panes  y copy",
+                        "l clear pane  c close ended  S restore-system-panes",
+                        "y copy",
                         "b,b broadcast",
                         "w save  R restore-layout",
                         "copy: arrows/hjkl  PgUp/PgDn  g/G  q exit",
@@ -650,13 +699,14 @@ impl Desktop {
         // survives truncation in a narrow column; the endpoint follows for
         // panes that have one.
         format!(
-            "{} v {}{}{}{}",
+            "{} v {}{}{}{}{}",
             index + 1,
             pane.title,
             match pane.kind {
                 PaneKind::Application => format!(" ep={}", u16::from(pane.channel) + 1),
                 _ => String::new(),
             },
+            if pane.ended { " (ended)" } else { "" },
             if pane.alert { " !" } else { "" },
             if index == self.focus { " *" } else { "" }
         )
@@ -845,6 +895,37 @@ mod tests {
         // Restoring again is a no-op rather than a duplicate.
         desktop.command(b'S');
         assert_eq!(desktop.layout().len(), PaneKind::ALL.len());
+    }
+
+    #[test]
+    fn a_pane_says_when_its_process_has_ended_and_can_be_reclaimed() {
+        let mut desktop = Desktop::new(10);
+        desktop.add_application(4, "clock");
+        desktop.push_channel(4, b"00:01\n");
+
+        // Endpoint five is running: the pane is live and says nothing extra.
+        desktop.mark_live_endpoints(&[1, 5]);
+        let screen = desktop.render(100, 24);
+        assert!(screen.contains("clock ep=5"), "{screen}");
+        assert!(!screen.contains("(ended)"), "{screen}");
+
+        // It exits. The pane keeps what it printed and says so.
+        desktop.mark_live_endpoints(&[1]);
+        let screen = desktop.render(100, 24);
+        assert!(screen.contains("clock ep=5 (ended)"), "{screen}");
+        assert!(screen.contains("00:01"), "output must survive: {screen}");
+
+        // A pane that never held a process is not a dead one.
+        assert!(!desktop.render(100, 24).contains("Application ep=2 (ended)"));
+
+        // Reclaiming the space closes it and leaves the rest alone.
+        let before = desktop.pane_count();
+        desktop.command(b'c');
+        assert_eq!(desktop.pane_count(), before - 1);
+        // The footer carries a wall clock of its own; look for the pane.
+        let after = desktop.render(100, 24);
+        assert!(!after.contains("v clock"), "{after}");
+        assert!(desktop.render(100, 24).contains("1 v Shell"));
     }
 
     #[test]

@@ -1046,14 +1046,18 @@ fn run_windows(options: &Options) -> io::Result<()> {
                                 clock: resources.has_process_named("cloc"),
                             };
                             // Channel N carries endpoint N+1, so this is what
-                            // teaches a pane the name of the program on it.
+                            // teaches a pane the name of the program on it,
+                            // and what tells a pane its process has gone.
                             if let Some(snapshot) = resources.snapshot() {
+                                let mut live = Vec::new();
                                 for process in snapshot.processes.values() {
-                                    if process.endpoint > 0 {
+                                    if process.endpoint > 0 && process.state != 0 {
                                         desktop
                                             .name_channel(process.endpoint - 1, &process.name);
+                                        live.push(process.endpoint);
                                     }
                                 }
+                                desktop.mark_live_endpoints(&live);
                             }
                         }
                     }
