@@ -77,7 +77,8 @@ Run one with `just <recipe>`.
 | Read memory | `x <addr>` | `emulator-debugger-smoke` |
 | Run any shell command from the debugger | `!ps -l`, `!bg mon`, `!kill 3` | `tui-soak` |
 | Memory map | `map hw|plan|live` | `debug-info-smoke` |
-| Symbols and source | `sym`, `list`, `dis` | `debug-info-smoke` |
+| Symbols and source | `sym`, `list` | `debug-info-smoke` |
+| Disassemble anywhere, map or not | `dis <addr>` | unit test against the linker's own output |
 
 ## Storage and devices
 
@@ -99,9 +100,13 @@ No recipe covers these yet. They are real behaviours, not hypotheticals.
   the menu.
 - **The launcher's adapter watchdog.** `swtos-emulator-debug.py` now exits when
   the adapter dies, which was verified by hand but has no recipe.
-- **Disassembly inside a spawned process.** `dis` and `list` refuse an address
-  in a heap-loaded image copy, because the debug map covers only the linked
-  image.
+- **Source lines inside a spawned process.** `dis` now decodes any address by
+  reading the bytes, but `list` still needs the map, so a spawned copy shows
+  instructions without the source they came from. Mapping a copy back to its
+  origin image would need the loader to report each process's load base.
+- **Live disassembly reads twelve bytes at a time**, which is the debug
+  protocol's memory-read size: three long instructions or a dozen short ones.
+  A longer listing means several reads and somewhere to keep them.
 - **Transport-loss reporting.** The frontend's crash report and session log are
   not asserted anywhere.
 - **Typed commands can be dropped by the frontend.** Several commands typed
