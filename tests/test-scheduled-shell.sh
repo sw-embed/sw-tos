@@ -10,11 +10,11 @@ OUT_DIR="$ROOT_DIR/build/scheduled-shell"
     "$ROOT_DIR/tests/catalog-shell.plsw" scheduled-shell
 
 output=$($EMU --load-binary "$OUT_DIR/program.bin@0" --entry 0 \
-    -u '1\nx2\n3\n\xFF\x01\xF4\x01\x00\xFF\x01\x58\x02\x00\xFF\x01\xBC\x02\x00\x1B4\n\xFF\x02\xC0\xFF\x03\x45\xFF\x02\x24\x1E\x45\xFF\x02\x88\x1E\x45\x1B5\n0\n6\n' \
+    -u '1\nx2\n3\n\xFF\x01\xF4\x01\x00\xFF\x01\x58\x02\x00\xFF\x01\xBC\x02\x00\x1B4\n\xFF\x02\xC0\xFF\x03\x45\xFF\x02\x24\x1E\x45\xFF\x02\x88\x1E\x45\x1B5\n0\n' \
     --speed 0 -n 3000000 --quiet 2>/dev/null \
     | sed '/^Entry point:/d')
 
-for expected in 'Hello' 'B1' 'B2' 'Uptime' '00:05' '00:06' '00:07' 'Clock' '12:34:56' '12:34:57' '12:34:58' '5=Multitask' '6=UART Test 9=Fill' 'B1' 'C1' 'B2' 'C2' 'BAD' 'ABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789'; do
+for expected in 'Hello' 'B1' 'B2' 'Uptime' '00:05' '00:06' '00:07' 'Clock' '12:34:56' '12:34:57' '12:34:58' '5=Multitask 9=Fill' 'B1' 'C1' 'B2' 'C2' 'BAD'; do
     if ! grep -q "$expected" <<<"$output"; then
         echo "FAIL: scheduled menu output missing '$expected'" >&2
         echo "$output" >&2
@@ -35,4 +35,4 @@ if [ "$menu_count" -ne 7 ]; then
     exit 1
 fi
 
-echo "PASS: persistent menu scheduled apps, alternating workers, and UART test pattern"
+echo "PASS: persistent menu scheduled apps and alternating workers"

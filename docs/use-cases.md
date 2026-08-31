@@ -13,7 +13,7 @@ Run one with `just <recipe>`.
 | See what programs exist | `ls`, `stat <name>`, `df`, `du` | `scheduled-catalog-smoke` |
 | Run a program in its own pane | `run <name>`, `bg <name>`, or just `<name>` | `debugger-kill-acceptance`, `test-shell-command-parsing` |
 | Start a program without blocking the prompt | `bg <name>` (same as `run`) | `test-shell-command-parsing`, `catalog-run-smoke` |
-| Launch from the menu | keys `1`-`6` | `scheduled-shell-smoke` |
+| Launch from the menu | keys `1`-`5`, `9` | `scheduled-shell-smoke` |
 | Fill every process slot | menu `9` | `fill-demo-acceptance`, `scheduled-sixteen-smoke` |
 | Refuse a spawn with no free slot | `run` on a full table | `tui-soak`, `scheduled-sixteen-smoke` |
 | Kill a process from the shell | `kill <ep>`, `kill ep=<n>` | `debugger-kill-acceptance` |
