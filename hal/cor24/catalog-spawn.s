@@ -2808,6 +2808,66 @@ _stats_div10_done:
         pop     r1
         jmp     (r1)
 
+; TASK_SPAWN_ENDPOINT(result): the endpoint the last spawn was given, so a
+; caller can wait for that one child rather than for every child there is.
+        .globl  _TASK_SPAWN_ENDPOINT
+_TASK_SPAWN_ENDPOINT:
+        push    fp
+        push    r2
+        push    r1
+        mov     fp,sp
+        la      r2,_spawn_endpoint_save
+        lw      r0,0(r2)
+        lw      r2,9(fp)
+        sw      r0,0(r2)
+        mov     sp,fp
+        pop     r1
+        pop     r2
+        pop     fp
+        jmp     (r1)
+
+; TASK_JOIN_ENDPOINT(endpoint): wait for one process to finish.
+;
+; TASK_JOIN waits for the child count to reach zero, which means every child
+; and not the one just started. That was harmless while children were things
+; the operator launched and ended, and became a hang the moment the shell kept
+; one of its own: a resident monitor never exits, so a join for a program that
+; had already finished waited on it forever and took the prompt with it.
+        .globl  _TASK_JOIN_ENDPOINT
+_TASK_JOIN_ENDPOINT:
+        push    fp
+        push    r2
+        push    r1
+        mov     fp,sp
+        ; Counted like the join it replaces, so the reported IPC figure keeps
+        ; meaning the same thing.
+        la      r2,_current_proc
+        lw      r0,0(r2)
+        la      r2,_stats_for_proc
+        jal     r1,(r2)
+        add     r0,9
+        la      r2,_stats_increment
+        jal     r1,(r2)
+_task_join_endpoint_wait:
+        lw      r0,9(fp)
+        la      r2,_proc_for_endpoint
+        jal     r1,(r2)
+        ceq     r0,z
+        brt     _task_join_endpoint_done
+        mov     r2,r0
+        lw      r0,24(r2)
+        ceq     r0,z
+        brt     _task_join_endpoint_done
+        la      r2,_yield
+        jal     r1,(r2)
+        bra     _task_join_endpoint_wait
+_task_join_endpoint_done:
+        mov     sp,fp
+        pop     r1
+        pop     r2
+        pop     fp
+        jmp     (r1)
+
 ; TASK_CLAIM_FOREGROUND(): make the caller the process raw terminal input
 ; reaches. A spawn hands input focus to the new child, which is what a user
 ; wants when launching something interactive and exactly wrong for a service

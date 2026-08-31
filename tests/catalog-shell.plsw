@@ -407,14 +407,20 @@ SHELL_MULTITASK_DEMO: PROC(STATE_PTR PTR);
     DCL PRIVATE_STATE PTR;
     DCL FIRST_STATUS INT;
     DCL SECOND_STATUS INT;
+    DCL FIRST_EP INT;
+    DCL SECOND_EP INT;
     PRIVATE_STATE = STATE_PTR;
     CALL TASK_SPAWN(PRIVATE_STATE->SPS_COUNTER_DESC);
     CALL TASK_SPAWN_RESULT(ADDR(FIRST_STATUS));
+    CALL TASK_SPAWN_ENDPOINT(ADDR(FIRST_EP));
     CALL TASK_SPAWN(PRIVATE_STATE->SPS_COUNTER_DESC);
     CALL TASK_SPAWN_RESULT(ADDR(SECOND_STATUS));
+    CALL TASK_SPAWN_ENDPOINT(ADDR(SECOND_EP));
     IF (FIRST_STATUS = 0) THEN DO;
         IF (SECOND_STATUS = 0) THEN DO;
-            CALL TASK_JOIN;
+            /* These two, not every process: the monitor is a child too. */
+            CALL TASK_JOIN_ENDPOINT(FIRST_EP);
+            CALL TASK_JOIN_ENDPOINT(SECOND_EP);
             CALL SHELL_READY;
         END;
         ELSE CALL SHELL_READY;
@@ -439,11 +445,16 @@ SHELL_READY: PROC;
 END;
 
 SHELL_RUN_SELECTED: PROC(DESC_PTR PTR);
+    /* Wait for this program, not for every process there is. The monitor is
+       a child too and never exits, so waiting for the child count to fall to
+       zero waited forever and took the prompt with it. */
     DCL SPAWN_STATUS INT;
+    DCL ENDPOINT INT;
     CALL TASK_SPAWN(DESC_PTR);
     CALL TASK_SPAWN_RESULT(ADDR(SPAWN_STATUS));
     IF (SPAWN_STATUS = 0) THEN DO;
-        CALL TASK_JOIN;
+        CALL TASK_SPAWN_ENDPOINT(ADDR(ENDPOINT));
+        CALL TASK_JOIN_ENDPOINT(ENDPOINT);
         CALL SHELL_READY;
     END;
     ELSE DO;
