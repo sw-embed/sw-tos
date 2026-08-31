@@ -23,6 +23,16 @@ run_shell() {
         | sed '/^Entry point:/d'
 }
 
+refute() {
+    local label="$1" input="$2" needle="$3" output
+    output=$(run_shell "$input")
+    if printf '%s' "$output" | grep -q -- "$needle"; then
+        echo "FAIL: $label (did not expect '$needle')" >&2
+        printf '%s\n' "$output" >&2
+        exit 1
+    fi
+}
+
 expect() {
     local label="$1" input="$2" needle="$3" output
     output=$(run_shell "$input")
@@ -61,6 +71,16 @@ expect "backspace corrects an option" \
     "ps -x${BS}l\n" 'ep=1 name=shell'
 expect "backspace corrects an argument name" \
     "stat hellp${BS}o\n" 'hello kind=program'
+
+# "help NAME" explains one command, which also proves the parser waits for
+# the whole line: a parser that acted at the space would print the general
+# help before the topic was typed, which is what it used to do.
+expect "help explains one command" \
+    'help bg\n' 'bg NAME is run'
+refute "help does not act at the space" \
+    'help bg\n' 'df du mem stat uname'
+expect "an unknown help topic is refused" \
+    'help nope\n' 'BAD'
 
 # A digit is a command like any other: it takes effect on Enter, not on the
 # keypress. Reacting to the digit itself made it the one thing that could

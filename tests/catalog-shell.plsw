@@ -61,6 +61,17 @@ DCL SHELL_PROC_IPC(6) CHAR INIT(' ipc=');
 DCL SHELL_PROC_TTY_IN(9) CHAR INIT(' ttyin=');
 DCL SHELL_PROC_TTY_OUT(10) CHAR INIT(' ttyout=');
 DCL SHELL_PROC_NONE(5) CHAR INIT('none');
+DCL SHELL_TOPIC_HELP(31) CHAR INIT('help NAME explains one command');
+DCL SHELL_TOPIC_LS(28) CHAR INIT('ls and dir list the catalog');
+DCL SHELL_TOPIC_DF(24) CHAR INIT('df shows catalog totals');
+DCL SHELL_TOPIC_DU(21) CHAR INIT('du shows image sizes');
+DCL SHELL_TOPIC_PS(36) CHAR INIT('ps lists processes, ps -l in detail');
+DCL SHELL_TOPIC_RUN(42) CHAR INIT('run NAME starts a program in its own pane');
+DCL SHELL_TOPIC_BG(42) CHAR INIT('bg NAME is run, and the prompt stays free');
+DCL SHELL_TOPIC_KILL(42) CHAR INIT('kill EP ends a process, ep=N accepted too');
+DCL SHELL_TOPIC_MEM(46) CHAR INIT('mem totals, mem -r resets, mem -p per process');
+DCL SHELL_TOPIC_STAT(35) CHAR INIT('stat NAME or stat EP describes one');
+DCL SHELL_TOPIC_UNAME(40) CHAR INIT('uname shows the system name and version');
 DCL SHELL_PROC_FORCED(5) CHAR INIT(' fp=');
 DCL SHELL_PROC_CPU(6) CHAR INIT(' cpu=');
 
@@ -92,9 +103,39 @@ SHELL_BAD: PROC;
     CALL UART_PUTCHAR(10);
 END;
 
-SHELL_HELP_COMMAND: PROC;
-    CALL UART_PUTS(ADDR(SHELL_HELP_1)); CALL UART_PUTCHAR(10);
-    CALL UART_PUTS(ADDR(SHELL_HELP_2)); CALL UART_PUTCHAR(10);
+SHELL_TOPIC_LINE: PROC(TEXT_PTR PTR);
+    CALL UART_PUTS(TEXT_PTR);
+    CALL UART_PUTCHAR(10);
+END;
+
+SHELL_HELP_COMMAND: PROC(A0 BYTE, A1 BYTE, ALEN INT);
+    /* "help" lists the commands, "help NAME" explains one. Matching on the
+       first two characters and the length tells these apart and costs no
+       storage. The tests are written flat rather than as one long else
+       chain, which the compiler will not nest this deep. */
+    DCL FOUND INT;
+    IF (ALEN = 0) THEN DO;
+        CALL UART_PUTS(ADDR(SHELL_HELP_1)); CALL UART_PUTCHAR(10);
+        CALL UART_PUTS(ADDR(SHELL_HELP_2)); CALL UART_PUTCHAR(10);
+    END;
+    ELSE DO;
+        FOUND = 0;
+        IF (A0 = 104) THEN DO; CALL SHELL_TOPIC_LINE(ADDR(SHELL_TOPIC_HELP)); FOUND = 1; END;
+        IF (A0 = 108) THEN DO; CALL SHELL_TOPIC_LINE(ADDR(SHELL_TOPIC_LS)); FOUND = 1; END;
+        IF (A0 = 112) THEN DO; CALL SHELL_TOPIC_LINE(ADDR(SHELL_TOPIC_PS)); FOUND = 1; END;
+        IF (A0 = 114) THEN DO; CALL SHELL_TOPIC_LINE(ADDR(SHELL_TOPIC_RUN)); FOUND = 1; END;
+        IF (A0 = 98) THEN DO; CALL SHELL_TOPIC_LINE(ADDR(SHELL_TOPIC_BG)); FOUND = 1; END;
+        IF (A0 = 107) THEN DO; CALL SHELL_TOPIC_LINE(ADDR(SHELL_TOPIC_KILL)); FOUND = 1; END;
+        IF (A0 = 109) THEN DO; CALL SHELL_TOPIC_LINE(ADDR(SHELL_TOPIC_MEM)); FOUND = 1; END;
+        IF (A0 = 115) THEN DO; CALL SHELL_TOPIC_LINE(ADDR(SHELL_TOPIC_STAT)); FOUND = 1; END;
+        IF (A0 = 117) THEN DO; CALL SHELL_TOPIC_LINE(ADDR(SHELL_TOPIC_UNAME)); FOUND = 1; END;
+        IF (A0 = 100) THEN DO;
+            IF (A1 = 105) THEN DO; CALL SHELL_TOPIC_LINE(ADDR(SHELL_TOPIC_LS)); FOUND = 1; END;
+            IF (A1 = 102) THEN DO; CALL SHELL_TOPIC_LINE(ADDR(SHELL_TOPIC_DF)); FOUND = 1; END;
+            IF (A1 = 117) THEN DO; CALL SHELL_TOPIC_LINE(ADDR(SHELL_TOPIC_DU)); FOUND = 1; END;
+        END;
+        IF (FOUND = 0) THEN CALL SHELL_BAD;
+    END;
 END;
 
 SHELL_UNAME_COMMAND: PROC;
@@ -662,7 +703,8 @@ PLSW_LAUNCHER: PROC(STATE_PTR PTR);
         END;
         ELSE DO;
             IF (CWORD(0) = 104) THEN DO;
-                IF (WLEN = 4) THEN CALL SHELL_HELP_COMMAND; ELSE CALL SHELL_BAD;
+                IF (WLEN = 4) THEN CALL SHELL_HELP_COMMAND(CARG(0), CARG(1), ALEN);
+                ELSE CALL SHELL_BAD;
             END;
             ELSE DO;
             IF (CWORD(0) = 108) THEN DO;

@@ -27,6 +27,7 @@ Run one with `just <recipe>`.
 | Use case | Recipe |
 | --- | --- |
 | Correct a typo anywhere in a line | `test-shell-command-parsing` |
+| Explain one command | `help bg`, `help kill` | `test-shell-command-parsing` |
 | Leave an argument unfinished (`run x --`) without losing the prompt | `test-shell-command-parsing` |
 | Old `--tty=new` spelling still accepted | `test-shell-command-parsing` |
 | Reject a `kill` with no endpoint | `test-shell-command-parsing` |
