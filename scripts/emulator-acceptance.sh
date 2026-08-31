@@ -21,6 +21,7 @@ RECIPES=(
     tui-soak
     debugger-kill-acceptance
     shell-command-parsing
+    shell-restart
     acceptance-report-smoke
     provider-config-smoke
     proc-desc-abi-smoke

@@ -110,9 +110,11 @@ expect "a menu digit acts on Enter" \
 expect "bg leaves the prompt free" \
     'bg hello\n \nuname\n' 'SWTOS COR24'
 
-# The shell may not kill itself, however it is asked.
-expect "the shell refuses to kill itself" \
-    'kill 1\n' 'BAD'
+# Killing the shell rewinds it. Its slot stays, because the session goes with
+# it, but the request is answered rather than refused: an operator asking to
+# kill a wedged shell wants it back, not an error.
+expect "killing the shell restarts it" \
+    'kill 1\n' 'SHELL RESTARTED'
 
 # A line with no endpoint at all is rejected rather than acted on.
 expect "kill without an endpoint is rejected" \

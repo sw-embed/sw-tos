@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Every process except the shell can be killed from the debugger.
+"""Every process can be killed from the debugger, the shell included.
 
 The kill path was built for the forced-preemption proof and only accepted
 the first two child slots, and only a process the interrupt handler could
@@ -7,6 +7,10 @@ reach. A clock or an uptime never spins, so it is never the process the
 handler interrupts and no amount of waiting made it killable: the debugger
 answered "status 3" forever. This drives the shell the way a person does,
 spawns one of each kind, and requires the slot to come back.
+
+Endpoint 1 is the exception that proves the rule: the shell keeps its slot,
+because the session ends without it, and a kill rewinds it to its prompt
+instead.
 """
 
 import os
@@ -24,7 +28,6 @@ ADAPTER = ROOT / "build/cor24-debugger/swtos-cor24-debug-adapter"
 SYNC = b"\xa5\x5a"
 
 KILL_OK = 0
-KILL_REJECTED = 1
 
 
 def frame(kind: int, payload: bytes = b"", channel: int = 0) -> bytes:
@@ -207,10 +210,6 @@ def main():
                       if endpoint != 1 and state)
         assert len(live) >= 3, f"expected three children, saw {before}"
 
-        # The shell is protected; everything else goes.
-        tick, status = kill(transport, tick, 1)
-        assert status == KILL_REJECTED, f"shell was killable: status {status}"
-
         killed = []
         for endpoint in live[:3]:
             tick, status = kill(transport, tick, endpoint)
@@ -265,8 +264,31 @@ def main():
         assert restarted.get(reused[0]), (
             f"the freed slot was not reused: {restarted}")
 
-        print(f"PASS: debugger killed endpoints {killed} and refused the shell; "
-              f"the shell killed endpoint {reused[0]} and reused its slot")
+        # Endpoint 1 is the shell, and killing it restarts it rather than
+        # releasing its slot: a session with no shell is not a session. It is
+        # left until last here because it discards whatever the shell was
+        # doing, which is the point of it.
+        output.clear()
+        tick, status = kill(transport, tick, 1)
+        assert status == KILL_OK, f"the shell refused its own restart: {status}"
+        tick = pump(transport, tick, 250, output)
+        tick, after_restart = slot_states(transport, tick)
+        assert after_restart.get(1), f"the shell did not come back: {after_restart}"
+        banner = bytes(output.get(0, b"")).decode("ascii", "replace")
+        assert "SHELL RESTARTED" in banner, (
+            f"no restart banner:\n{banner[-400:]}")
+
+        # And it is a working shell, not merely a live slot.
+        output.clear()
+        tick = type_slowly(transport, b"mem\r", tick, output)
+        tick = pump(transport, tick, 250, output)
+        revived = bytes(output.get(0, b"")).decode("ascii", "replace")
+        assert "total=" in revived, (
+            f"the restarted shell did not run a command:\n{revived[-400:]}")
+
+        print(f"PASS: debugger killed endpoints {killed}; the shell killed "
+              f"endpoint {reused[0]} and reused its slot; killing the shell "
+              f"restarted it")
     finally:
         os.close(slave)
         if proc.poll() is None:

@@ -617,6 +617,15 @@ fn time_frame(mode: TimeMode, tick: u32) -> Vec<u8> {
     frame
 }
 
+/// Ask the target to restart its shell.
+///
+/// This is written unframed, straight past the multiplexer, because it exists
+/// for the case where nothing on the target is reading framed input any more:
+/// a command running in the shell's own context that will not give the CPU
+/// back. The target's UART interrupt handler is then the only code still
+/// running, and this is the one thing it listens for.
+const SHELL_RESTART: [u8; 2] = [0xff, 4];
+
 fn scheduler_heartbeat(tick: u32) -> [u8; 5] {
     [0xff, 1, tick as u8, (tick >> 8) as u8, (tick >> 16) as u8]
 }
@@ -730,6 +739,16 @@ fn echo_swtos_key(tty: &mut File, byte: u8) -> io::Result<()> {
         0x20..=0x7e => tty.write_all(&[byte]),
         _ => Ok(()),
     }
+}
+
+/// Recognize a request to kill endpoint 1, in the spellings the shell accepts.
+fn is_shell_restart_request(command: &str) -> bool {
+    let mut words = command.split_whitespace();
+    if words.next() != Some("kill") {
+        return false;
+    }
+    let target = words.next().map(|word| word.trim_start_matches("ep="));
+    words.next().is_none() && target == Some("1")
 }
 
 fn is_numeric_menu_choice(byte: u8) -> bool {
@@ -1136,6 +1155,11 @@ fn run_windows(options: &Options) -> io::Result<()> {
                             next_scheduler_heartbeat = Instant::now();
                             next_hello_retry = Instant::now() + Duration::from_millis(250);
                         }
+                        b'k' => {
+                            serial.write_all(&SHELL_RESTART)?;
+                            serial.flush()?;
+                            desktop.push_channel(254, b"restarting the shell\n");
+                        }
                         b'e' => {
                             let channel = desktop.focused_channel();
                             if matches!(
@@ -1191,6 +1215,14 @@ fn run_windows(options: &Options) -> io::Result<()> {
                                 let command = command.trim().to_string();
                                 let note = if command.is_empty() {
                                     "usage: !<shell command>, e.g. !ps -l".to_string()
+                                } else if is_shell_restart_request(&command) {
+                                    // Not injected. The shell is endpoint 1,
+                                    // and a request to kill it is most often
+                                    // made because it has stopped reading what
+                                    // it would be injected into.
+                                    serial.write_all(&SHELL_RESTART)?;
+                                    serial.flush()?;
+                                    "restarting the shell".to_string()
                                 } else {
                                     injected = command.into_bytes();
                                     injected.push(b'\n');

@@ -26,7 +26,7 @@ fi
 for expected in \
     'arena=256 peak=256' \
     'arena=256 peak=640' \
-    'kstack=7' \
+    'kstack=8' \
     'failures=0 slots=1/16' \
     'ep=1 status=1 stack=256 state=6 total=262' \
     'ep=2 status=0 stack=0 state=0 total=0' \

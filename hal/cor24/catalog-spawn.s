@@ -52,17 +52,15 @@ _kernel_stack_fill:
         la      r2,_proc_a
         lc      r0,1
         sw      r0,18(r2)
-        lw      r2,36(r2)
-        la      r0,_scheduled_counter_descriptor
-        sw      r0,3(r2)        ; process-local descriptor selection
-        la      r0,_scheduled_hello_descriptor
-        sw      r0,6(r2)
-        la      r0,_scheduled_clock_descriptor
-        sw      r0,9(r2)
-        la      r0,_scheduled_embedded_hello_descriptor
-        sw      r0,12(r2)
-        la      r0,_scheduled_uptime_descriptor
-        sw      r0,15(r2)
+        la      r2,_shell_bind_descriptors
+        jal     r1,(r2)
+        ; Retain the stack top a restart rewinds to. _spawn_resident has just
+        ; left the saved SP twelve bytes below it.
+        la      r2,_proc_a
+        lw      r0,9(r2)
+        add     r0,12
+        la      r2,_shell_stack_top
+        sw      r0,0(r2)
 
         ; Endpoint identities belong to process-table slots, including FREE
         ; slots, so process inspection remains stable before first spawn.
@@ -124,6 +122,140 @@ _kernel_stack_found:
         jal     r1,(r2)
         la      r2,_restore_context
         jmp     (r2)
+
+; Point the shell's private state at the programs its menu can select. Boot
+; and restart both bind them, so a restarted shell has the same menu as a
+; freshly booted one.
+_shell_bind_descriptors:
+        push    r1
+        push    r2
+        la      r2,_proc_a
+        lw      r2,36(r2)
+        la      r0,_scheduled_counter_descriptor
+        sw      r0,3(r2)        ; process-local descriptor selection
+        la      r0,_scheduled_hello_descriptor
+        sw      r0,6(r2)
+        la      r0,_scheduled_clock_descriptor
+        sw      r0,9(r2)
+        la      r0,_scheduled_embedded_hello_descriptor
+        sw      r0,12(r2)
+        la      r0,_scheduled_uptime_descriptor
+        sw      r0,15(r2)
+        pop     r2
+        pop     r1
+        jmp     (r1)
+
+; Ask for the shell to be restarted at its next kernel entry. r0 is not
+; preserved.
+_request_shell_restart:
+        push    r1
+        push    r2
+        lc      r0,1
+        la      r2,_shell_restart_pending
+        sw      r0,0(r2)
+        ; Wake it as well. A shell blocked for input it is never going to get
+        ; is not dispatched again on its own, and a request can only be seen by
+        ; a process that runs. It is about to be rewound past whatever it was
+        ; waiting for, so runnable is what it now is.
+        la      r2,_proc_a
+        sw      r0,24(r2)       ; PROC_RUNNABLE
+        pop     r2
+        pop     r1
+        jmp     (r1)
+
+; Rewind the shell to its entry point and resume it. This never returns.
+;
+; The shell is the one process with no way out: it is protected from kill
+; because the session dies with it, and it is not one of the private images the
+; runway can force to quiesce. A command it runs in its own context therefore
+; owns the CPU until it chooses to give it back, and one that never does takes
+; the session with it.
+;
+; A restart is safe where a kill would not be, precisely because it keeps
+; everything. The slot, its private state and its stack all stay where they
+; are, and only the call stack is discarded -- so nothing is allocated, nothing
+; is freed, and repeating it costs nothing. What is thrown away is whatever the
+; shell was in the middle of, which in the case this exists for is a command
+; that was never going to finish.
+_restart_shell:
+        ; Clear the request first: a restart that faulted its way back here
+        ; would otherwise never make progress.
+        lc      r0,0
+        la      r2,_shell_restart_pending
+        sw      r0,0(r2)
+
+        ; Fabricate the same initial context _spawn_resident builds, at the
+        ; same stack top, reusing the private state that is already allocated.
+        la      r2,_proc_a
+        la      r0,_shell_stack_top
+        lw      r0,0(r0)
+        lw      r1,36(r2)
+        sw      r1,-3(r0)       ; initial r0 = state pointer
+        lw      r1,33(r2)       ; selected PROGRAM_DESC
+        lw      r1,6(r1)        ; direct resident entry
+        sw      r1,-6(r0)       ; initial r1/PC
+        lc      r1,0
+        sw      r1,-9(r0)       ; initial r2
+        sw      r1,-12(r0)      ; initial fp
+        add     r0,-12
+        sw      r0,9(r2)        ; saved SP
+
+        ; Drop input typed at the command that is being abandoned. Whatever the
+        ; operator pressed while waiting for it was meant for that command, not
+        ; for the prompt they are about to get back.
+        la      r0,_proc_a
+        la      r2,_tty_for_proc
+        jal     r1,(r2)
+        mov     r2,r0
+        lc      r0,0
+        sw      r0,0(r2)        ; read cursor
+        sw      r0,3(r2)        ; write cursor
+        sw      r0,6(r2)        ; queued count
+
+        la      r2,_shell_bind_descriptors
+        jal     r1,(r2)
+
+        la      r2,_proc_a
+        lc      r0,1
+        sw      r0,24(r2)       ; PROC_RUNNABLE
+        la      r0,_proc_a
+        la      r2,_current_proc
+        sw      r0,0(r2)
+        la      r2,_tty_foreground_proc
+        sw      r0,0(r2)
+
+        la      r0,_restart_banner
+        la      r2,_puts
+        jal     r1,(r2)
+
+        la      r2,_proc_a
+        lw      r0,9(r2)
+        mov     sp,r0
+        la      r2,_restore_context
+        jmp     (r2)
+
+; Act on a pending restart request, if the current process is the shell. Called
+; from the kernel entries a running command must pass through.
+_shell_restart_check:
+        push    r1
+        push    r2
+        push    r0
+        la      r2,_shell_restart_pending
+        lw      r0,0(r2)
+        ceq     r0,z
+        brt     _shell_restart_check_done
+        la      r2,_current_proc
+        lw      r0,0(r2)
+        la      r2,_proc_a
+        ceq     r0,r2
+        brf     _shell_restart_check_done
+        la      r2,_restart_shell
+        jmp     (r2)
+_shell_restart_check_done:
+        pop     r0
+        pop     r2
+        pop     r1
+        jmp     (r1)
 
 ; Spawn descriptor in r0 into the process selected in _spawn_process.
 _spawn_resident:
@@ -2387,6 +2519,8 @@ _TASK_YIELD:
         push    r2
         push    r1
         mov     fp,sp
+        la      r2,_shell_restart_check
+        jal     r1,(r2)
         la      r2,_yield
         jal     r1,(r2)
         mov     sp,fp
@@ -2404,6 +2538,10 @@ _TASK_GETCHAR:
         push    r1
         mov     fp,sp
 _task_getchar_wait:
+        ; Every time around, not only on the way in: a shell waiting here for a
+        ; key it will never be given is exactly the case a restart answers.
+        la      r2,_shell_restart_check
+        jal     r1,(r2)
         la      r2,_current_proc
         lw      r0,0(r2)
         la      r2,_tty_for_proc
@@ -3530,6 +3668,8 @@ _puts_done:
 _putchar:
         push    r1
         push    r2
+        la      r2,_shell_restart_check
+        jal     r1,(r2)
         push    r0
         la      r2,_current_proc
         lw      r0,0(r2)
@@ -4441,7 +4581,13 @@ _kill_endpoint:
         lc      r1,1
         ceq     r0,r1
         brf     _kill_endpoint_lookup
-        lc      r0,1           ; the shell is protected
+        ; Killing the shell restarts it. Releasing its slot would end the
+        ; session, and refusing outright left an operator with a wedged shell
+        ; and nothing to type at, so the one endpoint that cannot go away is
+        ; the one that can always be rewound.
+        la      r2,_request_shell_restart
+        jal     r1,(r2)
+        lc      r0,0           ; accepted
         la      r2,_kill_endpoint_done
         jmp     (r2)
 _kill_endpoint_lookup:
@@ -5327,6 +5473,17 @@ _spawn_heap_mark:
         .zero   3
 _child_count:
         .byte   0
+; The shell's stack top, captured once its initial frame is built. A restart
+; rewinds the process to exactly this address, so it never allocates again and
+; repeated restarts cannot leak the stack arena.
+_shell_stack_top:
+        .zero   3
+; Raised by the UART ISR, which is the only code that runs while a wedged shell
+; spins. The kernel acts on it at its next entry from the shell.
+_shell_restart_pending:
+        .zero   3
+_restart_banner:
+        .byte   10,83,72,69,76,76,32,82,69,83,84,65,82,84,69,68,10,0
 _banner:
         .byte   83,80,65,87,78,10,0
 _state_free:

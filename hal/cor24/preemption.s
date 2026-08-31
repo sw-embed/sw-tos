@@ -112,6 +112,12 @@ _preemption_frame_escape:
         lc      r1,1
         ceq     r0,r1
         brt     _preemption_start_tick
+        lc      r1,4
+        ceq     r0,r1
+        brf     _preemption_escape_ordinary
+        la      r2,_preemption_shell_restart
+        jmp     (r2)
+_preemption_escape_ordinary:
         ; FF 00 is literal FF. Other malformed escapes preserve both bytes.
         push    r0
         lcu     r0,255
@@ -159,6 +165,24 @@ _preemption_tick2:
         la      r2,_preemption_forward_legacy_uptime
         jal     r1,(r2)
         la      r2,_preemption_clock_tick
+        jmp     (r2)
+
+; FF 04 asks for the shell to be restarted. It is raised here rather than
+; delivered as input because a shell that needs restarting is one that is no
+; longer reading input: nothing drains the ISR ring, so nothing downstream of
+; it can ever see the request. This handler is the only code still running.
+;
+; The request cannot be acted on here either -- COR24 cannot load an
+; interrupted PC, so an ISR can resume only the process it interrupted. It is
+; raised for the kernel to act on at its next entry from the shell, which is
+; the next character the running command reads or writes, or its next yield.
+_preemption_shell_restart:
+        la      r2,_request_shell_restart
+        jal     r1,(r2)
+        lc      r0,0
+        la      r2,_preemption_frame_state
+        sb      r0,0(r2)
+        la      r2,_preemption_isr_return
         jmp     (r2)
 
 ; In unframed recovery mode the same FF 01 timestamp historically feeds the
