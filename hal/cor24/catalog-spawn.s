@@ -2808,6 +2808,31 @@ _stats_div10_done:
         pop     r1
         jmp     (r1)
 
+; _release_slot(r0 = slot): mark it free and forget what ran there.
+;
+; Clearing the state alone left the descriptor and the counters standing, so
+; ps listed a free slot under its last program's name with that program's
+; figures beside it -- a process that had been killed still looked present.
+_release_slot:
+        push    r1
+        push    r2
+        mov     r2,r0
+        lc      r0,0
+        sw      r0,24(r2)       ; PROC_FREE
+        sw      r0,33(r2)       ; no program
+        add     r2,39           ; the statistics block
+        lc      r1,8
+_release_slot_stats:
+        lc      r0,0
+        sw      r0,0(r2)
+        add     r2,3
+        add     r1,-1
+        ceq     r1,z
+        brf     _release_slot_stats
+        pop     r2
+        pop     r1
+        jmp     (r1)
+
 ; TASK_PRINT_UNSIGNED(value): print a 24-bit value as an unsigned decimal.
 ;
 ; PL/SW's own printer loops while the value is greater than zero, so anything
@@ -3408,8 +3433,9 @@ _TASK_EXIT:
         lc      r1,1
         ceq     r0,r1
         brt     _TASK_HALT
-        lc      r0,0
-        sw      r0,24(r2)       ; PROC_FREE
+        mov     r0,r2
+        la      r2,_release_slot
+        jal     r1,(r2)
         la      r2,_child_count
         lbu     r0,0(r2)
         add     r0,-1
@@ -4465,9 +4491,9 @@ _kill_endpoint_queue:
         jmp     (r2)
 _kill_endpoint_release:
         la      r2,_protocol_debug_proc
-        lw      r2,0(r2)
-        lc      r0,0
-        sw      r0,24(r2)       ; PROC_FREE
+        lw      r0,0(r2)
+        la      r2,_release_slot
+        jal     r1,(r2)
         la      r2,_child_count
         lbu     r0,0(r2)
         ceq     r0,z

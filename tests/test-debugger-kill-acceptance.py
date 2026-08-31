@@ -97,6 +97,18 @@ def type_line(transport: Transport, text: bytes):
         time.sleep(0.006)
 
 
+def type_slowly(transport: Transport, text: bytes, tick: int, output: dict):
+    """Type a line with the target running between characters.
+
+    A command line arriving faster than the shell drains its input ring is
+    partly lost, which reads as a garbled command rather than a slow one.
+    """
+    for byte in text:
+        transport.send(1, bytes((byte,)), 0)
+        tick = pump(transport, tick, 2, output)
+    return tick
+
+
 def pump(transport: Transport, tick: int, rounds: int, output: dict):
     for _ in range(rounds):
         heartbeat(transport, tick)
@@ -228,6 +240,16 @@ def main():
         tick, after_shell_kill = slot_states(transport, tick)
         assert not after_shell_kill.get(reused[0]), (
             f"shell kill left endpoint {reused[0]} running: {after_shell_kill}")
+
+        # A freed slot must report as empty, not under the name of whatever
+        # ran there last: a killed process that still has a name and figures
+        # beside it looks like one that is still there.
+        output.clear()
+        tick = type_slowly(transport, b"ps -l\r", tick, output)
+        tick = pump(transport, tick, 250, output)
+        listing = bytes(output.get(0, b"")).decode("ascii", "replace")
+        freed = f"ep={reused[0]} name=none state=0"
+        assert freed in listing, f"expected {freed!r} in:\n{listing[-400:]}"
 
         type_line(transport, b"run mon\r")
         tick = pump(transport, tick, 60, output)

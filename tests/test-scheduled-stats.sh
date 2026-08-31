@@ -13,12 +13,18 @@ output=$($EMU --load-binary "$OUT_DIR/program.bin@0" --entry 0 \
     -u '2\nstat 2\nps -l\n' --speed 0 -n 1000000 --quiet 2>/dev/null \
     | sed '/^Entry point:/d')
 
-counter_line='ep=2 name=counter state=0 blocked=0 stack=192 statew=1 dispatch=3 yields=2 ipc=0 ttyin=0 ttyout=6'
-if ! grep -q "$counter_line" <<<"$output"; then
-    echo "FAIL: counter activity snapshot did not match deterministic transitions" >&2
+# The counter has finished by the time this listing is taken, and a slot with
+# nothing in it says so: no name, no figures. It used to keep both, so a
+# process that had ended still read as one that was there.
+released_line='ep=2 name=none state=0 blocked=0 stack=0 statew=0 dispatch=0 yields=0 ipc=0 ttyin=0 ttyout=0'
+if ! grep -q "$released_line" <<<"$output"; then
+    echo "FAIL: the finished counter's slot was not reported as free" >&2
     echo "$output" >&2
     exit 1
 fi
+
+# That its statistics are tracked at all is proved by the shell's own row
+# below: the shell is still running when the listing is taken.
 
 # The shell reads a whole line before acting, so it is dispatched once more
 # than when it acted on each character as it arrived.
