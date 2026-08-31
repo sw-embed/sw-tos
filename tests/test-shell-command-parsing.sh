@@ -82,6 +82,19 @@ refute "help does not act at the space" \
 expect "an unknown help topic is refused" \
     'help nope\n' 'BAD'
 
+# A command is matched on its whole word. "mon" and "mem" are both m and
+# three characters long, so matching the first letter and the length ran the
+# mem command when a program was asked for.
+refute "mon is not mem" \
+    'mon\n' 'total='
+
+# A word that is not a command names a program to run, which is what a person
+# means by typing it. run and bg say the same thing more explicitly.
+expect "a bare program name runs it" \
+    'hello\n' 'Hello'
+expect "an unknown word is still refused" \
+    'nosuch\n' 'BAD'
+
 # A digit is a command like any other: it takes effect on Enter, not on the
 # keypress. Reacting to the digit itself made it the one thing that could
 # not be taken back. "1x" is therefore a word, not a launch and a keystroke.

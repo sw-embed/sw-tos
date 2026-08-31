@@ -11,7 +11,7 @@ Run one with `just <recipe>`.
 | Use case | How | Recipe |
 | --- | --- | --- |
 | See what programs exist | `ls`, `stat <name>`, `df`, `du` | `scheduled-catalog-smoke` |
-| Run a program in its own pane | `run <name>` | `debugger-kill-acceptance`, `scheduled-shell-smoke` |
+| Run a program in its own pane | `run <name>`, `bg <name>`, or just `<name>` | `debugger-kill-acceptance`, `test-shell-command-parsing` |
 | Start a program without blocking the prompt | `bg <name>` (same as `run`) | `test-shell-command-parsing`, `catalog-run-smoke` |
 | Launch from the menu | keys `1`-`6` | `scheduled-shell-smoke` |
 | Fill every process slot | menu `9` | `fill-demo-acceptance`, `scheduled-sixteen-smoke` |
