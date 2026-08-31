@@ -1215,7 +1215,14 @@ fn run_windows(options: &Options) -> io::Result<()> {
                             }
                         }
                         0x08 | 0x7f => {
-                            debug_input.pop();
+                            // Erase on screen as well as in the buffer. The
+                            // correction was always applied -- Enter ran the
+                            // corrected line -- but the pane went on showing
+                            // the mistake, so there was no way to see what
+                            // would run.
+                            if debug_input.pop().is_some() {
+                                desktop.push_channel(254, &[0x08]);
+                            }
                         }
                         0x20..=0x7e => {
                             debug_input.push(char::from(byte));

@@ -348,6 +348,18 @@ def main():
         session.send(b"regs 2\r", settle=2.0)
         step("debugger regs")
 
+        # A correction must be visible as it is made. The buffer was always
+        # edited -- Enter ran the corrected line -- but the pane went on
+        # showing the mistake, so there was no way to see what would run.
+        session.send(b"regx", settle=1.5)
+        require("regx" in session.screen(), "the debugger echoes what is typed",
+                session.screen()[-300:])
+        session.send(b"\x08", settle=1.5)
+        require("regx" not in session.screen(), "backspace erases in the pane",
+                session.screen()[-300:])
+        session.send(b"s\r", settle=2.5)
+        step("debugger line editing")
+
 
 
         # Resources must show the hogs being forcibly preempted, and the count
