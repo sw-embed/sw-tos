@@ -916,8 +916,6 @@ fn run_windows(options: &Options) -> io::Result<()> {
     {
         desktop.set_error(Some(format!("session: {error}")));
     }
-    let mut resource_lines = resources.render(Instant::now());
-    desktop.set_resources(&resource_lines);
     desktop.push_channel(254, b"SWTOS debugger: type help\n");
     if let Some(error) = debug_map_error {
         desktop.push_channel(254, format!("{error}\n").as_bytes());
@@ -1057,8 +1055,6 @@ fn run_windows(options: &Options) -> io::Result<()> {
                                     }
                                 }
                             }
-                            resource_lines = resources.render(Instant::now());
-                            desktop.set_resources(&resource_lines);
                         }
                     }
                     StreamItem::Frame(frame) if frame.kind == FrameType::DebugResponse => {
@@ -1123,8 +1119,6 @@ fn run_windows(options: &Options) -> io::Result<()> {
                             resources = SnapshotAssembler::default();
                             debug_identity_sent = false;
                             transport_decode_error = false;
-                            resource_lines = resources.render(Instant::now());
-                            desktop.set_resources(&resource_lines);
                             desktop.set_error(None);
                             desktop.set_connected(true);
                             desktop.push_channel(254, b"reconnecting target transport\n");
@@ -1280,6 +1274,12 @@ fn run_windows(options: &Options) -> io::Result<()> {
                     serial.write_all(&[byte])?;
                 }
                 serial.flush()?;
+                // A typed character is echoed into its pane, and a pane that
+                // has changed has to be drawn. This went unnoticed because
+                // the monitor pane's figures changed every quarter second and
+                // repainted the screen for everyone; typing looked immediate
+                // only for as long as something else was moving.
+                dirty = true;
             }
         }
 
@@ -1289,12 +1289,6 @@ fn run_windows(options: &Options) -> io::Result<()> {
             dirty = true;
         }
         let now = Instant::now();
-        let latest_resource_lines = resources.render(now);
-        if latest_resource_lines != resource_lines {
-            resource_lines = latest_resource_lines;
-            desktop.set_resources(&resource_lines);
-            dirty = true;
-        }
         if connection.mode() == Mode::Framed && now >= next_resource_request {
             serial.write_all(&resource_request_frame())?;
             serial.flush()?;

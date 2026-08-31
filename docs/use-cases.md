@@ -37,9 +37,8 @@ Run one with `just <recipe>`.
 
 | Use case | How | Recipe |
 | --- | --- | --- |
-| Monitor processes as a program | `run mon` | `fill-demo-acceptance`, `tui-soak` |
+| Monitor processes | `mon`, started at boot | `fill-demo-acceptance`, `tui-soak` |
 | Several monitors at once | `run mon` twice | `debugger-kill-acceptance` |
-| Always-present monitor pane | pane 4 | `tui-soak`, `windows-smoke` |
 | List processes | `ps`, `ps -l` | `scheduled-stats-smoke` |
 | Memory and slot totals | `mem` | `scheduled-memory-smoke` |
 | Reclaim on exit | `mem` after children exit | `scheduled-reclaim-smoke` |

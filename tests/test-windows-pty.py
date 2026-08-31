@@ -285,9 +285,12 @@ def normal_path():
     screen = read_until(tty_master, b"cntr ep=2", 2.0)
     screen += read_until(tty_master, b"app-one", 2.0)
     assert b"\x1b[?1049h" in screen and b"\x1b[?25l" in screen, "screen entry"
-    assert b"Shell *" in screen and b"Application" in screen, "four-pane grid was not rendered"
+    assert b"Shell *" in screen, "the grid was not rendered"
     assert b"shell-two" in screen and b"app-one" in screen, "independent pane output missing"
-    assert b"stk 10/20B" in screen and b"cntr ep=2" in screen, "resource snapshot missing"
+    # The frontend does not draw the report any more -- the mon program does.
+    # It still reads the snapshot, and naming a pane after the process on its
+    # channel is what that reading is for.
+    assert b"v cntr ep=2" in screen, "the snapshot did not name the pane"
     damaged = bytearray(frame(2, 0, b"damaged"))
     damaged[-1] ^= 0x80
     os.write(serial_master, damaged)
@@ -295,10 +298,16 @@ def normal_path():
     os.write(serial_master, frame(2, 0, b"recovered\n"))
     recovered = read_until(tty_master, b" ok", 2.0)
     assert b"recovered" in recovered and b" ok" in recovered, "valid frame did not clear error"
-    os.write(tty_master, b"\x014\x01z")
-    resource_zoom = read_until(tty_master, b"cpu=42", 2.0)
-    assert b"fp=11" in resource_zoom and b"cpu=42" in resource_zoom, "preemption activity missing"
-    os.write(tty_master, b"\x01z\x011")
+    # Forced-preemption figures belong to mon now: that they are parsed is a
+    # unit test and that they climb is fill-demo-acceptance. Zoom still has to
+    # work, and must leave the grid as it found it.
+    os.write(tty_master, b"\x013\x01z")
+    zoomed = read_until(tty_master, b"Debugger", 2.0)
+    assert b"Debugger" in zoomed, "zoom did not render the focused pane"
+    os.write(tty_master, b"\x01z")
+    unzoomed = read_until(tty_master, b"1 v Shell", 2.0)
+    assert b"1 v Shell" in unzoomed, "zoom did not restore the grid"
+    os.write(tty_master, b"\x011")
 
     time_generation = 4
     time_records = (
@@ -391,7 +400,7 @@ def normal_path():
     # Fifty columns leaves twenty-five per pane, so a long name and its
     # endpoint cannot both survive; the pane numbers must.
     resized = read_until(tty_master, b"1 v Shell", 2.0)
-    assert b"1 v Shell" in resized and b"4 v Resources" in resized, "resize/focus render"
+    assert b"1 v Shell" in resized and b"3 v Debugger" in resized, "resize/focus render"
     os.write(tty_master, b"\x01z\x01?\x01?\x01z")
     time.sleep(0.1)
     os.write(tty_master, b"\x01d")

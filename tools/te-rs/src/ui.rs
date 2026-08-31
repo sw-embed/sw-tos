@@ -31,12 +31,14 @@ impl PaneKind {
     /// reports the same figures as an ordinary process, so several can run at
     /// once and any of them can be killed; this pane is the one that is
     /// simply always there.
-    pub const ALL: [Self; 4] = [
-        Self::Shell,
-        Self::Application,
-        Self::Debugger,
-        Self::Resources,
-    ];
+    /// Panes the frontend creates for itself.
+    ///
+    /// There is no monitor pane: the monitor is the `mon` program, started at
+    /// boot from the catalog's autostart list, so it holds an ordinary slot
+    /// and an ordinary pane. A private pane drawing the same figures could
+    /// not be killed, could not be run twice, and was a second renderer to
+    /// keep in step with the first.
+    pub const ALL: [Self; 3] = [Self::Shell, Self::Application, Self::Debugger];
 
     pub fn title(self) -> &'static str {
         match self {
@@ -133,13 +135,6 @@ impl Pane {
         output
     }
 
-    fn replace(&mut self, lines: &[String]) {
-        self.lines.clear();
-        self.current.clear();
-        for line in lines {
-            self.lines.push_back(line.clone());
-        }
-    }
 }
 
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
@@ -438,16 +433,6 @@ impl Desktop {
 
     pub fn set_error(&mut self, value: Option<String>) {
         self.error = value;
-    }
-
-    pub fn set_resources(&mut self, lines: &[String]) {
-        if let Some(pane) = self
-            .panes
-            .iter_mut()
-            .find(|pane| pane.kind == PaneKind::Resources)
-        {
-            pane.replace(lines);
-        }
     }
 
     pub fn command(&mut self, byte: u8) -> CommandOutcome {
@@ -837,28 +822,26 @@ mod tests {
         assert_eq!(desktop.focused_channel(), 1);
         desktop.command(b'n');
         assert_eq!(desktop.focused_kind(), PaneKind::Debugger);
-        desktop.command(b'4');
-        assert_eq!(desktop.focused_kind(), PaneKind::Resources);
         assert_eq!(desktop.command(b'd'), CommandOutcome::Detach);
     }
 
     #[test]
     fn closed_system_panes_can_be_restored() {
         let mut desktop = Desktop::new(2);
-        desktop.command(b'4');
-        assert_eq!(desktop.focused_kind(), PaneKind::Resources);
+        desktop.command(b'3');
+        assert_eq!(desktop.focused_kind(), PaneKind::Debugger);
         desktop.command(b'x');
         assert!(!desktop
             .layout()
             .iter()
-            .any(|(kind, _, _)| *kind == PaneKind::Resources));
+            .any(|(kind, _, _)| *kind == PaneKind::Debugger));
 
         desktop.command(b'S');
         let layout = desktop.layout();
         assert_eq!(layout.len(), PaneKind::ALL.len());
         // Restored at its canonical position, so Ctrl-A 4 still reaches it.
-        desktop.command(b'4');
-        assert_eq!(desktop.focused_kind(), PaneKind::Resources);
+        desktop.command(b'3');
+        assert_eq!(desktop.focused_kind(), PaneKind::Debugger);
         // Restoring again is a no-op rather than a duplicate.
         desktop.command(b'S');
         assert_eq!(desktop.layout().len(), PaneKind::ALL.len());
@@ -911,7 +894,7 @@ mod tests {
         // on two rules and leave every name half a column to fit in.
         let mut desktop = Desktop::new(4);
         desktop.push_channel(0, b"shell-body\n");
-        desktop.push_channel(3, b"resources-body\n");
+        desktop.push_channel(2, b"debugger-body\n");
         // Strip the cursor-home and clear-to-end controls so a rule is
         // recognisable by its first character wherever it sits.
         let plain = |desktop: &Desktop| {
@@ -934,14 +917,13 @@ mod tests {
             (left.to_string(), right.to_string())
         };
         let (top_left, top_right) = split(rules[0]);
-        let (low_left, low_right) = split(rules[1]);
+        let (low_left, _low_right) = split(rules[1]);
         assert!(top_left.contains("1 v Shell"), "{top_left}");
         assert!(top_right.contains("2 v Application"), "{top_right}");
         assert!(low_left.contains("3 v Debugger"), "{low_left}");
-        assert!(low_right.contains("4 v Resources"), "{low_right}");
 
         // No name appears twice anywhere on the screen's rules.
-        for name in ["Shell", "Application", "Debugger", "Resources"] {
+        for name in ["Shell", "Application", "Debugger"] {
             let seen: usize = rules.iter().map(|rule| rule.matches(name).count()).sum();
             assert_eq!(seen, 1, "{name} named {seen} times");
         }
@@ -954,13 +936,13 @@ mod tests {
             "{screen}"
         );
 
-        desktop.command(b'4');
+        desktop.command(b'3');
         let screen = plain(&desktop);
         let rules: Vec<&str> = screen
             .lines()
             .filter(|line| line.starts_with('-'))
             .collect();
-        assert!(rules[1].contains("4 v Resources *"), "{}", rules[1]);
+        assert!(rules[1].contains("3 v Debugger *"), "{}", rules[1]);
         assert!(!rules[0].contains("1 v Shell *"), "{}", rules[0]);
     }
 
@@ -976,7 +958,7 @@ mod tests {
         assert!(large.contains("application"));
         let small = desktop.render(40, 12);
         assert!(small.contains("Shell *"));
-        assert!(small.contains("Resources"));
+        assert!(small.contains("Debugger"));
     }
 
     #[test]
@@ -1009,11 +991,11 @@ mod tests {
     fn dynamic_layout_search_alerts_and_guarded_broadcast() {
         let mut desktop = Desktop::default();
         desktop.add_application(7, "Counter");
-        assert_eq!(desktop.pane_count(), 5);
+        assert_eq!(desktop.pane_count(), 4);
         desktop.command(b'1');
         desktop.push_channel(7, b"count 1\ncount 2\n");
         assert!(desktop.render(80, 24).contains("Counter ep=8 !"));
-        desktop.command(b'5');
+        desktop.command(b'4');
         assert!(desktop.search("count 1"));
         assert!(!desktop.broadcast_enabled());
         desktop.command(b'b');
@@ -1026,9 +1008,9 @@ mod tests {
         let saved = desktop.layout();
         desktop.close_focused();
         desktop.restore_layout(&saved);
-        assert_eq!(desktop.pane_count(), 5);
-        desktop.release_channel(7);
         assert_eq!(desktop.pane_count(), 4);
+        desktop.release_channel(7);
+        assert_eq!(desktop.pane_count(), 3);
     }
 
     #[test]

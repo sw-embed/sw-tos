@@ -36,10 +36,10 @@ IMAGE = ROOT / "build/scheduled-shell/program.bin"
 MAP = ROOT / "build/scheduled-shell/program.debug.json"
 
 ROWS, COLUMNS = 50, 200
-#: Shell, Application, Debugger and the monitor pane, plus one per printing
-#: child beyond the monitor, which starts itself into the Application pane.
-#: The two cpu-hogs print nothing, so they contribute no pane.
-EXPECTED_PANES = 4 + 12
+#: Shell, Application and Debugger, plus one per printing child beyond the
+#: monitor, which starts itself into the Application pane. The two cpu-hogs
+#: print nothing, so they contribute no pane.
+EXPECTED_PANES = 3 + 12
 PREFIX = b"\x01"  # Ctrl-A
 #: Whole session budget. A hang is a failure, not something to wait out.
 BUDGET = 300
@@ -364,8 +364,8 @@ def main():
 
         # Resources must show the hogs being forcibly preempted, and the count
         # must keep climbing: that is what keeps every other pane scheduled.
-        session.command(b"4", settle=1.0)
-        require("focus:Resources" in session.screen(), "focus reaches the monitor pane",
+        session.command(b"2", settle=1.0)
+        require("focus:mon" in session.screen(), "focus reaches the monitor",
                 session.screen()[-400:])
         # Zoom first: in a shared column the process lines are cut off well
         # before the fp= field, so the unzoomed pane cannot answer this.
