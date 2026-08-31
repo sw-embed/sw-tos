@@ -498,15 +498,12 @@ SHELL_LIST_COMMAND: PROC;
 END;
 
 SHELL_PS_COMMAND: PROC(DETAILED INT);
-    DCL EP INT;
+    /* "ps" is the table: every slot, one word each, so it is plain which are
+       free. "ps -l" is the detail, and detail about an empty slot is a row of
+       zeroes under a name that is no longer there -- it reports what is
+       running, which is what mon reports, from the same code. */
     IF (DETAILED = 0) THEN CALL TASK_PROCESS_LIST;
-    ELSE DO;
-        EP = 1;
-        DO WHILE (EP < 17);
-            CALL SHELL_PROCESS_LINE(EP);
-            EP = EP + 1;
-        END;
-    END;
+    ELSE CALL SHELL_REPORT;
 END;
 
 SHELL_RUN_NAMED: PROC(NAME_PTR PTR);
@@ -940,7 +937,7 @@ PLSW_TIME_APP: PROC(STATE_PTR PTR, FRAME_CODE INT);
     CALL TASK_EXIT;
 END;
 
-MON_REPORT: PROC;
+SHELL_REPORT: PROC;
     /* The whole report, in the layout the frontend used to draw for itself:
        totals first, then one padded row per live process so the columns line
        up. There is one renderer now rather than two saying the same thing in
@@ -980,7 +977,6 @@ MON_REPORT: PROC;
         3 SMI_ARENA_CAPACITY_BYTES INT;
     CALL TASK_MEM_INFO(ADDR(MEMORY_INFO));
     CALL TASK_HEAP_INFO(ADDR(HEAP_INFO));
-    CALL UART_PUTCHAR(12);
     CALL UART_PUTS(ADDR(SHELL_MON_STK));
     CALL TASK_PRINT_UNSIGNED(MEMORY_INFO.SMI_ARENA_CURRENT_BYTES);
     CALL UART_PUTCHAR(47);
@@ -1035,6 +1031,14 @@ MON_REPORT: PROC;
         END;
         EP = EP + 1;
     END;
+END;
+
+MON_REPORT: PROC;
+    /* Clear the pane, then report. ps -l asks for the same report without
+       the clearing, so the two say the same thing by construction rather
+       than by two renderers kept in step. */
+    CALL UART_PUTCHAR(12);
+    CALL SHELL_REPORT;
 END;
 
 PLSW_MON: PROC(STATE_PTR PTR);

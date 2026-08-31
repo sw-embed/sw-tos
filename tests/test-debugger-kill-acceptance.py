@@ -241,15 +241,23 @@ def main():
         assert not after_shell_kill.get(reused[0]), (
             f"shell kill left endpoint {reused[0]} running: {after_shell_kill}")
 
-        # A freed slot must report as empty, not under the name of whatever
-        # ran there last: a killed process that still has a name and figures
-        # beside it looks like one that is still there.
+        # ps -l reports what is running, so a killed process is simply not
+        # there; ps still lists every slot, and that one reads FREE. A row of
+        # zeroes under a name that has gone is what made a killed process look
+        # present.
         output.clear()
         tick = type_slowly(transport, b"ps -l\r", tick, output)
         tick = pump(transport, tick, 250, output)
-        listing = bytes(output.get(0, b"")).decode("ascii", "replace")
-        freed = f"ep={reused[0]} name=none state=0"
-        assert freed in listing, f"expected {freed!r} in:\n{listing[-400:]}"
+        detail = bytes(output.get(0, b"")).decode("ascii", "replace")
+        assert f"ep={reused[0]} " not in detail, (
+            f"ps -l listed a killed process:\n{detail[-400:]}")
+
+        output.clear()
+        tick = type_slowly(transport, b"ps\r", tick, output)
+        tick = pump(transport, tick, 250, output)
+        table = bytes(output.get(0, b"")).decode("ascii", "replace")
+        assert f"{reused[0]} FREE" in table, (
+            f"ps did not report the slot as free:\n{table[-400:]}")
 
         type_line(transport, b"run mon\r")
         tick = pump(transport, tick, 60, output)

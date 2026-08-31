@@ -68,7 +68,7 @@ expect "backspace corrects a mistyped command" \
 # Arguments used to be matched as they arrived, so a typo in an option or a
 # name was as final as one in the command.
 expect "backspace corrects an option" \
-    "ps -x${BS}l\n" 'ep=1 name=shell'
+    "ps -x${BS}l\n" 'shell    ep=1'
 expect "backspace corrects an argument name" \
     "stat hellp${BS}o\n" 'hello kind=program'
 

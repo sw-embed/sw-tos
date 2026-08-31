@@ -39,7 +39,8 @@ Run one with `just <recipe>`.
 | --- | --- | --- |
 | Monitor processes | `mon`, started at boot | `fill-demo-acceptance`, `tui-soak` |
 | Several monitors at once | `run mon` twice | `debugger-kill-acceptance` |
-| List processes | `ps`, `ps -l` | `scheduled-stats-smoke` |
+| See which slots are taken | `ps` (all sixteen, one word each) | `scheduled-stats-smoke` |
+| See what is running, in detail | `ps -l` (same report as `mon`) | `scheduled-stats-smoke` |
 | Memory and slot totals | `mem` | `scheduled-memory-smoke` |
 | Reclaim on exit | `mem` after children exit | `scheduled-reclaim-smoke` |
 
