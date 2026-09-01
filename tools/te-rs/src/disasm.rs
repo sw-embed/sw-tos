@@ -11,8 +11,8 @@
 //! instruction, exact by construction rather than by a second table written
 //! out by hand and left to drift.
 
-use cor24_isa::opcode::{InstructionFormat, Opcode};
 use cor24_isa::encode::encode_instruction;
+use cor24_isa::opcode::{InstructionFormat, Opcode};
 
 /// One decoded instruction: its text and how many bytes it occupied.
 pub struct Decoded {
@@ -41,10 +41,15 @@ fn table() -> [Option<(Opcode, u8, u8)>; 256] {
     table
 }
 
-
-/// The ISA crate's own names, so the two cannot drift apart.
+/// Use the assembler-visible architectural aliases for the two interrupt
+/// registers.  The shared ISA crate deliberately exposes their raw register
+/// file names (`r6`/`r7`) while COR24 assembly accepts only `iv`/`ir`.
 fn register(index: u8) -> &'static str {
-    cor24_isa::register::reg_name(index)
+    match index & 7 {
+        6 => "iv",
+        7 => "ir",
+        other => cor24_isa::register::reg_name(other),
+    }
 }
 
 /// Decode one instruction from `bytes`, which begins at the instruction.
@@ -89,13 +94,17 @@ pub fn decode(bytes: &[u8], address: u32) -> Option<Decoded> {
                 // The add immediate is a signed byte, which is the whole
                 // reason 128..255 assemble quietly and run as negatives.
                 Opcode::AddImm => format!("{mnemonic} {},{}", register(ra), operand as i8),
-                _ => format!("{mnemonic} {},{}({})", register(ra), operand as i8, register(rb)),
+                _ => format!(
+                    "{mnemonic} {},{}({})",
+                    register(ra),
+                    operand as i8,
+                    register(rb)
+                ),
             }
         }
         InstructionFormat::FourBytes => {
-            let address = u32::from(bytes[1])
-                | u32::from(bytes[2]) << 8
-                | u32::from(bytes[3]) << 16;
+            let address =
+                u32::from(bytes[1]) | u32::from(bytes[2]) << 8 | u32::from(bytes[3]) << 16;
             format!("{mnemonic} {},0x{address:06X}", register(ra))
         }
     };
@@ -125,7 +134,9 @@ mod tests {
             return;
         };
         let document: serde_json::Value = serde_json::from_str(&text).expect("debug map is JSON");
-        let instructions = document["instructions"].as_array().expect("instruction list");
+        let instructions = document["instructions"]
+            .as_array()
+            .expect("instruction list");
         let mut checked = 0;
         let mut wrong: Vec<String> = Vec::new();
         for entry in instructions {
@@ -180,7 +191,10 @@ mod tests {
                 }
             }
         }
-        assert!(checked > 1000, "expected a substantial image, decoded {checked}");
+        assert!(
+            checked > 1000,
+            "expected a substantial image, decoded {checked}"
+        );
         assert!(
             wrong.is_empty(),
             "{} of {checked} disagreed:\n{}",
