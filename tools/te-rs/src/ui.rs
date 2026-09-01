@@ -568,6 +568,7 @@ impl Desktop {
                         "w save  R restore-layout",
                         "copy: arrows/hjkl  PgUp/PgDn  g/G  q exit",
                         "r reconnect/redraw  e target-Escape  k restart shell",
+                        "B warm SWTOS reboot (ISR request)",
                         "? help  d detach",
                         "close help: q, Escape, or ?",
                     ],

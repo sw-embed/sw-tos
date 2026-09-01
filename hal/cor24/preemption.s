@@ -92,7 +92,8 @@ _preemption_uart_isr:
         lc      r2,3
         ceq     r1,r2
         brt     _preemption_tick1
-        bra     _preemption_tick2
+        la      r2,_preemption_tick2
+        jmp     (r2)
 
 _preemption_frame_normal:
         lcu     r1,255
@@ -114,8 +115,14 @@ _preemption_frame_escape:
         brt     _preemption_start_tick
         lc      r1,4
         ceq     r0,r1
-        brf     _preemption_escape_ordinary
+        brf     _preemption_escape_check_reboot
         la      r2,_preemption_shell_restart
+        jmp     (r2)
+_preemption_escape_check_reboot:
+        lc      r1,5
+        ceq     r0,r1
+        brf     _preemption_escape_ordinary
+        la      r2,_preemption_system_reboot
         jmp     (r2)
 _preemption_escape_ordinary:
         ; FF 00 is literal FF. Other malformed escapes preserve both bytes.
@@ -178,6 +185,17 @@ _preemption_tick2:
 ; the next character the running command reads or writes, or its next yield.
 _preemption_shell_restart:
         la      r2,_request_shell_restart
+        jal     r1,(r2)
+        lc      r0,0
+        la      r2,_preemption_frame_state
+        sb      r0,0(r2)
+        la      r2,_preemption_isr_return
+        jmp     (r2)
+
+; FF 05 requests a full warm SWTOS restart. Like FF 04, the ISR only raises
+; and wakes: destructive process-table cleanup waits for a safe shell entry.
+_preemption_system_reboot:
+        la      r2,_request_system_reboot
         jal     r1,(r2)
         lc      r0,0
         la      r2,_preemption_frame_state

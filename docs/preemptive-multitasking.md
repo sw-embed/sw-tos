@@ -244,6 +244,11 @@ and versions used.
 
 ## Limits and failure containment
 
+- Shell `reboot` and frontend `Ctrl-A B` provide a warm recovery boundary.
+  The ISR escape `FF 05` wakes endpoint 1 and defers cleanup until its next
+  safe kernel entry; cleanup clears every child record, including runway
+  sidecars and TTY rings, before rewinding the shell. It cannot recover a CPU
+  that no longer accepts UART interrupts or reaches scheduler-safe code.
 - Private allocation alone is insufficient. Catalog flag `preemptible_leaf`
   certifies a private image with zero relocations and no external control
   transfers; the generator rejects invalid combinations. Currently only the

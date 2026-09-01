@@ -419,6 +419,10 @@ Shell commands include:
 - `ps` lists process slots; `ps -l` shows detailed activity counters.
 - `run <name>` launches a program descriptor.
 - `help` lists commands.
+- `reboot` clears application process/TTY/preemption state and warm-restarts
+  the persistent shell without reloading the resident image. The Windows
+  frontend's `Ctrl-A B` sends the same request through the UART ISR when the
+  shell is no longer reading input.
 - `uname` identifies SWTOS and COR24.
 - `df` summarizes generated catalog/image totals.
 - `du` lists generated external-image sizes.

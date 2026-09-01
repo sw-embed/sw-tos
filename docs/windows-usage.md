@@ -86,6 +86,7 @@ and sends the unprefixed `3` to it.
 | `a` | Assign the focused pane to an unused channel |
 | `x` | Close the focused pane |
 | `z` | Toggle zoom for the focused pane |
+| `B` | Request a warm SWTOS reboot through the UART ISR |
 | `y` | Enter or leave copy mode |
 | `e` | Send Escape to the focused Shell or Application pane |
 | `r` | Resynchronize heartbeat framing, renegotiate, refresh Resources, and redraw |
@@ -130,7 +131,15 @@ ps
 ps -l
 run counter
 run counter --tty=new
+reboot
 ```
+
+`reboot` and prefix-`B` both request a warm SWTOS restart. The prefix form is
+recognized by the UART ISR and can therefore recover a shell that no longer
+reads input. It preserves the loaded image and transport negotiation while
+clearing child process records, TTYs, preemption state, and the allocation
+generation. It still requires a functioning UART ISR and a safe scheduler
+boundary; physical reset and image reload remain the hard-wedge recovery.
 
 `run NAME --tty=new` asks the frontend for another application pane. Uptime
 and Clock receive host time frames only while the Resources snapshot reports

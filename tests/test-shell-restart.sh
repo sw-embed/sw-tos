@@ -49,6 +49,12 @@ check "the shell accepts kill 1 rather than refusing it" \
 check "a restarted shell still runs commands" \
     '\xFF\x04mem\n' 'total='
 
+check "the ISR escape requests a full warm reboot" \
+    '\xFF\x05' 'SYSTEM REBOOTED'
+
+check "the typed command requests the same warm reboot" \
+    'reboot\n' 'SYSTEM REBOOTED'
+
 # Twice over: a restart that leaked its stack or its private state would fail
 # the second time, and this is the failure it would be reached for repeatedly.
 output=$(run '\xFF\x04\xFF\x04\xFF\x04')

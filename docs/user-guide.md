@@ -331,7 +331,8 @@ Use `--windows` for the fixed four-pane desktop. It implies framed mode and
 opens Shell, Application, Debugger, and Resources panes with independent
 scrollback. The focused pane is marked with `*` and exclusively receives
 ordinary keys. The default host prefix is Ctrl-A: follow it with `1` through
-`4` to focus a pane, `n` to cycle, `z` to zoom, `?` for help, or `d` to detach.
+`4` to focus a pane, `n` to cycle, `z` to zoom, `B` to request a warm SWTOS
+reboot through the UART ISR, `?` for help, or `d` to detach.
 Set another single-byte prefix with `--prefix KEY` or control notation such as
 `--prefix '^B'`. Ctrl-] remains ordinary target input unless selected as the
 host prefix.
@@ -346,6 +347,14 @@ Use Ctrl-A then `e` to send an unambiguous Escape byte to the focused Shell or
 Application pane, including while copy mode is active. This stops interactive
 applications such as Uptime without conflicting with arrow-key escape
 sequences.
+
+At a working shell, `reboot` performs the same warm restart. Both forms retain
+the loaded image and framed UART session while clearing application slots,
+process statistics, preemption sidecars, virtual TTY input, and the current
+allocation generation. `SYSTEM REBOOTED` followed by `SHELL RESTARTED`
+confirms target-side completion. Neither form can recover a CPU that has
+stopped servicing UART interrupts or cannot reach a safe scheduler boundary;
+use the physical reset and reload procedure in that case.
 
 The Resources pane refreshes at four Hz and shows memory current/peak use,
 kernel-stack peak, allocation failures, live process state and activity, IPC

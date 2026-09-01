@@ -163,6 +163,22 @@ _request_shell_restart:
         pop     r1
         jmp     (r1)
 
+; Request a complete warm SWTOS restart at the shell's next safe kernel
+; boundary. This can be raised directly by the UART ISR even when the shell no
+; longer consumes its TTY. It deliberately preserves the loaded image and the
+; negotiated transport mode.
+_request_system_reboot:
+        push    r1
+        push    r2
+        lc      r0,1
+        la      r2,_system_reboot_pending
+        sw      r0,0(r2)
+        la      r2,_proc_a
+        sw      r0,24(r2)       ; wake shell
+        pop     r2
+        pop     r1
+        jmp     (r1)
+
 ; Rewind the shell to its entry point and resume it. This never returns.
 ;
 ; The shell is the one process with no way out: it is protected from kill
@@ -243,15 +259,22 @@ _shell_restart_check:
         push    r1
         push    r2
         push    r0
-        la      r2,_shell_restart_pending
-        lw      r0,0(r2)
-        ceq     r0,z
-        brt     _shell_restart_check_done
         la      r2,_current_proc
         lw      r0,0(r2)
         la      r2,_proc_a
         ceq     r0,r2
         brf     _shell_restart_check_done
+        la      r2,_system_reboot_pending
+        lw      r0,0(r2)
+        ceq     r0,z
+        brt     _shell_restart_check_shell_only
+        la      r2,_warm_reboot
+        jmp     (r2)
+_shell_restart_check_shell_only:
+        la      r2,_shell_restart_pending
+        lw      r0,0(r2)
+        ceq     r0,z
+        brt     _shell_restart_check_done
         la      r2,_restart_shell
         jmp     (r2)
 _shell_restart_check_done:
@@ -259,6 +282,62 @@ _shell_restart_check_done:
         pop     r2
         pop     r1
         jmp     (r1)
+
+; Reset all state owned by endpoints 2..16 and rewind the persistent shell.
+; Each complete 172-byte child record is cleared, then its stable endpoint is
+; restored. This removes stale statistics, preemption sidecars and TTY bytes,
+; not merely the visible PROC_STATE field.
+_warm_reboot:
+        lc      r0,0
+        la      r2,_system_reboot_pending
+        sw      r0,0(r2)
+        la      r0,_system_reboot_banner
+        la      r2,_puts
+        jal     r1,(r2)
+        la      r2,_proc_b
+        lc      r1,2
+_warm_reboot_slot:
+        push    r1
+        push    r2
+        mov     r0,r2
+        lcu     r1,172
+        add     r1,r0
+_warm_reboot_clear:
+        lc      r2,0
+        sb      r2,0(r0)
+        add     r0,1
+        ceq     r0,r1
+        brf     _warm_reboot_clear
+        pop     r2
+        pop     r1
+        sw      r1,18(r2)       ; stable endpoint identity
+        add     r1,1
+        lcu     r0,172
+        add     r2,r0
+        push    r2
+        mov     r0,r2
+        la      r2,_proc_table_end
+        ceq     r0,r2
+        pop     r2
+        brf     _warm_reboot_slot
+        lc      r0,0
+        la      r2,_child_count
+        sb      r0,0(r2)
+        la      r2,_spawn_arena_mark
+        lw      r0,0(r2)
+        la      r2,_stack_next
+        sw      r0,0(r2)
+        la      r2,_spawn_heap_mark
+        lw      r0,0(r2)
+        la      r2,_heap_next
+        sw      r0,0(r2)
+        la      r2,_restart_shell
+        jmp     (r2)
+
+        .globl  _TASK_REBOOT
+_TASK_REBOOT:
+        la      r2,_warm_reboot
+        jmp     (r2)
 
 ; Spawn descriptor in r0 into the process selected in _spawn_process.
 _spawn_resident:
@@ -5609,8 +5688,12 @@ _sync_state:
 ; spins. The kernel acts on it at its next entry from the shell.
 _shell_restart_pending:
         .zero   3
+_system_reboot_pending:
+        .zero   3
 _restart_banner:
         .byte   10,83,72,69,76,76,32,82,69,83,84,65,82,84,69,68,10,0
+_system_reboot_banner:
+        .byte   10,83,89,83,84,69,77,32,82,69,66,79,79,84,69,68,10,0
 _banner:
         .byte   83,80,65,87,78,10,0
 _state_free:

@@ -1,4 +1,5 @@
 use serde::{Deserialize, Serialize};
+use std::collections::VecDeque;
 use std::env;
 use std::fs::{self, File, OpenOptions};
 use std::io::{self, BufRead, BufReader, Read, Write};
@@ -15,6 +16,7 @@ use te_rs::ui::{CommandOutcome, Desktop, PaneKind};
 const DEFAULT_DEVICE: &str = "/dev/ttyUSB0";
 const SYNC_TIMEOUT: Duration = Duration::from_secs(2);
 const MAX_MONITOR_RESPONSE: usize = 1024;
+const MAX_WINDOWS_SERIAL_BACKLOG: usize = 64 * 1024;
 
 // Keep monitor diagnostics in one place. Replace or extend these placeholders
 // when the monitor's exact error messages are known.
@@ -387,6 +389,40 @@ fn set_termios(fd: RawFd, attributes: &libc::termios) -> io::Result<()> {
     }
 }
 
+fn set_nonblocking(fd: RawFd) -> io::Result<()> {
+    // SAFETY: F_GETFL/F_SETFL operate on the live serial descriptor.
+    let flags = unsafe { libc::fcntl(fd, libc::F_GETFL) };
+    if flags == -1 || unsafe { libc::fcntl(fd, libc::F_SETFL, flags | libc::O_NONBLOCK) } == -1 {
+        Err(io::Error::last_os_error())
+    } else {
+        Ok(())
+    }
+}
+
+fn queue_serial(output: &mut VecDeque<u8>, bytes: &[u8]) -> bool {
+    if output.len().saturating_add(bytes.len()) > MAX_WINDOWS_SERIAL_BACKLOG {
+        return false;
+    }
+    output.extend(bytes.iter().copied());
+    true
+}
+
+fn flush_serial(serial: &mut File, output: &mut VecDeque<u8>) -> io::Result<()> {
+    while !output.is_empty() {
+        let (front, _) = output.as_slices();
+        match serial.write(front) {
+            Ok(0) => break,
+            Ok(count) => {
+                output.drain(..count);
+            }
+            Err(error) if error.kind() == io::ErrorKind::WouldBlock => break,
+            Err(error) if error.kind() == io::ErrorKind::Interrupted => continue,
+            Err(error) => return Err(error),
+        }
+    }
+    Ok(())
+}
+
 fn terminal_size(fd: RawFd) -> (usize, usize) {
     // SAFETY: winsize is initialized before its fields are read and fd is a tty.
     let mut size: libc::winsize = unsafe { std::mem::zeroed() };
@@ -625,6 +661,7 @@ fn time_frame(mode: TimeMode, tick: u32) -> Vec<u8> {
 /// own context that will not give the CPU back. The handler is then the only
 /// code still running, and this is the one thing it listens for.
 const SHELL_RESTART: [u8; 2] = [0xff, 4];
+const SYSTEM_REBOOT: [u8; 2] = [0xff, 5];
 
 /// The adapter's passthrough frame type, which is not one of the protocol's
 /// own: it asks for its payload to be put on the target's UART verbatim.
@@ -650,6 +687,13 @@ fn shell_restart_request(mode: Mode) -> Vec<u8> {
     match mode {
         Mode::Framed => passthrough_frame(&SHELL_RESTART),
         Mode::Plain => SHELL_RESTART.to_vec(),
+    }
+}
+
+fn system_reboot_request(mode: Mode) -> Vec<u8> {
+    match mode {
+        Mode::Framed => passthrough_frame(&SYSTEM_REBOOT),
+        Mode::Plain => SYSTEM_REBOOT.to_vec(),
     }
 }
 
@@ -983,6 +1027,7 @@ fn run_windows(options: &Options) -> io::Result<()> {
     //: loop's own cadence is the pacing a person would have provided.
     let mut injected: Vec<u8> = Vec::new();
     let mut next_time_frames = Instant::now();
+    let mut next_footer_repaint = Instant::now();
     let mut time_modes = TimeModes::default();
 
     // Nothing precedes this frontend on a first attach, so the target's boot
@@ -998,8 +1043,11 @@ fn run_windows(options: &Options) -> io::Result<()> {
     }
     serial.write_all(&hello().encode().expect("HELLO payload is bounded"))?;
     serial.flush()?;
+    set_nonblocking(serial.as_raw_fd())?;
+    let mut serial_output = VecDeque::new();
 
     loop {
+        flush_serial(&mut serial, &mut serial_output)?;
         // A short timeout provides portable resize detection without installing
         // a process-global signal handler.
         let readable = match wait_readable([serial.as_raw_fd(), tty.as_raw_fd()], 10) {
@@ -1166,8 +1214,12 @@ fn run_windows(options: &Options) -> io::Result<()> {
                             let renegotiate = connection.mode() == Mode::Plain;
                             if renegotiate {
                                 connection.resynchronize();
-                                // A previous decoder generation: discard.
-                                let _ = resynchronize_heartbeat_parser(&mut serial)?;
+                                // Realign a possibly partial target heartbeat without
+                                // performing a blocking read or write. The Windows
+                                // frontend must retain local control even when CTS is
+                                // deasserted or the target has stopped consuming bytes.
+                                queue_serial(&mut serial_output, &scheduler_heartbeat(0));
+                                queue_serial(&mut serial_output, &scheduler_heartbeat(0));
                             }
                             resources = SnapshotAssembler::default();
                             debug_identity_sent = false;
@@ -1176,19 +1228,28 @@ fn run_windows(options: &Options) -> io::Result<()> {
                             desktop.set_connected(true);
                             desktop.push_channel(254, b"reconnecting target transport\n");
                             if renegotiate {
-                                serial.write_all(
+                                queue_serial(
+                                    &mut serial_output,
                                     &hello().encode().expect("HELLO payload is bounded"),
-                                )?;
-                                serial.flush()?;
+                                );
                             }
                             next_resource_request = Instant::now();
                             next_scheduler_heartbeat = Instant::now();
                             next_hello_retry = Instant::now() + Duration::from_millis(250);
                         }
                         b'k' => {
-                            serial.write_all(&shell_restart_request(connection.mode()))?;
-                            serial.flush()?;
+                            queue_serial(
+                                &mut serial_output,
+                                &shell_restart_request(connection.mode()),
+                            );
                             desktop.push_channel(254, b"restarting the shell\n");
+                        }
+                        b'B' => {
+                            queue_serial(
+                                &mut serial_output,
+                                &system_reboot_request(connection.mode()),
+                            );
+                            desktop.push_channel(254, b"requesting warm SWTOS reboot\n");
                         }
                         b'e' => {
                             let channel = desktop.focused_channel();
@@ -1196,8 +1257,10 @@ fn run_windows(options: &Options) -> io::Result<()> {
                                 desktop.focused_kind(),
                                 PaneKind::Shell | PaneKind::Application
                             ) {
-                                serial.write_all(&multiplexed_input_frame(channel, &[0x1b]))?;
-                                serial.flush()?;
+                                queue_serial(
+                                    &mut serial_output,
+                                    &multiplexed_input_frame(channel, &[0x1b]),
+                                );
                                 desktop.push_channel(channel, ESCAPE_ECHO);
                             }
                         }
@@ -1251,8 +1314,10 @@ fn run_windows(options: &Options) -> io::Result<()> {
                                     // and a request to kill it is most often
                                     // made because it has stopped reading what
                                     // it would be injected into.
-                                    serial.write_all(&shell_restart_request(connection.mode()))?;
-                                    serial.flush()?;
+                                    queue_serial(
+                                        &mut serial_output,
+                                        &shell_restart_request(connection.mode()),
+                                    );
                                     "restarting the shell".to_string()
                                 } else {
                                     injected = command.into_bytes();
@@ -1270,8 +1335,7 @@ fn run_windows(options: &Options) -> io::Result<()> {
                                 desktop.push_channel(254, format!("{line}\n").as_bytes());
                             }
                             if let Some(request) = result.request {
-                                serial.write_all(&debug_request_frame(request))?;
-                                serial.flush()?;
+                                queue_serial(&mut serial_output, &debug_request_frame(request));
                             }
                         }
                         0x08 | 0x7f => {
@@ -1334,12 +1398,14 @@ fn run_windows(options: &Options) -> io::Result<()> {
                         }
                     }
                     for channel in input_channels {
-                        serial.write_all(&multiplexed_input_frame(channel, &[outgoing]))?;
+                        queue_serial(
+                            &mut serial_output,
+                            &multiplexed_input_frame(channel, &[outgoing]),
+                        );
                     }
                 } else {
-                    serial.write_all(&[byte])?;
+                    queue_serial(&mut serial_output, &[byte]);
                 }
-                serial.flush()?;
                 // A typed character is echoed into its pane, and a pane that
                 // has changed has to be drawn. This went unnoticed because
                 // the monitor pane's figures changed every quarter second and
@@ -1355,9 +1421,12 @@ fn run_windows(options: &Options) -> io::Result<()> {
             dirty = true;
         }
         let now = Instant::now();
+        if now >= next_footer_repaint {
+            dirty = true;
+            next_footer_repaint = now + Duration::from_secs(1);
+        }
         if connection.mode() == Mode::Framed && now >= next_resource_request {
-            serial.write_all(&resource_request_frame())?;
-            serial.flush()?;
+            queue_serial(&mut serial_output, &resource_request_frame());
             next_resource_request = now + Duration::from_millis(250);
         }
         // Heartbeats must continue while HELLO is being negotiated.  In
@@ -1366,16 +1435,17 @@ fn run_windows(options: &Options) -> io::Result<()> {
         // which consumes HELLO and emits HELLO_ACK.
         if now >= next_scheduler_heartbeat {
             let tick = (connected.elapsed().as_millis() as u32 / 10) & 0x00ff_ffff;
-            serial.write_all(&scheduler_heartbeat(tick))?;
-            serial.flush()?;
+            queue_serial(&mut serial_output, &scheduler_heartbeat(tick));
             next_scheduler_heartbeat += Duration::from_millis(10);
             if next_scheduler_heartbeat < now {
                 next_scheduler_heartbeat = now + Duration::from_millis(10);
             }
         }
         if connection.mode() == Mode::Plain && now >= next_hello_retry {
-            serial.write_all(&hello().encode().expect("HELLO payload is bounded"))?;
-            serial.flush()?;
+            queue_serial(
+                &mut serial_output,
+                &hello().encode().expect("HELLO payload is bounded"),
+            );
             next_hello_retry = now + Duration::from_millis(250);
         }
         if connection.mode() == Mode::Framed && time_modes.any() && now >= next_time_frames {
@@ -1384,21 +1454,25 @@ fn run_windows(options: &Options) -> io::Result<()> {
                     TimeMode::Uptime => connected.elapsed().as_millis() as u32 / 10,
                     TimeMode::Clock => wall_centiseconds(),
                 } & 0x00ff_ffff;
-                serial.write_all(&multiplexed_time_frame(mode, tick))?;
+                queue_serial(&mut serial_output, &multiplexed_time_frame(mode, tick));
             }
-            serial.flush()?;
             next_time_frames = now + Duration::from_secs(1);
         }
         if connection.mode() == Mode::Framed && !injected.is_empty() {
             let byte = injected.remove(0);
-            serial.write_all(&multiplexed_input_frame(0, &[byte]))?;
-            serial.flush()?;
+            queue_serial(&mut serial_output, &multiplexed_input_frame(0, &[byte]));
         }
         if connection.mode() == Mode::Framed && !debug_identity_sent {
-            serial.write_all(&debug_request_frame(identity_request()))?;
-            serial.flush()?;
+            queue_serial(&mut serial_output, &debug_request_frame(identity_request()));
             debug_identity_sent = true;
         }
+        if serial_output.len() >= MAX_WINDOWS_SERIAL_BACKLOG * 3 / 4 {
+            desktop.set_error(Some(
+                "serial output stalled; Ctrl-A d remains available".into(),
+            ));
+            dirty = true;
+        }
+        flush_serial(&mut serial, &mut serial_output)?;
         if dirty {
             repaint_desktop(&mut tty, &mut desktop)?;
         }
@@ -1850,7 +1924,28 @@ mod tests {
     }
 
     #[test]
+    fn the_warm_reboot_request_is_wrapped_once_the_link_is_framed() {
+        assert_eq!(system_reboot_request(Mode::Plain), vec![0xff, 5]);
+        let framed = system_reboot_request(Mode::Framed);
+        assert_eq!(&framed[..2], &[0xa5, 0x5a]);
+        assert_eq!(framed[3], PASSTHROUGH);
+        assert_eq!(&framed[7..9], &SYSTEM_REBOOT);
+    }
+
+    #[test]
     fn scheduler_heartbeat_is_a_fixed_unescaped_five_byte_irq_frame() {
         assert_eq!(scheduler_heartbeat(0x1dff01), [0xff, 1, 1, 0xff, 0x1d]);
+    }
+
+    #[test]
+    fn windows_serial_queue_is_ordered_and_bounded() {
+        let mut output = VecDeque::new();
+        assert!(queue_serial(&mut output, b"first"));
+        assert!(queue_serial(&mut output, b"second"));
+        assert_eq!(output.iter().copied().collect::<Vec<_>>(), b"firstsecond");
+
+        output.resize(MAX_WINDOWS_SERIAL_BACKLOG, 0);
+        assert!(!queue_serial(&mut output, b"overflow"));
+        assert_eq!(output.len(), MAX_WINDOWS_SERIAL_BACKLOG);
     }
 }

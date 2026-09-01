@@ -238,7 +238,7 @@ def render_scheduled(entries: list[dict], manifest: Path) -> str:
     image_bytes = sum(entry["image_words"] * 3 for entry in images)
     shell_strings = {
         "SHELL_DF_TEXT": f"catalog entries={len(entries)} images={len(images)} bytes={image_bytes}",
-        "SHELL_HELP_1": "help ls dir ps run bg sync kill",
+        "SHELL_HELP_1": "help ls dir ps run bg sync kill reboot",
         "SHELL_HELP_2": "df du mem stat uname",
         "SHELL_UNAME_TEXT": "SWTOS COR24 0.1",
         "SHELL_CPU_HOG_NAME": HOG_NAME,
@@ -300,6 +300,7 @@ def render_scheduled(entries: list[dict], manifest: Path) -> str:
         "SHELL_TOPIC_MEM": "mem totals, mem -r resets, mem -p per process",
         "SHELL_TOPIC_STAT": "stat NAME or stat EP describes one",
         "SHELL_TOPIC_UNAME": "uname shows the system name and version",
+        "SHELL_TOPIC_BOOT": "reboot ends apps and restarts shell",
         "SHELL_PROC_FORCED": " fp=",
         "SHELL_PROC_CPU": " cpu=",
         "SHELL_MON_NAME": MON_NAME,

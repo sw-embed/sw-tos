@@ -116,6 +116,11 @@ expect "bg leaves the prompt free" \
 expect "killing the shell restarts it" \
     'kill 1\n' 'SHELL RESTARTED'
 
+# Warm reboot removes children, recreates the autostart monitor and rewinds
+# the shell without requiring the serial monitor to reload the resident image.
+expect "reboot restarts shell services" \
+    'reboot\n' 'SYSTEM REBOOTED'
+
 # A line with no endpoint at all is rejected rather than acted on.
 expect "kill without an endpoint is rejected" \
     'kill nothing\n' 'BAD'

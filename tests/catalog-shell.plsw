@@ -20,7 +20,7 @@ DCL 1 SHELL_PROGRAM_DESC BASED,
     3 SPD_STACK_WORDS INT,
     3 SPD_STATE_WORDS INT,
     3 SPD_FLAGS INT;
-DCL SHELL_HELP_1(32) CHAR INIT('help ls dir ps run bg sync kill');
+DCL SHELL_HELP_1(39) CHAR INIT('help ls dir ps run bg sync kill reboot');
 DCL SHELL_HELP_2(24) CHAR INIT('df du mem stat uname');
 DCL SHELL_UNAME_TEXT(17) CHAR INIT('SWTOS COR24 0.1');
 DCL SHELL_CPU_HOG_NAME(8) CHAR INIT('cpu-hog');
@@ -86,6 +86,7 @@ DCL SHELL_TOPIC_KILL(42) CHAR INIT('kill EP ends a process, ep=N accepted too');
 DCL SHELL_TOPIC_MEM(46) CHAR INIT('mem totals, mem -r resets, mem -p per process');
 DCL SHELL_TOPIC_STAT(35) CHAR INIT('stat NAME or stat EP describes one');
 DCL SHELL_TOPIC_UNAME(40) CHAR INIT('uname shows the system name and version');
+DCL SHELL_TOPIC_BOOT(35) CHAR INIT('reboot ends apps and restarts shell');
 DCL SHELL_PROC_FORCED(5) CHAR INIT(' fp=');
 DCL SHELL_PROC_CPU(6) CHAR INIT(' cpu=');
 
@@ -137,7 +138,9 @@ SHELL_HELP_COMMAND: PROC(A0 BYTE, A1 BYTE, ALEN INT);
         IF (A0 = 104) THEN DO; CALL SHELL_TOPIC_LINE(ADDR(SHELL_TOPIC_HELP)); FOUND = 1; END;
         IF (A0 = 108) THEN DO; CALL SHELL_TOPIC_LINE(ADDR(SHELL_TOPIC_LS)); FOUND = 1; END;
         IF (A0 = 112) THEN DO; CALL SHELL_TOPIC_LINE(ADDR(SHELL_TOPIC_PS)); FOUND = 1; END;
-        IF (A0 = 114) THEN DO; CALL SHELL_TOPIC_LINE(ADDR(SHELL_TOPIC_RUN)); FOUND = 1; END;
+        IF (A0 = 114) THEN DO;
+            IF (A1 = 117) THEN DO; CALL SHELL_TOPIC_LINE(ADDR(SHELL_TOPIC_RUN)); FOUND = 1; END;
+        END;
         IF (A0 = 98) THEN DO; CALL SHELL_TOPIC_LINE(ADDR(SHELL_TOPIC_BG)); FOUND = 1; END;
         IF (A0 = 107) THEN DO; CALL SHELL_TOPIC_LINE(ADDR(SHELL_TOPIC_KILL)); FOUND = 1; END;
         IF (A0 = 109) THEN DO; CALL SHELL_TOPIC_LINE(ADDR(SHELL_TOPIC_MEM)); FOUND = 1; END;
@@ -146,6 +149,9 @@ SHELL_HELP_COMMAND: PROC(A0 BYTE, A1 BYTE, ALEN INT);
             IF (A1 = 121) THEN DO; CALL SHELL_TOPIC_LINE(ADDR(SHELL_TOPIC_SYNC)); FOUND = 1; END;
         END;
         IF (A0 = 117) THEN DO; CALL SHELL_TOPIC_LINE(ADDR(SHELL_TOPIC_UNAME)); FOUND = 1; END;
+        IF (A0 = 114) THEN DO;
+            IF (A1 = 101) THEN DO; CALL SHELL_TOPIC_LINE(ADDR(SHELL_TOPIC_BOOT)); FOUND = 1; END;
+        END;
         IF (A0 = 100) THEN DO;
             IF (A1 = 105) THEN DO; CALL SHELL_TOPIC_LINE(ADDR(SHELL_TOPIC_LS)); FOUND = 1; END;
             IF (A1 = 102) THEN DO; CALL SHELL_TOPIC_LINE(ADDR(SHELL_TOPIC_DF)); FOUND = 1; END;
@@ -592,6 +598,12 @@ SHELL_KILL_COMMAND: PROC(ENDPOINT INT, DIGITS INT);
     ELSE CALL SHELL_BAD;
 END;
 
+SHELL_REBOOT_COMMAND: PROC;
+    /* This never returns. The HAL clears every child slot, allocator
+       generation and virtual TTY, then rewinds endpoint 1. */
+    CALL TASK_REBOOT;
+END;
+
 PLSW_LAUNCHER: PROC(STATE_PTR PTR);
     /* Read a whole line, apply its corrections, then parse it.
        Nothing acts on a character as it arrives any more. Backspace removes
@@ -776,6 +788,13 @@ PLSW_LAUNCHER: PROC(STATE_PTR PTR);
                     IF (WLEN = 3) THEN DO;
                         IF (ALEN = 0) THEN CALL SHELL_BAD;
                         ELSE CALL SHELL_RUN_NAMED(ADDR(CARG));
+                        MATCHED = 1;
+                    END;
+                END;
+                IF (CWORD(1) = 101) THEN DO;
+                    IF (WLEN = 6) THEN DO;
+                        IF (ALEN = 0) THEN CALL SHELL_REBOOT_COMMAND;
+                        ELSE CALL SHELL_BAD;
                         MATCHED = 1;
                     END;
                 END;

@@ -18,6 +18,14 @@ payload is `SWT1`. Both peers remain in plain recovery mode until a valid ACK.
 The Rust host sends HELLO only when `--framed` is requested and returns to plain
 mode on disconnect. The target accepts another exact HELLO while framed, so a
 reconnected frontend can negotiate without rebooting the target.
+
+Two unframed ISR control escapes remain available inside framed passthrough
+records: `FF 04` requests a shell-only restart and `FF 05` requests a warm
+system reboot. The latter clears endpoints 2 through 16 in full—including
+statistics, preemption sidecars, and virtual TTY rings—resets the child
+allocation generation, and rewinds endpoint 1. Both requests are deferred to
+a safe shell kernel boundary; neither substitutes for physical reset if UART
+interrupts or scheduler progress have stopped.
 Channels are logical virtual-TTY identifiers; channel zero is reserved for
 system-wide traffic where a message type does not belong to one TTY.
 
