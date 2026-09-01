@@ -164,7 +164,6 @@ impl SnapshotAssembler {
                 .any(|process| process.name.starts_with(prefix))
         })
     }
-
 }
 
 fn u24(bytes: &[u8]) -> u32 {
@@ -184,11 +183,16 @@ mod tests {
         let now = Instant::now();
         let mut assembler = SnapshotAssembler::default();
         assembler.push(&[BEGIN, 7], now);
-        assembler.push(&[MEMORY, 7, 10, 0, 0, 20, 0, 0, 3, 0, 0, 1, 0, 0, 2, 3], now);
+        assembler.push(
+            &[MEMORY, 7, 10, 0, 0, 20, 0, 0, 3, 0, 0, 1, 0, 0, 2, 3],
+            now,
+        );
         assembler.push(&[PREEMPTION, 7, 2, 11, 0, 0, 42, 0, 0], now);
         assembler.push(&[PROCESS, 7, 2, 7, 1, 192, 0, 1, 0, 9, 0, 0, 4, 0, 0], now);
         assembler.push(
-            &[PROCESS_IO, 7, 2, 3, 0, 0, 5, 0, 0, 6, 0, 0, b'c', b'n', b't', b'r'],
+            &[
+                PROCESS_IO, 7, 2, 3, 0, 0, 5, 0, 0, 6, 0, 0, b'c', b'n', b't', b'r',
+            ],
             now,
         );
         assert!(!assembler.push(&[END, 6, 0, 0, 0, 0, 0, 0, 0, 0, 0], now));
@@ -212,7 +216,10 @@ mod tests {
         let mut assembler = SnapshotAssembler::default();
         assert!(assembler.snapshot().is_none());
         assembler.push(&[BEGIN, 1], now);
-        assert!(assembler.snapshot().is_none(), "a begun generation is not one");
+        assert!(
+            assembler.snapshot().is_none(),
+            "a begun generation is not one"
+        );
         assembler.push(&[END, 1, 0, 0, 0, 0, 0, 0, 0, 0, 0], now);
         assert!(assembler.snapshot().is_some());
         // A lost link must not leave the last figures standing as current.
@@ -225,9 +232,14 @@ mod tests {
         let now = Instant::now();
         let mut assembler = SnapshotAssembler::default();
         assembler.push(&[BEGIN, 1], now);
-        assembler.push(&[MEMORY, 1, 30, 0, 0, 40, 0, 0, 2, 0, 0, 0, 0, 0, 3, 3], now);
         assembler.push(
-            &[PROCESS_IO, 1, 2, 0, 0, 0, 0, 0, 0, 0, 0, 0, b'a', b'p', b'p', 0],
+            &[MEMORY, 1, 30, 0, 0, 40, 0, 0, 2, 0, 0, 0, 0, 0, 3, 3],
+            now,
+        );
+        assembler.push(
+            &[
+                PROCESS_IO, 1, 2, 0, 0, 0, 0, 0, 0, 0, 0, 0, b'a', b'p', b'p', 0,
+            ],
             now,
         );
         assembler.push(&[END, 1, 0, 0, 0, 0, 0, 0, 0, 0, 0], now);

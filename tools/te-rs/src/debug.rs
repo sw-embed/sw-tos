@@ -154,7 +154,6 @@ pub fn memory_request(address: u32, length: u8) -> Result<Vec<u8>, String> {
     ])
 }
 
-
 /// COR24-TB physical address space. Hardware facts, fixed by the board.
 const HARDWARE: &[(&str, &str)] = &[
     ("000000-0FFFFF", "1 MB SRAM (ISSI IS61WV10248EDBLL)"),
@@ -169,8 +168,14 @@ const HARDWARE: &[(&str, &str)] = &[
 /// hal/cor24/catalog-spawn.s; the frontend cannot read either at runtime, so
 /// a kernel layout change must be reflected here.
 const PLANNED: &[(&str, &str)] = &[
-    ("000000-......", "kernel text, resident programs, catalog, data"),
-    ("......-0EFFFF", "heap: loaded image text, shadow, private state"),
+    (
+        "000000-......",
+        "kernel text, resident programs, catalog, data",
+    ),
+    (
+        "......-0EFFFF",
+        "heap: loaded image text, shadow, private state",
+    ),
     ("0F0000-0FFFFF", "process stacks, 64 KB, allocated downward"),
     ("FEEC00", "kernel stack top; grows down"),
     ("FEEB01-FEEBFF", "kernel and boot stack reserve, 255 B"),
@@ -298,13 +303,13 @@ impl DebugConsole {
                         && !lines
                             .iter()
                             .any(|line| line.contains(&format!("pc={address:06x}")))
-                        {
-                            lines.push(format!(
-                                "#{} {} pc={address:06x}",
-                                lines.len(),
-                                function.name
-                            ));
-                        }
+                    {
+                        lines.push(format!(
+                            "#{} {} pc={address:06x}",
+                            lines.len(),
+                            function.name
+                        ));
+                    }
                 }
                 if lines.len() == 1 {
                     lines.push("best-effort stack scan found no caller".into());
@@ -369,7 +374,6 @@ impl DebugConsole {
         };
         result.unwrap_or_else(|error| text(&error))
     }
-
 
     /// Three views of memory: what the board has, how SWTOS means to use it,
     /// and what is actually there now.
@@ -515,12 +519,14 @@ impl DebugConsole {
     fn list_command(&self, value: &str) -> Result<CommandResult, String> {
         let address = self.address(value)?;
         let map = self.matched_map()?;
-        let instruction = map.source_at(address).ok_or_else(|| match map.mapped_extent() {
-            Some((low, high)) => {
-                format!("no source for {address:06x}; image maps {low:06x}-{high:06x}")
-            }
-            None => format!("no source for {address:06x}"),
-        })?;
+        let instruction = map
+            .source_at(address)
+            .ok_or_else(|| match map.mapped_extent() {
+                Some((low, high)) => {
+                    format!("no source for {address:06x}; image maps {low:06x}-{high:06x}")
+                }
+                None => format!("no source for {address:06x}"),
+            })?;
         Ok(text(&format!(
             "{:06x} {}:{} {}",
             instruction.address, instruction.source, instruction.line, instruction.text

@@ -916,7 +916,10 @@ fn report_transport_loss(
     resources: &SnapshotAssembler,
     connected: Instant,
 ) {
-    eprintln!("transport lost after {:.1}s: {detail}", connected.elapsed().as_secs_f32());
+    eprintln!(
+        "transport lost after {:.1}s: {detail}",
+        connected.elapsed().as_secs_f32()
+    );
     eprintln!("  negotiated mode: {:?}", connection.mode());
     match resources.snapshot() {
         Some(snapshot) => eprintln!(
@@ -1098,8 +1101,7 @@ fn run_windows(options: &Options) -> io::Result<()> {
                                 let mut live = Vec::new();
                                 for process in snapshot.processes.values() {
                                     if process.endpoint > 0 && process.state != 0 {
-                                        desktop
-                                            .name_channel(process.endpoint - 1, &process.name);
+                                        desktop.name_channel(process.endpoint - 1, &process.name);
                                         live.push(process.endpoint);
                                     }
                                 }
@@ -1155,9 +1157,10 @@ fn run_windows(options: &Options) -> io::Result<()> {
                         }
                         b'R' => {
                             if let Some(path) = options.session.as_deref()
-                                && let Err(error) = load_session(path, &mut desktop) {
-                                    desktop.set_error(Some(format!("session: {error}")));
-                                }
+                                && let Err(error) = load_session(path, &mut desktop)
+                            {
+                                desktop.set_error(Some(format!("session: {error}")));
+                            }
                         }
                         b'r' => {
                             let renegotiate = connection.mode() == Mode::Plain;
@@ -1202,9 +1205,10 @@ fn run_windows(options: &Options) -> io::Result<()> {
                             CommandOutcome::Detach => return Ok(()),
                             CommandOutcome::Save => {
                                 if let Some(path) = options.session.as_deref()
-                                    && let Err(error) = save_session(path, &desktop) {
-                                        desktop.set_error(Some(format!("session: {error}")));
-                                    }
+                                    && let Err(error) = save_session(path, &desktop)
+                                {
+                                    desktop.set_error(Some(format!("session: {error}")));
+                                }
                             }
                             CommandOutcome::Continue => {}
                         },
@@ -1247,16 +1251,13 @@ fn run_windows(options: &Options) -> io::Result<()> {
                                     // and a request to kill it is most often
                                     // made because it has stopped reading what
                                     // it would be injected into.
-                                    serial.write_all(
-                                        &shell_restart_request(connection.mode()),
-                                    )?;
+                                    serial.write_all(&shell_restart_request(connection.mode()))?;
                                     serial.flush()?;
                                     "restarting the shell".to_string()
                                 } else {
                                     injected = command.into_bytes();
                                     injected.push(b'\n');
-                                    "sent to the shell; its reply is in the shell pane"
-                                        .to_string()
+                                    "sent to the shell; its reply is in the shell pane".to_string()
                                 };
                                 desktop.push_channel(254, format!("{note}\n").as_bytes());
                                 debug_input.clear();
@@ -1609,19 +1610,20 @@ fn run(options: &Options) -> io::Result<()> {
 
         let now = Instant::now();
         if let Some(mode) = time_mode
-            && now >= next_frame {
-                let tick = match mode {
-                    TimeMode::Uptime => connected.elapsed().as_millis() as u32 / 10,
-                    TimeMode::Clock => wall_centiseconds(),
-                } & 0x00ff_ffff;
-                if options.framed && connection.mode() == Mode::Framed {
-                    serial.write_all(&multiplexed_time_frame(mode, tick))?;
-                } else {
-                    serial.write_all(&time_frame(mode, tick))?;
-                }
-                serial.flush()?;
-                next_frame = now + Duration::from_secs(1);
+            && now >= next_frame
+        {
+            let tick = match mode {
+                TimeMode::Uptime => connected.elapsed().as_millis() as u32 / 10,
+                TimeMode::Clock => wall_centiseconds(),
+            } & 0x00ff_ffff;
+            if options.framed && connection.mode() == Mode::Framed {
+                serial.write_all(&multiplexed_time_frame(mode, tick))?;
+            } else {
+                serial.write_all(&time_frame(mode, tick))?;
             }
+            serial.flush()?;
+            next_frame = now + Duration::from_secs(1);
+        }
     }
 }
 

@@ -143,7 +143,6 @@ impl Pane {
         }
         output
     }
-
 }
 
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
@@ -361,9 +360,7 @@ impl Desktop {
             return;
         }
         for pane in &mut self.panes {
-            if pane.channel == channel
-                && pane.kind == PaneKind::Application
-                && pane.title != title
+            if pane.channel == channel && pane.kind == PaneKind::Application && pane.title != title
             {
                 pane.title = title.to_string();
                 // A different program on the same channel is a different
@@ -410,7 +407,12 @@ impl Desktop {
             let at = position.min(self.panes.len());
             self.panes.insert(
                 at,
-                Pane::new(kind, kind.default_channel(), kind.title(), DEFAULT_SCROLLBACK),
+                Pane::new(
+                    kind,
+                    kind.default_channel(),
+                    kind.title(),
+                    DEFAULT_SCROLLBACK,
+                ),
             );
             if self.focus >= at {
                 self.focus += 1;
@@ -609,7 +611,6 @@ impl Desktop {
         output.push_str("\x1b[K\r\n");
         output
     }
-
 }
 
 /// The tiling: how many rows and columns, and the width left for panes once
@@ -691,8 +692,8 @@ impl Desktop {
         let columns = grid.columns;
         let mut x = 0;
         for column in 0..columns {
-            let pane_width = (column + 1) * grid.column_total / columns
-                - column * grid.column_total / columns;
+            let pane_width =
+                (column + 1) * grid.column_total / columns - column * grid.column_total / columns;
             // One name per column, for the pane directly beneath. Naming both
             // neighbours would repeat every middle pane's name on two rules
             // and leave each one half a column to fit in.
@@ -772,11 +773,7 @@ impl Desktop {
             if target >= canvas.len() {
                 break;
             }
-            for (column, character) in line
-                .chars()
-                .skip(horizontal_offset)
-                .take(width)
-                .enumerate()
+            for (column, character) in line.chars().skip(horizontal_offset).take(width).enumerate()
             {
                 let cell = x + column;
                 if cell < canvas[target].len() {
@@ -902,10 +899,12 @@ mod tests {
         desktop.command(b'3');
         assert_eq!(desktop.focused_kind(), PaneKind::Debugger);
         desktop.command(b'x');
-        assert!(!desktop
-            .layout()
-            .iter()
-            .any(|(kind, _, _)| *kind == PaneKind::Debugger));
+        assert!(
+            !desktop
+                .layout()
+                .iter()
+                .any(|(kind, _, _)| *kind == PaneKind::Debugger)
+        );
 
         desktop.command(b'S');
         let layout = desktop.layout();
@@ -998,7 +997,10 @@ mod tests {
         desktop.command(b'l');
         let screen = desktop.render(80, 24);
         assert!(!screen.contains("old output"), "{screen}");
-        assert!(screen.contains("1 v Shell"), "the pane must stay open: {screen}");
+        assert!(
+            screen.contains("1 v Shell"),
+            "the pane must stay open: {screen}"
+        );
 
         // Reusing a channel starts the new program's pane empty.
         desktop.push_channel(0, b"newer output\n");
@@ -1026,8 +1028,16 @@ mod tests {
             desktop.push_channel(0, &[b'x'; 1024]);
         }
         let pane = &desktop.panes[0];
-        assert!(pane.current.len() < MAX_LINE_BYTES, "{}", pane.current.len());
-        assert!(pane.lines.len() <= DEFAULT_SCROLLBACK, "{}", pane.lines.len());
+        assert!(
+            pane.current.len() < MAX_LINE_BYTES,
+            "{}",
+            pane.current.len()
+        );
+        assert!(
+            pane.lines.len() <= DEFAULT_SCROLLBACK,
+            "{}",
+            pane.lines.len()
+        );
     }
 
     #[test]
@@ -1041,7 +1051,10 @@ mod tests {
         // Strip the cursor-home and clear-to-end controls so a rule is
         // recognisable by its first character wherever it sits.
         let plain = |desktop: &Desktop| {
-            desktop.render(80, 24).replace("\x1b[H", "").replace("\x1b[K", "")
+            desktop
+                .render(80, 24)
+                .replace("\x1b[H", "")
+                .replace("\x1b[K", "")
         };
         let screen = plain(&desktop);
         let rules: Vec<&str> = screen
@@ -1074,7 +1087,10 @@ mod tests {
         // The marker sits on the focused pane's own name, and only there.
         assert!(top_left.contains("1 v Shell *"), "{top_left}");
         assert_eq!(
-            rules.iter().map(|rule| rule.matches('*').count()).sum::<usize>(),
+            rules
+                .iter()
+                .map(|rule| rule.matches('*').count())
+                .sum::<usize>(),
             1,
             "{screen}"
         );
