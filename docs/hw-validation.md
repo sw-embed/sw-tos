@@ -45,6 +45,11 @@ second validates that its JSON report is passing, complete, from the current
 commit and branch, and was generated with a clean tracked worktree. It does not
 silently rerun acceptance.
 
+When reusing a workspace whose ignored `build/` tree contains generated files
+from an older revision, run `just clean-build` before acceptance. The recipe
+removes reproducible outputs while preserving hardware and video evidence under
+`build/captures/`.
+
 The resulting `build/hardware-validation/` contains:
 
 - `swtos-resident.bin`: scheduler-integrated resident menu, load address zero.

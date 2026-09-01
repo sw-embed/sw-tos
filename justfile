@@ -18,6 +18,10 @@ default: plsw-smoke-run
 emulator-acceptance:
     ./scripts/emulator-acceptance.sh
 
+# Remove reproducible build outputs but retain build/captures hardware evidence
+clean-build:
+    ./scripts/clean-build.sh
+
 # Verify machine-readable emulator acceptance report generation
 acceptance-report-smoke:
     python3 tests/test-acceptance-report.py
