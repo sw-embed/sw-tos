@@ -305,6 +305,10 @@ def render_scheduled(entries: list[dict], manifest: Path) -> str:
         "SHELL_PROC_CPU": " cpu=",
         "SHELL_MON_NAME": MON_NAME,
         "SHELL_SYNC_NOTE": "no free slot: running it here",
+        "SHELL_FG_HINT": "[Ctrl-[ to end]",
+        "SHELL_KILL_NO_SUCH": "no such endpoint",
+        "SHELL_KILL_GONE": "nothing is running there",
+        "SHELL_KILL_USAGE": "kill needs an endpoint, as in kill 3 or kill ep=3",
         "SHELL_SYNC_NEEDS_SLOT": "needs a slot of its own",
         "SHELL_TOPIC_SYNC": "sync NAME runs it here, without a slot",
     }

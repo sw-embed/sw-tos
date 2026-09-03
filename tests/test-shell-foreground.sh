@@ -40,6 +40,38 @@ output=$(run 'mon\n5\nmem\n')
 grep -q 'total=' <<<"$output" ||
     fail "the prompt lost the keyboard when a child exited" "$output"
 
+# The menu runs its programs in the shell itself. It used to start one as a
+# process and wait for it, which put its output in a pane of its own while the
+# shell that waited for it owned another: typing reached the shell, which was
+# not reading, so a kill aimed at the pane that was scrolling did nothing, and
+# for a clock or an uptime the wait never ended at all.
+#
+# One pane, one thing typing reaches, and nothing in the process table to kill
+# because nothing was put there.
+output=$(run '3\n\x1bmem\n')
+grep -q 'Uptime' <<<"$output" ||
+    fail "the menu did not run uptime" "$output"
+grep -q 'slots=1/16' <<<"$output" ||
+    fail "a menu program took a process slot" "$output"
+grep -q 'total=' <<<"$output" ||
+    fail "Escape did not return the prompt" "$output"
+
+# And it is a running program, not merely a started one: the time broadcast
+# finds a clock or an uptime by the program its slot names, so a shell that
+# went on naming itself was never sent a tick.
+output=$(run '3\n\xFF\x01\xF4\x01\x00\xFF\x01\x58\x02\x00\x1bmem\n')
+grep -q '00:05' <<<"$output" ||
+    fail "a menu uptime was never sent the time" "$output"
+
+output=$(run '1\nx\nmem\n')
+grep -q 'Press a key here to exit' <<<"$output" ||
+    fail "the menu did not run Hello in the shell" "$output"
+
+# A program running here owns the shell until it ends, so the way out is said
+# before it starts rather than left to be guessed at.
+grep -q 'Ctrl-\[ to end' <<<"$output" ||
+    fail "starting a foreground program did not say how to end it" "$output"
+
 # The same command twice is the same command twice. The counters exit on their
 # second step, so a stale or shared state word shows up immediately as a run
 # that does not stop where the first one did.

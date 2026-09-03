@@ -124,6 +124,14 @@ expect "a menu digit acts on Enter" \
 expect "bg leaves the prompt free" \
     'bg hello\n \nuname\n' 'SWTOS COR24'
 
+# kill says which way it failed. BAD was the answer to all of them, which left
+# nothing to act on: a mistyped number, a process that had gone and a process
+# that was never there all read the same.
+expect "kill without an endpoint says so" \
+    'kill\n' 'kill needs an endpoint'
+expect "killing an empty slot says so" \
+    'kill 9\n' 'nothing is running there'
+
 # Killing the shell rewinds it. Its slot stays, because the session goes with
 # it, but the request is answered rather than refused: an operator asking to
 # kill a wedged shell wants it back, not an error.
@@ -135,9 +143,9 @@ expect "killing the shell restarts it" \
 expect "reboot restarts shell services" \
     'reboot\n' 'SYSTEM REBOOTED'
 
-# A line with no endpoint at all is rejected rather than acted on.
+# A line with no endpoint at all is not acted on, and says what was wanted.
 expect "kill without an endpoint is rejected" \
-    'kill nothing\n' 'BAD'
+    'kill nothing\n' 'kill needs an endpoint'
 
 # The ep= spelling is proved against a live process in the framed
 # debugger-kill recipe; a bare run cannot, because raw input follows the

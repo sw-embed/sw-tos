@@ -26,6 +26,10 @@ DCL SHELL_UNAME_TEXT(17) CHAR INIT('SWTOS COR24 0.1');
 DCL SHELL_CPU_HOG_NAME(8) CHAR INIT('cpu-hog');
 DCL SHELL_MON_NAME(4) CHAR INIT('mon');
 DCL SHELL_SYNC_NOTE(30) CHAR INIT('no free slot: running it here');
+DCL SHELL_FG_HINT(19) CHAR INIT('[Ctrl-[ to end]');
+DCL SHELL_KILL_NO_SUCH(17) CHAR INIT('no such endpoint');
+DCL SHELL_KILL_GONE(23) CHAR INIT('nothing is running there');
+DCL SHELL_KILL_USAGE(43) CHAR INIT('kill needs an endpoint, as in kill 3 or kill ep=3');
 DCL SHELL_SYNC_NEEDS_SLOT(25) CHAR INIT('needs a slot of its own');
 DCL SHELL_TOPIC_SYNC(38) CHAR INIT('sync NAME runs it here, without a slot');
 DCL SHELL_STAT_KIND(7) CHAR INIT(' kind=');
@@ -440,33 +444,31 @@ SHELL_READY: PROC;
 END;
 
 SHELL_RUN_SELECTED: PROC(DESC_PTR PTR);
-    /* Wait for this program, not for every process there is. The monitor is
-       a child too and never exits, so waiting for the child count to fall to
-       zero waited forever and took the prompt with it. */
-    DCL SPAWN_STATUS INT;
-    DCL ENDPOINT INT;
-    CALL TASK_SPAWN(DESC_PTR);
-    CALL TASK_SPAWN_RESULT(ADDR(SPAWN_STATUS));
-    IF (SPAWN_STATUS = 0) THEN DO;
-        CALL TASK_SPAWN_ENDPOINT(ADDR(ENDPOINT));
-        CALL TASK_JOIN_ENDPOINT(ENDPOINT);
-        CALL SHELL_READY;
-    END;
-    ELSE DO;
-        CALL UART_PUTCHAR(69);
-        CALL UART_PUTCHAR(82);
-        CALL UART_PUTCHAR(82);
-        CALL UART_PUTCHAR(79);
-        CALL UART_PUTCHAR(82);
-        CALL UART_PUTCHAR(10);
-    END;
+    /* The menu runs its programs here, in the shell itself.
+
+       It used to start one as a process and wait for it, which put its output
+       in a pane of its own while the shell that was waiting for it owned
+       another. Typing went to the shell, which was not reading, so a kill
+       aimed at the pane that was scrolling did nothing at all -- and for a
+       clock or an uptime, which never finish, the wait never ended.
+
+       Run here there is one pane, one thing typing reaches, and Escape ends
+       it, which is what a foreground program has always meant. Nothing is
+       left in the process table to kill, because nothing was ever put there.
+       Programs that should outlive the prompt are what bg is for. */
+    CALL SHELL_SYNC_RUN(DESC_PTR);
 END;
 
 SHELL_SYNC_RUN: PROC(DESC_PTR PTR);
+    /* Say how to get out before handing over. A program running here owns the
+       shell until it ends, and one that ends on its own never needed telling
+       -- but the ones that do not are exactly the ones nobody can guess at. */
     /* Run a program here, in the shell itself, with no process of its own.
        The prompt is gone until it finishes, so it had better finish; if it
        does not, the restart escape is the way back. */
     DCL SYNC_STATUS INT;
+    CALL UART_PUTS(ADDR(SHELL_FG_HINT));
+    CALL UART_PUTCHAR(10);
     CALL TASK_RUN_SYNC(DESC_PTR, ADDR(SYNC_STATUS));
     IF (SYNC_STATUS = 0) THEN CALL SHELL_READY;
     ELSE DO;
@@ -585,13 +587,25 @@ END;
 
 SHELL_KILL_COMMAND: PROC(ENDPOINT INT, DIGITS INT);
     /* End a process. The endpoint arrives parsed, so "kill ep=2" and "kill 2"
-       are the same line by the time this sees it. */
+       are the same line by the time this sees it.
+
+       BAD was the answer to every way this can fail, which left nothing to
+       act on: a mistyped number, a process that had already gone and a
+       process that was never there all read the same. */
     DCL STATUS INT;
-    STATUS = 1;
-    IF (DIGITS = 0) THEN STATUS = 1;
-    ELSE CALL TASK_KILL(ENDPOINT, ADDR(STATUS));
-    IF (STATUS = 0) THEN CALL SHELL_READY;
-    ELSE CALL SHELL_BAD;
+    IF (DIGITS = 0) THEN DO;
+        CALL UART_PUTS(ADDR(SHELL_KILL_USAGE));
+        CALL UART_PUTCHAR(10);
+    END;
+    ELSE DO;
+        CALL TASK_KILL(ENDPOINT, ADDR(STATUS));
+        IF (STATUS = 0) THEN CALL SHELL_READY;
+        ELSE DO;
+            IF (STATUS = 2) THEN CALL UART_PUTS(ADDR(SHELL_KILL_GONE));
+            ELSE CALL UART_PUTS(ADDR(SHELL_KILL_NO_SUCH));
+            CALL UART_PUTCHAR(10);
+        END;
+    END;
 END;
 
 SHELL_REBOOT_COMMAND: PROC;
@@ -870,9 +884,24 @@ PLSW_HELLO: PROC(STATE_PTR PTR);
     CALL UART_PUTCHAR(115);
     CALL UART_PUTCHAR(115);
     CALL UART_PUTCHAR(32);
+    CALL UART_PUTCHAR(97);
+    CALL UART_PUTCHAR(32);
     CALL UART_PUTCHAR(107);
     CALL UART_PUTCHAR(101);
     CALL UART_PUTCHAR(121);
+    CALL UART_PUTCHAR(32);
+    CALL UART_PUTCHAR(104);
+    CALL UART_PUTCHAR(101);
+    CALL UART_PUTCHAR(114);
+    CALL UART_PUTCHAR(101);
+    CALL UART_PUTCHAR(32);
+    CALL UART_PUTCHAR(116);
+    CALL UART_PUTCHAR(111);
+    CALL UART_PUTCHAR(32);
+    CALL UART_PUTCHAR(101);
+    CALL UART_PUTCHAR(120);
+    CALL UART_PUTCHAR(105);
+    CALL UART_PUTCHAR(116);
     CALL UART_PUTCHAR(10);
     CALL TASK_GETCHAR(ADDR(CH));
     CALL TASK_EXIT;

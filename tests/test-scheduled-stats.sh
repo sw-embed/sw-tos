@@ -9,8 +9,11 @@ EMU="$ROOT_DIR/scripts/swtos-emu"
 "$ROOT_DIR/scripts/catalog-spawn-link.sh" \
     "$ROOT_DIR/tests/catalog-shell.plsw" scheduled-stats
 
+# bg, not the menu: the menu runs its programs in the shell itself now, and a
+# program that never becomes a process exercises none of the spawn accounting
+# this is here to measure.
 output=$($EMU --load-binary "$OUT_DIR/program.bin@0" --entry 0 \
-    -u '2\nstat 2\nps -l\n' --speed 0 -n 1000000 --quiet 2>/dev/null \
+    -u 'bg counter\nstat 2\nps -l\n' --speed 0 -n 2000000 --quiet 2>/dev/null \
     | sed '/^Entry point:/d')
 
 # The counter has finished by the time this listing is taken. ps -l reports
@@ -24,14 +27,19 @@ fi
 
 # The shell is running, so its own row carries the figures that prove they
 # are tracked at all.
-if ! grep -q 'shell    ep=1 s=1 b=0 alloc=256/6w d=17 y=18 fp=0 cpu=0 ipc=2' <<<"$output"; then
+if ! grep -q 'shell    ep=1 s=1 b=0 alloc=256/6w d=24 y=25 fp=0 cpu=0 ipc=1' <<<"$output"; then
     echo "FAIL: detailed ps did not report shell scheduling and IPC operations" >&2
     echo "$output" >&2
     exit 1
 fi
 
-if [ "$(grep -c "$counter_line" <<<"$output")" -ne 2 ]; then
-    echo "FAIL: stat <endpoint> and ps -l did not agree" >&2
+# The slot the counter used reports nothing of it. This never ran: it compared
+# against a variable that was never assigned, so the unbound name failed inside
+# the command substitution, the test that followed complained about an empty
+# integer, and the script carried on to pass. What it should have checked is
+# that a released slot keeps none of its last tenant's figures.
+if ! grep -q 'ep=2 name=none state=0 blocked=0 stack=0 statew=0 dispatch=0 yields=0 ipc=0 ttyin=0 ttyout=0' <<<"$output"; then
+    echo "FAIL: a released slot still reported its last tenant" >&2
     echo "$output" >&2
     exit 1
 fi

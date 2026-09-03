@@ -61,6 +61,9 @@ _kernel_stack_fill:
         add     r0,12
         la      r2,_shell_stack_top
         sw      r0,0(r2)
+        la      r0,_scheduled_shell_descriptor
+        la      r2,_shell_descriptor
+        sw      r0,0(r2)
 
         ; Endpoint identities belong to process-table slots, including FREE
         ; slots, so process inspection remains stable before first spawn.
@@ -210,7 +213,12 @@ _restart_shell:
         lw      r0,0(r0)
         lw      r1,36(r2)
         sw      r1,-3(r0)       ; initial r0 = state pointer
-        lw      r1,33(r2)       ; selected PROGRAM_DESC
+        ; From the retained copy, not from the slot: the slot may be naming a
+        ; program it is running synchronously, which is often the very thing
+        ; being restarted away from.
+        la      r1,_shell_descriptor
+        lw      r1,0(r1)
+        sw      r1,33(r2)
         lw      r1,6(r1)        ; direct resident entry
         sw      r1,-6(r0)       ; initial r1/PC
         lc      r1,0
@@ -3721,12 +3729,29 @@ _task_run_sync_enter:
         lc      r0,1
         la      r2,_sync_active
         sw      r0,0(r2)
+        ; Say what the slot is running. Everything that asks a process what it
+        ; is reads this: the time broadcast finds a clock or an uptime by it,
+        ; and ps and the monitor name a process by it. Left pointing at the
+        ; shell, a synchronous clock was never sent a tick and never printed
+        ; the time.
+        la      r2,_proc_a
+        lw      r0,33(r2)
+        la      r2,_sync_saved_descriptor
+        sw      r0,0(r2)
+        la      r2,_sync_descriptor
+        lw      r0,0(r2)
+        la      r2,_proc_a
+        sw      r0,33(r2)
         la      r2,_sync_descriptor
         lw      r2,0(r2)
         lw      r2,6(r2)        ; direct resident entry
         la      r0,_sync_state
         jal     r1,(r2)
 _task_run_sync_returned:
+        la      r2,_sync_saved_descriptor
+        lw      r0,0(r2)
+        la      r2,_proc_a
+        sw      r0,33(r2)
         lc      r0,0
         la      r2,_sync_active
         sw      r0,0(r2)
@@ -5685,6 +5710,13 @@ _child_count:
 ; rewinds the process to exactly this address, so it never allocates again and
 ; repeated restarts cannot leak the stack arena.
 _shell_stack_top:
+        .zero   3
+; The shell's own program, kept apart from its slot. While the slot is running
+; something synchronously it names that program instead, so a restart cannot
+; read the slot to find its way back.
+_shell_descriptor:
+        .zero   3
+_sync_saved_descriptor:
         .zero   3
 ; The process that called TASK_EXIT, retained across the slot release so the
 ; terminal can be handed on only by the process that actually held it.
