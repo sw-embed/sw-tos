@@ -208,7 +208,7 @@ keeps explicitly raw register and memory inspection available.
 
 The interactive frontend is `scripts/swtos-terminal.py`. It runs the emulator
 behind a pseudo-terminal, forwards ordinary bytes, and recognizes when the
-shell has printed `Choice: `. If a numeric choice is followed by Return, the
+shell has printed its `#` prompt. If a numeric choice is followed by Return, the
 frontend discards that one CR/LF so it cannot be consumed by Hello or become a
 new invalid menu choice.
 

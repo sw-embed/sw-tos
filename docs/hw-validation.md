@@ -107,7 +107,7 @@ connecting TX/RX or powering the board.
    that exactly one `G000000` entry record terminates the image.
 2. Start execution at address `0x000000`.
 3. Capture the complete terminal transcript from reset through exit.
-4. At `Choice:`, run `ls` and require all catalog entries to be listed.
+4. At the `#` prompt, run `ls` and require all catalog entries to be listed.
 5. Run `ps` and require stable process endpoints and sensible slot states.
 6. Choose `1`. Require `Hello from SWTOS!` and verify the app remains waiting
    until a new key is pressed; the Return used for the choice must not satisfy

@@ -197,7 +197,7 @@ def main():
         type_line(transport, b"5\r")
         tick = pump(transport, tick, 250, output)
         shell = bytes(output.get(0, b"")).decode("ascii", "replace")
-        assert shell.rstrip().endswith("Choice:"), (
+        assert shell.rstrip().endswith("#"), (
             f"the multitask demo did not return to the prompt: {shell[-200:]!r}")
 
         for command in (b"run clock --tty=new\r", b"run uptime --tty=new\r",

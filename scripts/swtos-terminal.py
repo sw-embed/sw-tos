@@ -97,7 +97,7 @@ def main() -> int:
                     break
                 os.write(sys.stdout.fileno(), data)
                 combined = output_tail + data
-                if b"Choice: " in combined:
+                if b"# " in combined:
                     menu_prompt = True
                     time_mode = None
                 output_tail = combined[-7:]

@@ -179,7 +179,7 @@ def main():
 
         shell = bytes(output.get(0, b"")).decode("ascii", "replace")
         assert f"{SLOTS} RUNNABLE" in shell, f"table did not fill:\n{shell}"
-        assert shell.rstrip().endswith("Choice:"), f"shell left its prompt:\n{shell}"
+        assert shell.rstrip().endswith("#"), f"shell left its prompt:\n{shell}"
 
         advancing = []
         for channel, raw in sorted(output.items()):

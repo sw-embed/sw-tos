@@ -260,6 +260,14 @@ where
     Ok(ParseResult::Run(options))
 }
 
+/// Spell a prefix byte the way a person would say it.
+fn prefix_label(prefix: u8) -> String {
+    match prefix {
+        0x00..=0x1f => format!("Ctrl-{}", (prefix + b'@') as char),
+        byte => format!("{:?}", byte as char),
+    }
+}
+
 fn parse_prefix(value: &str) -> Result<u8, String> {
     let bytes = value.as_bytes();
     match bytes {
@@ -835,6 +843,15 @@ fn show_debugger_help(desktop: &mut Desktop) {
     for line in help_lines() {
         desktop.push_channel(254, format!("{line}\n").as_bytes());
     }
+    debugger_prompt(desktop);
+}
+
+/// Mark where debugger input goes.
+///
+/// The pane is titled, so it never needed a line announcing itself; what it
+/// needed was somewhere the typing visibly starts.
+fn debugger_prompt(desktop: &mut Desktop) {
+    desktop.push_channel(254, b"dbg ");
 }
 
 /// The target announces its own rewinds. These are the two it prints.
@@ -1027,7 +1044,7 @@ fn run_windows(options: &Options) -> io::Result<()> {
     {
         desktop.set_error(Some(format!("session: {error}")));
     }
-    desktop.push_channel(254, b"SWTOS debugger\n");
+    desktop.set_prefix_label(prefix_label(options.prefix));
     show_debugger_help(&mut desktop);
     if let Some(error) = debug_map_error {
         desktop.push_channel(254, format!("{error}\n").as_bytes());
@@ -1351,6 +1368,7 @@ fn run_windows(options: &Options) -> io::Result<()> {
                                     "sent to the shell; its reply is in the shell pane".to_string()
                                 };
                                 desktop.push_channel(254, format!("{note}\n").as_bytes());
+                                debugger_prompt(&mut desktop);
                                 debug_input.clear();
                                 dirty = true;
                                 continue;
@@ -1363,6 +1381,7 @@ fn run_windows(options: &Options) -> io::Result<()> {
                             if let Some(request) = result.request {
                                 queue_serial(&mut serial_output, &debug_request_frame(request));
                             }
+                            debugger_prompt(&mut desktop);
                         }
                         0x08 | 0x7f => {
                             // Erase on screen as well as in the buffer. The

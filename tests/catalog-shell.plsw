@@ -25,7 +25,6 @@ DCL SHELL_HELP_2(24) CHAR INIT('df du mem stat uname');
 DCL SHELL_UNAME_TEXT(17) CHAR INIT('SWTOS COR24 0.1');
 DCL SHELL_CPU_HOG_NAME(8) CHAR INIT('cpu-hog');
 DCL SHELL_MON_NAME(4) CHAR INIT('mon');
-DCL SHELL_MENU_HELP(15) CHAR INIT(' help=commands');
 DCL SHELL_SYNC_NOTE(30) CHAR INIT('no free slot: running it here');
 DCL SHELL_SYNC_NEEDS_SLOT(25) CHAR INIT('needs a slot of its own');
 DCL SHELL_TOPIC_SYNC(38) CHAR INIT('sync NAME runs it here, without a slot');
@@ -338,15 +337,10 @@ SHELL_MENU: PROC;
     CALL UART_PUTCHAR(105);
     CALL UART_PUTCHAR(108);
     CALL UART_PUTCHAR(108);
-    CALL UART_PUTS(ADDR(SHELL_MENU_HELP));
     CALL UART_PUTCHAR(10);
-    CALL UART_PUTCHAR(67);
-    CALL UART_PUTCHAR(104);
-    CALL UART_PUTCHAR(111);
-    CALL UART_PUTCHAR(105);
-    CALL UART_PUTCHAR(99);
-    CALL UART_PUTCHAR(101);
-    CALL UART_PUTCHAR(58);
+    /* A prompt, not a question. Every command runs at one level, so the
+       conventional mark for that is the whole prompt. */
+    CALL UART_PUTCHAR(35);
     CALL UART_PUTCHAR(32);
 END;
 

@@ -34,7 +34,7 @@ check() {
 }
 
 count_prompts() {
-    grep -c 'Choice:' <<<"$1" || true
+    grep -c '^# ' <<<"$1" || true
 }
 
 check "the escape restarts a shell sitting at its prompt" \
@@ -47,8 +47,6 @@ check "a restarted shell offers its menu again" \
 # so it says what it can do rather than only what it can be sent.
 check "a restarted shell lists its commands" \
     '\xFF\x04' 'help ls dir ps run bg'
-check "and the menu points at them the rest of the time" \
-    '\xFF\x04' 'help=commands'
 check "a rebooted shell lists them too" \
     '\xFF\x05' 'help ls dir ps run bg'
 

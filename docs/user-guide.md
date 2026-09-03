@@ -47,7 +47,7 @@ just plsw-system-interactive
 ```
 
 `just plsw-system-run` is a backward-compatible alias for the same scheduled
-system. Wait for `Choice: `, then use:
+system. Wait for the `#` prompt, then use:
 
 | Input | Result |
 |---|---|
@@ -305,7 +305,7 @@ choices. Confirm the terminal recipe was rebuilt after source changes.
 
 A queued CR or LF is being delivered to Hello. The supported wrapper removes
 the newline immediately following a numeric menu choice. Type `1` once at the
-`Choice: ` prompt and avoid piping an extra line of input into the session.
+`#` prompt and avoid piping an extra line of input into the session.
 
 ### Counter returns to repeated invalid choices
 

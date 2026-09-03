@@ -41,6 +41,8 @@ ROWS, COLUMNS = 50, 200
 #: print nothing, so they contribute no pane.
 EXPECTED_PANES = 3 + 12
 PREFIX = b"\x01"  # Ctrl-A
+# The shell prompt. One level, so one mark.
+SHELL_PROMPT = "#"
 #: Whole session budget. A hang is a failure, not something to wait out.
 BUDGET = 300
 
@@ -226,9 +228,9 @@ def main():
     try:
         # Wait for the shell prompt, not just the link: a keystroke sent
         # before the target has booted is simply lost.
-        view = session.wait_for("Choice:", timeout=40)
+        view = session.wait_for(SHELL_PROMPT, timeout=40)
         require("connected" in view, "connect", view[-800:])
-        require("Choice:" in view, "shell reaches its prompt", view[-1500:])
+        require(SHELL_PROMPT in view, "shell reaches its prompt", view[-1500:])
 
         # Fill every slot, then require the frontend to have opened a pane per
         # process rather than folding them together.

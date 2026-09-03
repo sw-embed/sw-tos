@@ -50,7 +50,7 @@ runs=$(grep -o 'READY' <<<"$output" | wc -l | tr -d ' ')
     fail "expected four completed launches, saw $runs" "$output"
 # A worker step is a slot letter and a step number on a line of its own; the
 # prompt shares a line with whatever answered it, so take that off first.
-steps=$(sed 's/^Choice: //' <<<"$output")
+steps=$(sed 's/^# //' <<<"$output")
 first=$(grep -c '^[A-P]1$' <<<"$steps" || true)
 [ "$first" -eq 6 ] ||
     fail "expected six first steps across three runs, saw $first" "$output"
