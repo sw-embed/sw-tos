@@ -50,11 +50,30 @@ trap 'rm -rf "$scratch"' EXIT
     printf '\x04'
 } > "$scratch/input.bin"
 
+# The compiler is a COR24 program, so it runs under an instruction budget. It
+# needs a little over half a billion for this source and grows with it.
+PLSW_BUDGET=2000000000
 compiler_output=$($EMU --lgo "$PLSW" --uart-file "$scratch/input.bin" \
-    --quiet --speed 0 -n 500000000 -t 120 2>&1)
+    --quiet --speed 0 -n "$PLSW_BUDGET" -t 600 2>&1)
 if echo "$compiler_output" | grep -q 'compilation failed\|COMPILE ERROR\|ERROR:'; then
     echo "PL/SW task compilation failed:" >&2
     echo "$compiler_output" >&2
+    exit 1
+fi
+# A compiler that runs out of instructions stops mid-emit, and the half-written
+# assembly it leaves behind is not obviously half-written: it fails much later
+# as an undefined label, at whatever line the emit happened to stop on, which
+# reads like a fault in the source that was being compiled.
+# A compiler that runs out of instructions stops mid-emit, and the half-written
+# assembly it leaves behind is not obviously half-written: it fails much later
+# as an undefined label, at whatever line the emit happened to stop on, which
+# reads like a fault in the source being compiled rather than a truncated file.
+# The emulator reports its instruction count either way, so the count is what
+# says which happened.
+executed=$(echo "$compiler_output" | sed -n 's/^Executed \([0-9]*\) instructions.*/\1/p' | tail -1)
+if [ -n "$executed" ] && [ "$executed" -ge "$PLSW_BUDGET" ]; then
+    echo "PL/SW compilation stopped at its $PLSW_BUDGET instruction budget;" >&2
+    echo "the assembly it wrote is truncated. Raise PLSW_BUDGET in $0." >&2
     exit 1
 fi
 generated_banner "$PLSW_SOURCE compiled by tools/plsw.lgo" \

@@ -28,9 +28,8 @@ for expected in \
     'arena=256 peak=640' \
     'kstack=8' \
     'failures=0 slots=1/16' \
-    'ep=1 status=1 stack=256 state=6 total=262' \
-    'ep=2 status=0 stack=0 state=0 total=0' \
-    'ep=3 status=0 stack=0 state=0 total=0' \
+    'ep=1 status=1 stack=256@0FFD00 state=6@' \
+    'image=resident total=262' \
     'mem counters reset'; do
     if ! grep -q "$expected" <<<"$output"; then
         echo "FAIL: memory output missing '$expected'" >&2
@@ -72,6 +71,14 @@ fi
 if ! grep -q 'arena=256 peak=256.*failures=1 slots=1/16' <<<"$failure_output"; then
     echo "FAIL: failed spawn did not report the failure" >&2
     echo "$failure_output" >&2
+    exit 1
+fi
+
+# Free slots are not listed. ps is where slots are enumerated; sixteen rows of
+# zeroes here said nothing that ps does not say better.
+if grep -q 'status=0' <<<"$output"; then
+    echo "FAIL: mem -p listed a free slot" >&2
+    echo "$output" >&2
     exit 1
 fi
 

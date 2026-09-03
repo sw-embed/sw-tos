@@ -39,32 +39,6 @@ _kernel_stack_fill:
         sw      r0,0(r2)
         la      r2,_heap_peak_next
         sw      r0,0(r2)
-        la      r0,_banner
-        la      r2,_puts
-        jal     r1,(r2)
-
-        la      r0,_scheduled_shell_descriptor
-        la      r2,_proc_a
-        la      r1,_spawn_process
-        sw      r2,0(r1)
-        la      r2,_spawn_resident
-        jal     r1,(r2)
-        la      r2,_proc_a
-        lc      r0,1
-        sw      r0,18(r2)
-        la      r2,_shell_bind_descriptors
-        jal     r1,(r2)
-        ; Retain the stack top a restart rewinds to. _spawn_resident has just
-        ; left the saved SP twelve bytes below it.
-        la      r2,_proc_a
-        lw      r0,9(r2)
-        add     r0,12
-        la      r2,_shell_stack_top
-        sw      r0,0(r2)
-        la      r0,_scheduled_shell_descriptor
-        la      r2,_shell_descriptor
-        sw      r0,0(r2)
-
         ; Endpoint identities belong to process-table slots, including FREE
         ; slots, so process inspection remains stable before first spawn.
         ; Slot N holds endpoint N+1; the walk in _proc_for_endpoint reads these
@@ -85,6 +59,29 @@ _boot_endpoint_loop:
         mov     r0,r2
         ceq     r0,r1
         brf     _boot_endpoint_loop
+
+        la      r0,_banner
+        la      r2,_puts
+        jal     r1,(r2)
+
+        la      r0,_scheduled_shell_descriptor
+        la      r2,_proc_a
+        la      r1,_spawn_process
+        sw      r2,0(r1)
+        la      r2,_spawn_resident
+        jal     r1,(r2)
+        la      r2,_shell_bind_descriptors
+        jal     r1,(r2)
+        ; Retain the stack top a restart rewinds to. _spawn_resident has just
+        ; left the saved SP twelve bytes below it.
+        la      r2,_proc_a
+        lw      r0,9(r2)
+        add     r0,12
+        la      r2,_shell_stack_top
+        sw      r0,0(r2)
+        la      r0,_scheduled_shell_descriptor
+        la      r2,_shell_descriptor
+        sw      r0,0(r2)
 
         la      r0,_proc_a
         la      r2,_current_proc
@@ -178,6 +175,21 @@ _request_system_reboot:
         sw      r0,0(r2)
         la      r2,_proc_a
         sw      r0,24(r2)       ; wake shell
+        pop     r2
+        pop     r1
+        jmp     (r1)
+
+; r0 = PROC_DESC -> r0 = its _proc_stack_top word. Endpoints are one-based.
+_stack_top_slot:
+        push    r1
+        push    r2
+        lbu     r0,18(r0)
+        add     r0,-1
+        mov     r1,r0
+        add     r1,r0
+        add     r1,r0           ; three bytes a slot
+        la      r0,_proc_stack_top
+        add     r0,r1
         pop     r2
         pop     r1
         jmp     (r1)
@@ -480,6 +492,15 @@ _spawn_stack:
 _spawn_stack_allocated:
         la      r2,_spawn_process
         lw      r2,0(r2)
+        push    r0              ; the exclusive stack high address
+        mov     r0,r2
+        push    r2
+        la      r2,_stack_top_slot
+        jal     r1,(r2)
+        mov     r1,r0
+        pop     r2
+        pop     r0
+        sw      r0,0(r1)
         lw      r1,36(r2)
         sw      r1,-3(r0)       ; initial r0 = state pointer
         la      r1,_spawn_descriptor
@@ -3044,6 +3065,13 @@ _stats_div10_done:
 _release_slot:
         push    r1
         push    r2
+        push    r0
+        la      r2,_stack_top_slot
+        jal     r1,(r2)
+        mov     r2,r0
+        lc      r0,0
+        sw      r0,0(r2)
+        pop     r0
         mov     r2,r0
         lc      r0,0
         sw      r0,24(r2)       ; PROC_FREE
@@ -3350,9 +3378,13 @@ _TASK_MEM_PROCESS_INFO:
         la      r2,_proc_for_endpoint
         jal     r1,(r2)
         lw      r1,12(fp)
+        la      r2,_mem_info_result
+        sw      r1,0(r2)
         ceq     r0,z
         brt     _task_mem_process_none
         mov     r2,r0
+        la      r0,_mem_info_proc
+        sw      r2,0(r0)
         lw      r0,24(r2)
         sw      r0,0(r1)
         ceq     r0,z
@@ -3364,6 +3396,33 @@ _TASK_MEM_PROCESS_INFO:
         sw      r2,6(r1)
         add     r0,r2
         sw      r0,9(r1)
+
+        ; Where those lengths sit. Sizes alone say how much a process uses and
+        ; nothing about where, so nothing could be read back with x or dis, and
+        ; two processes of the same size were indistinguishable.
+        la      r2,_mem_info_proc
+        lw      r0,0(r2)
+        lw      r0,36(r0)       ; process-local state
+        sw      r0,15(r1)
+        la      r2,_mem_info_proc
+        lw      r0,0(r2)
+        la      r2,_stack_top_slot
+        jal     r1,(r2)
+        lw      r0,0(r0)
+        la      r2,_mem_info_result
+        lw      r1,0(r2)
+        sw      r0,12(r1)       ; stack allocation end
+        la      r2,_mem_info_proc
+        lw      r0,0(r2)
+        la      r2,_preempt_for_proc
+        jal     r1,(r2)
+        mov     r2,r0
+        lw      r0,0(r2)        ; private live image base
+        la      r1,_mem_info_result
+        lw      r1,0(r1)
+        sw      r0,18(r1)
+        lw      r0,3(r2)        ; and its length in words
+        sw      r0,21(r1)
         bra     _task_mem_process_done
 _task_mem_process_none:
         lc      r0,0
@@ -3373,7 +3432,60 @@ _task_mem_process_free:
         sw      r0,3(r1)
         sw      r0,6(r1)
         sw      r0,9(r1)
+        sw      r0,12(r1)
+        sw      r0,15(r1)
+        sw      r0,18(r1)
+        sw      r0,21(r1)
 _task_mem_process_done:
+        mov     sp,fp
+        pop     r1
+        pop     r2
+        pop     fp
+        jmp     (r1)
+
+; TASK_PRINT_HEX(value): six hex digits, which is how an address is written
+; everywhere else -- the debugger, the map and the linker all use it, and a
+; decimal address cannot be typed back into any of them.
+        .globl  _TASK_PRINT_HEX
+_TASK_PRINT_HEX:
+        push    fp
+        push    r2
+        push    r1
+        mov     fp,sp
+        lw      r0,9(fp)
+        la      r2,_print_hex_value
+        sw      r0,0(r2)
+        lc      r0,20           ; the top nibble of twenty-four bits
+        la      r2,_print_hex_shift
+        sw      r0,0(r2)
+_print_hex_digit:
+        la      r2,_print_hex_value
+        lw      r0,0(r2)
+        la      r2,_print_hex_shift
+        lw      r1,0(r2)
+        srl     r0,r1
+        lc      r1,15
+        and     r0,r1
+        lc      r1,10
+        clu     r0,r1
+        brt     _print_hex_decimal
+        add     r0,55           ; 'A' is ten
+        bra     _print_hex_emit
+_print_hex_decimal:
+        add     r0,48
+_print_hex_emit:
+        la      r2,_putchar
+        jal     r1,(r2)
+        la      r2,_print_hex_shift
+        lw      r0,0(r2)
+        ceq     r0,z
+        brt     _print_hex_done
+        add     r0,-4
+        la      r2,_print_hex_shift
+        sw      r0,0(r2)
+        la      r2,_print_hex_digit
+        jmp     (r2)
+_print_hex_done:
         mov     sp,fp
         pop     r1
         pop     r2
@@ -5709,6 +5821,22 @@ _child_count:
 ; The shell's stack top, captured once its initial frame is built. A restart
 ; rewinds the process to exactly this address, so it never allocates again and
 ; repeated restarts cannot leak the stack arena.
+; Where each process's stack allocation ends, one word per endpoint. The saved
+; SP moves as a process runs, so it cannot say where its stack began; the
+; descriptor gives the length and this gives the address to subtract it from.
+; Kept beside the table rather than inside it: a wider slot record would move
+; the statistics, the sidecar and the TTY, and every offset built on the
+; 172-byte stride with them.
+_print_hex_value:
+        .zero   3
+_print_hex_shift:
+        .zero   3
+_mem_info_proc:
+        .zero   3
+_mem_info_result:
+        .zero   3
+_proc_stack_top:
+        .zero   48
 _shell_stack_top:
         .zero   3
 ; The shell's own program, kept apart from its slot. While the slot is running
