@@ -50,19 +50,19 @@ Run one with `just <recipe>`.
 
 | Use case | How | Recipe |
 | --- | --- | --- |
-| Focus a pane by number | `Ctrl-A 1`-`9` | `tui-soak` |
-| Reach panes past nine | `Ctrl-A n` / `p` / `Tab` | `tui-soak` |
-| Zoom, help, copy mode, broadcast | `Ctrl-A z ? y b,b` | `tui-soak`, `windows-smoke` |
-| Close a pane and put it back | `Ctrl-A x`, `Ctrl-A S` | `tui-soak` |
-| Clear a pane, keeping it open | `Ctrl-A l` | unit test |
+| Focus a pane by number | `Ctrl-O 1`-`9` | `tui-soak` |
+| Reach panes past nine | `Ctrl-O n` / `p` / `Tab` | `tui-soak` |
+| Zoom, help, copy mode, broadcast | `Ctrl-O z ? y b,b` | `tui-soak`, `windows-smoke` |
+| Close a pane and put it back | `Ctrl-O x`, `Ctrl-O S` | `tui-soak` |
+| Clear a pane, keeping it open | `Ctrl-O l` | unit test |
 | See that a pane's process has ended | `(ended)` in its name, including a program too short-lived for any snapshot to catch | `tui-soak`, unit test |
-| Reclaim the space of finished programs | `Ctrl-A c` | `tui-soak`, unit test |
-| Get back a shell that has stopped responding | `Ctrl-A k`, debugger `!kill 1`, or `kill 1` at a working prompt | `shell-restart`, `debugger-kill-acceptance` |
-| Return a responsive kernel to a clean process baseline | shell `reboot` or `Ctrl-A B` ISR request | `shell-command-parsing`, `windows-smoke` |
+| Reclaim the space of finished programs | `Ctrl-O c` | `tui-soak`, unit test |
+| Get back a shell that has stopped responding | `Ctrl-O k`, debugger `!kill 1`, or `kill 1` at a working prompt | `shell-restart`, `debugger-kill-acceptance` |
+| Return a responsive kernel to a clean process baseline | shell `reboot` or `Ctrl-O B` ISR request | `shell-command-parsing`, `windows-smoke` |
 | Keep the keyboard at the prompt when a program starts or exits | any `bg`, and any child exiting while the monitor runs | `shell-foreground` |
 | A reused pane starts empty | any relaunch on a freed slot | unit test |
-| Save and restore a layout | `Ctrl-A w` / `R` | `windows-smoke` |
-| Detach without killing the target | `Ctrl-A d` | `windows-smoke` |
+| Save and restore a layout | `Ctrl-O w` / `R` | `windows-smoke` |
+| Detach without killing the target | `Ctrl-O d` | `windows-smoke` |
 | Survive a long interactive session | 118 interactions | `tui-soak` |
 | Panes named after their process | any spawn | `tui-soak` |
 

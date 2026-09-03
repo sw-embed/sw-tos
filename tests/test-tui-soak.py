@@ -9,7 +9,7 @@ zoom, ask the debugger and the shell for output -- and after every step
 requires that the frontend is still running and still painting.
 
 It also checks the two things that are easy to get wrong once the panes
-share their rules: that Ctrl-A <n> focuses the pane whose label reads <n>,
+share their rules: that the prefix and <n> focus the pane whose label reads <n>,
 and that the cpu-hogs' forced-preemption counts keep climbing, which is what
 keeps every other pane alive.
 """
@@ -40,7 +40,7 @@ ROWS, COLUMNS = 50, 200
 #: monitor, which starts itself into the Application pane. The two cpu-hogs
 #: print nothing, so they contribute no pane.
 EXPECTED_PANES = 3 + 12
-PREFIX = b"\x01"  # Ctrl-A
+PREFIX = b"\x0f"  # Ctrl-O
 # The shell prompt. One level, so one mark.
 SHELL_PROMPT = "#"
 #: Whole session budget. A hang is a failure, not something to wait out.
@@ -300,7 +300,7 @@ def main():
                 f"saw panes:{session.panes()}")
         step("menu 9")
 
-        # Ctrl-A <n> has to focus the pane whose label reads <n>.
+        # prefix <n> has to focus the pane whose label reads <n>.
         for digit in b"123456789":
             session.command(bytes((digit,)), settle=0.35)
             # Wait for the repaint rather than assuming one arrived: a screen
@@ -314,18 +314,18 @@ def main():
                 if shown == wanted:
                     break
                 time.sleep(0.1)
-            require(shown == wanted, f"Ctrl-A {chr(digit)} focus",
+            require(shown == wanted, f"prefix {chr(digit)} focus",
                     f"marker landed on pane {shown}")
         step("digit focus")
 
         # Panes past nine are reachable only by relative movement.
         for _ in range(12):
             session.command(b"n", settle=0.2)
-        step("Ctrl-A n walk")
+        step("prefix n walk")
         for _ in range(5):
             session.command(b"p", settle=0.2)
         session.command(b"\t", settle=0.2)
-        step("Ctrl-A p and tab")
+        step("prefix p and tab")
 
         session.command(b"z", settle=1.0)
         require("zoom" in session.screen().lower() or session.running(), "zoom in")
@@ -389,7 +389,7 @@ def main():
         # With every slot taken, a launch says so and runs the program in the
         # shell's own context instead of refusing. A clock never finishes, so
         # this is the case the restart escape exists for: the shell is now
-        # occupied by it and Ctrl-A k is the way back.
+        # occupied by it and prefix k is the way back.
         session.command(b"1", settle=1.0)
         # Zoomed: with fifteen panes open the shell shows about four lines, and
         # the menu a restart reprints is longer than that.

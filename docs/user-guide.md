@@ -330,20 +330,25 @@ returns an exact HELLO acknowledgment.
 Use `--windows` for the fixed four-pane desktop. It implies framed mode and
 opens Shell, Application, Debugger, and Resources panes with independent
 scrollback. The focused pane is marked with `*` and exclusively receives
-ordinary keys. The default host prefix is Ctrl-A: follow it with `1` through
+ordinary keys. The default host prefix is Ctrl-O. It has no meaning to the terminal, unlike
+Ctrl-S and Ctrl-Q which are flow control, and it is not a line ending, unlike
+Ctrl-J: a prefix that is also LF would swallow the Enter at the end of every
+pasted line. Emacs and readline do bind it, to open-line and
+operate-and-get-next, but both are quiet corners. `--prefix` takes any byte or
+`^X` spelling if you would rather have another. Follow it with `1` through
 `4` to focus a pane, `n` to cycle, `z` to zoom, `B` to request a warm SWTOS
 reboot through the UART ISR, `?` for help, or `d` to detach.
 Set another single-byte prefix with `--prefix KEY` or control notation such as
 `--prefix '^B'`. Ctrl-] remains ordinary target input unless selected as the
 host prefix.
 
-Enter pane scrollback with Ctrl-A then `y`. Arrow keys or `h`/`j`/`k`/`l`
+Enter pane scrollback with Ctrl-O then `y`. Arrow keys or `h`/`j`/`k`/`l`
 scroll left/down/up/right, Page Up and Page Down (or `u`/`d`) move ten lines,
 `g` jumps to the oldest retained output, `G` returns to live output, and `q`
 leaves copy mode. These navigation keys are consumed by the frontend and are
 not sent to the target.
 
-Use Ctrl-A then `e` to send an unambiguous Escape byte to the focused Shell or
+Use Ctrl-O then `e` to send an unambiguous Escape byte to the focused Shell or
 Application pane, including while copy mode is active. This stops interactive
 applications such as Uptime without conflicting with arrow-key escape
 sequences.
@@ -366,7 +371,7 @@ snapshot has arrived for one second; `resource data unavailable` means no
 complete generation has been received since connecting.
 
 Pass `--debug-map build/NAME/program.debug.json` with `--windows` to enable
-symbolic inspection in the Debugger pane. Focus it with Ctrl-A then `3` and use
+symbolic inspection in the Debugger pane. Focus it with Ctrl-O then `3` and use
 `sym NAME`, `list NAME|ADDRESS`, or `dis NAME|ADDRESS [COUNT]`. These commands
 remain disabled until the target's reported build ID matches the map. `regs
 [ENDPOINT]` and `x ADDRESS [1..12]` are raw read-only operations and remain

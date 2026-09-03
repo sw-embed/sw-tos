@@ -33,7 +33,7 @@ frontend with the emulator over a pseudo-terminal. This is also the command the
 recorded demos drive. The `.tape` files under `docs/demos/` are only scripted
 keystrokes for this same session -- `vhs` is needed to record a video, never to
 run the demo. To follow `cor24-preemption.tape` by hand, start the recipe and
-type its `run ...` lines and `Ctrl-A` pane commands yourself.
+type its `run ...` lines and `Ctrl-O` pane commands yourself.
 
 ## COR24-TB hardware
 
@@ -73,9 +73,9 @@ frontend instead when the help overlay is open, in copy mode, while the
 Debugger pane has focus, or with a broadcast armed; prefix-`e` is unambiguous
 in every case.
 
-The default host prefix is Ctrl-A. Release Ctrl-A before typing its command;
-each focus change needs its own prefix. For example, `Ctrl-A 2`, `Ctrl-A 3`
-focuses Application and then Debugger, while `Ctrl-A 2 3` focuses Application
+The default host prefix is Ctrl-O. Release Ctrl-O before typing its command;
+each focus change needs its own prefix. For example, `Ctrl-O 2`, `Ctrl-O 3`
+focuses Application and then Debugger, while `Ctrl-O 2 3` focuses Application
 and sends the unprefixed `3` to it.
 
 | Prefix command | Action |
@@ -103,7 +103,7 @@ prefix-`e` when an application such as Uptime must receive Escape.
 
 ## Copy mode and scrollback
 
-Focus a pane and press Ctrl-A then `y`. `COPY` appears in the status line and
+Focus a pane and press Ctrl-O then `y`. `COPY` appears in the status line and
 navigation remains local to the frontend:
 
 | Key | Action |
@@ -144,7 +144,7 @@ boundary; physical reset and image reload remain the hard-wedge recovery.
 `run NAME --tty=new` asks the frontend for another application pane. Uptime
 and Clock receive host time frames only while the Resources snapshot reports
 the matching live process. Stop either application by focusing its pane and
-pressing Ctrl-A then `e`.
+pressing Ctrl-O then `e`.
 
 For the two-context hostile-load demonstration, keep Shell interactive with:
 
@@ -161,7 +161,7 @@ terminates only the first, after which Resources and `ps -l` must still show
 endpoint 3 advancing.
 
 The tracked preemption tape first uses those application panes for `uptime`
-and `clock`, stops both with Ctrl-A then `e`, and then reuses the freed
+and `clock`, stops both with Ctrl-O then `e`, and then reuses the freed
 endpoints and panes for the two hogs. This contrasts normal blocking
 applications with forced
 preemption while keeping the final two-hog acceptance evidence unambiguous.

@@ -142,7 +142,7 @@ Options:
       --swtos           Enable SWTOS menu, Uptime, Clock, echo, and Ctrl-]
       --framed          Negotiate SWTOS multiplexed transport (plain fallback)
       --windows         Open the negotiated dynamic SWTOS desktop
-      --prefix <KEY>    Host-command prefix byte or ^X notation [default: ^A]
+      --prefix <KEY>    Host-command prefix byte or ^X notation [default: ^O]
       --debug-map PATH  Load matching program.debug.json for inspection
       --session PATH    Restore and save a dynamic window layout
       --uptime-active   Reattach while SWTOS is already inside Uptime
@@ -172,7 +172,7 @@ where
         swtos: false,
         framed: false,
         windows: false,
-        prefix: 0x01,
+        prefix: 0x0f,
         debug_map: None,
         session: None,
         time_mode: None,
@@ -1513,7 +1513,7 @@ fn run_windows(options: &Options) -> io::Result<()> {
         }
         if serial_output.len() >= MAX_WINDOWS_SERIAL_BACKLOG * 3 / 4 {
             desktop.set_error(Some(
-                "serial output stalled; Ctrl-A d remains available".into(),
+                "serial output stalled; the detach key remains available".into(),
             ));
             dirty = true;
         }
@@ -1805,7 +1805,7 @@ mod tests {
                 swtos: false,
                 framed: false,
                 windows: false,
-                prefix: 0x01,
+                prefix: 0x0f,
                 debug_map: None,
                 session: None,
                 time_mode: None,
@@ -1924,6 +1924,29 @@ mod tests {
         }
         assert!(!is_numeric_menu_choice(b'0'));
         assert!(!is_numeric_menu_choice(b'6'));
+    }
+
+    #[test]
+    fn the_prefix_is_never_a_line_ending() {
+        // Ctrl-O, not Ctrl-J. LF is a line ending as well as a keystroke: it
+        // arrives whenever text is pasted or input is scripted, and a prefix
+        // that is also LF swallows the Enter at the end of every pasted line.
+        // CR is Enter itself. Neither may be the prefix.
+        // SAFETY: cfmakeraw accepts a termios structure, and this test only
+        // inspects the input flags it clears.
+        let attributes = unsafe { std::mem::zeroed() };
+        let configured = terminal_attributes(attributes);
+        assert_eq!(configured.c_iflag & libc::ICRNL, 0, "Enter would become LF");
+        assert_eq!(configured.c_iflag & libc::INLCR, 0);
+        assert_eq!(configured.c_iflag & libc::IGNCR, 0);
+        // And the prefix is neither line ending, whatever it is set to.
+        // And the default really is that key, not merely documented as it.
+        let Ok(ParseResult::Run(options)) = parse_args(args(&["te-rs"])) else {
+            panic!("bare invocation runs");
+        };
+        assert_ne!(options.prefix, b'\n', "a pasted line would arm the prefix");
+        assert_ne!(options.prefix, b'\r');
+        assert_eq!(options.prefix, 0x0f, "Ctrl-O");
     }
 
     #[test]

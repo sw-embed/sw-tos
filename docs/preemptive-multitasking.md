@@ -244,7 +244,7 @@ and versions used.
 
 ## Limits and failure containment
 
-- Shell `reboot` and frontend `Ctrl-A B` provide a warm recovery boundary.
+- Shell `reboot` and frontend `Ctrl-O B` provide a warm recovery boundary.
   The ISR escape `FF 05` wakes endpoint 1 and defers cleanup until its next
   safe kernel entry; cleanup clears every child record, including runway
   sidecars and TTY rings, before rewinding the shell. It cannot recover a CPU

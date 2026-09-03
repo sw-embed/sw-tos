@@ -1,7 +1,7 @@
 # SWTOS Debugger Manual
 
 The Debugger pane of the [Windows frontend](windows-usage.md) accepts
-host-side commands rather than SWTOS TTY input. Focus it with `Ctrl-A 3`,
+host-side commands rather than SWTOS TTY input. Focus it with `Ctrl-O 3`,
 type a command, and press Enter. `help` prints the one-line summary that this
 manual expands.
 

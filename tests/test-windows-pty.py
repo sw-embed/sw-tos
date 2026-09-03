@@ -13,6 +13,13 @@ import termios
 import threading
 import time
 
+# The frontend's host-command prefix. Named once: it was written as a bare
+# byte in a dozen places, and changing the default turned every one of them
+# into ordinary keystrokes typed into whichever pane had focus.
+PREFIX = b"\x0f"  # Ctrl-O
+# The same key, spelled for the command line, so the frontend under test and
+# the keystrokes sent to it can never name different keys.
+PREFIX_FLAG = "^" + chr(PREFIX[0] | 0x40)
 ROOT = pathlib.Path(__file__).resolve().parents[1]
 BINARY = ROOT / "tools/te-rs/target/debug/te-rs"
 SYNC = b"\xA5\x5A"
@@ -163,7 +170,7 @@ def start_frontend(session=None):
         os.setsid()
         fcntl.ioctl(terminal_slave, termios.TIOCSCTTY, 0)
 
-    command = [str(BINARY), "--windows", "--prefix", "^A", "--debug-map", str(debug_map_path())]
+    command = [str(BINARY), "--windows", "--prefix", PREFIX_FLAG, "--debug-map", str(debug_map_path())]
     if session is not None:
         command.extend(("--session", str(session)))
     command.append(os.ttyname(serial_slave))
@@ -234,7 +241,7 @@ def negotiation_clock_path():
     os.write(serial_master, ACK)
     identity_request = frame(9, 0, b"\x01")
     assert identity_request in read_until(serial_master, identity_request), "late ACK did not recover"
-    os.write(tty_master := terminal_master, b"\x01d")
+    os.write(tty_master := terminal_master, PREFIX + b"d")
     assert_restored(process, tty_master, terminal_slave, before, 0)
     close_watched(serial_master)
     close_watched(terminal_master)
@@ -301,13 +308,13 @@ def normal_path():
     # Forced-preemption figures belong to mon now: that they are parsed is a
     # unit test and that they climb is fill-demo-acceptance. Zoom still has to
     # work, and must leave the grid as it found it.
-    os.write(tty_master, b"\x013\x01z")
+    os.write(tty_master, PREFIX + b"3" + PREFIX + b"z")
     zoomed = read_until(tty_master, b"Debugger", 2.0)
     assert b"Debugger" in zoomed, "zoom did not render the focused pane"
-    os.write(tty_master, b"\x01z")
+    os.write(tty_master, PREFIX + b"z")
     unzoomed = read_until(tty_master, b"1 v Shell", 2.0)
     assert b"1 v Shell" in unzoomed, "zoom did not restore the grid"
-    os.write(tty_master, b"\x011")
+    os.write(tty_master, PREFIX + b"1")
 
     time_generation = 4
     time_records = (
@@ -324,7 +331,7 @@ def normal_path():
     assert uptime_frame_prefix in time_traffic, "live Uptime did not enable host time frames"
     assert SYNC + bytes((1, 7, 0, 3, 0)) not in time_traffic, "Uptime received wall-clock frames"
 
-    os.write(tty_master, b"\x013sym counter\n")
+    os.write(tty_master, PREFIX + b"3sym counter\n")
     assert b"counter = 000010" in read_until(tty_master, b"counter = 000010"), "symbol lookup"
     os.write(tty_master, b"regs 2\n")
     register_request = frame(9, 0, bytes((2, 2)))
@@ -338,7 +345,7 @@ def normal_path():
     os.write(serial_master, frame(10, 0, bytes((3, 0, 0, 0, 0x29, 0, 0xEC, 0xFE))))
     assert b"000000: 29 00 ec fe" in read_until(tty_master, b"000000: 29 00 ec fe"), "memory display"
 
-    os.write(tty_master, b"\x011")
+    os.write(tty_master, PREFIX + b"1")
     os.write(tty_master, b"a")
     assert frame(1, 0, b"a") in read_until(serial_master, frame(1, 0, b"a")), "shell input route"
     os.write(tty_master, b"ps\r")
@@ -348,12 +355,12 @@ def normal_path():
     assert frame(1, 0, b"s") in shell_command
     assert frame(1, 0, b"\n") in shell_command, "shell Enter was not normalized"
     assert frame(1, 0, b"\r") not in shell_command, "shell received carriage return"
-    os.write(tty_master, b"\x012b")
+    os.write(tty_master, PREFIX + b"2b")
     assert frame(1, 1, b"b") in read_until(serial_master, frame(1, 1, b"b")), "app input route"
-    os.write(tty_master, b"\x01y\x01e")
+    os.write(tty_master, PREFIX + b"y" + PREFIX + b"e")
     target_escape = frame(1, 1, b"\x1b")
     assert target_escape in read_until(serial_master, target_escape), "target Escape from copy mode"
-    os.write(tty_master, b"\x01y")
+    os.write(tty_master, PREFIX + b"y")
 
     os.write(serial_master, frame(3, 2, b"Counter"))
     # The pane appears without taking focus: a launch must leave the keyboard
@@ -361,14 +368,14 @@ def normal_path():
     opened = read_until(tty_master, b"Counter ep=3")
     assert b"Counter ep=3" in opened, "dynamic channel open"
     assert b"Counter ep=3 *" not in opened, "a new pane must not steal focus"
-    os.write(tty_master, b"\x011")
+    os.write(tty_master, PREFIX + b"1")
     assert b"Shell *" in read_until(tty_master, b"Shell *"), "focus before background output"
     os.write(serial_master, frame(2, 2, b"count 1\n"))
     assert b"Counter ep=3 !" in read_until(tty_master, b"Counter ep=3 !"), "background input alert"
 
     # One broadcast command only arms the dangerous operation. An intervening
     # focus command cancels it, so ordinary input remains exclusive.
-    os.write(tty_master, b"\x01b\x011q")
+    os.write(tty_master, PREFIX + b"b" + PREFIX + b"1q")
     exclusive = read_until(serial_master, frame(1, 0, b"q"))
     assert frame(1, 0, b"q") in exclusive
     assert frame(1, 1, b"q") not in exclusive and frame(1, 2, b"q") not in exclusive
@@ -380,19 +387,19 @@ def normal_path():
         "Escape did not reach the target"
     )
 
-    os.write(tty_master, b"\x01b\x01bv")
+    os.write(tty_master, PREFIX + b"b" + PREFIX + b"bv")
     broadcast = read_until(serial_master, frame(1, 2, b"v"))
     assert all(frame(1, channel, b"v") in broadcast for channel in (0, 1, 2)), "confirmed broadcast"
-    os.write(tty_master, b"\x01\x1b")
+    os.write(tty_master, PREFIX + b"\x1b")
 
-    os.write(tty_master, b"\x01w")
+    os.write(tty_master, PREFIX + b"w")
     deadline = time.monotonic() + 2
     while not session.exists() and time.monotonic() < deadline:
         time.sleep(0.01)
     assert session.exists() and b'"channel": 2' in session.read_bytes(), "saved dynamic session"
     os.write(serial_master, frame(4, 2, b""))
     time.sleep(0.1)
-    os.write(tty_master, b"\x012")
+    os.write(tty_master, PREFIX + b"2")
     read_until(tty_master, b"Application ep=2 *")
 
     read_until(tty_master, b"never-present", 0.1)
@@ -401,9 +408,9 @@ def normal_path():
     # endpoint cannot both survive; the pane numbers must.
     resized = read_until(tty_master, b"1 v Shell", 2.0)
     assert b"1 v Shell" in resized and b"3 v Debugger" in resized, "resize/focus render"
-    os.write(tty_master, b"\x01z\x01?\x01?\x01z")
+    os.write(tty_master, PREFIX + b"z" + PREFIX + b"?" + PREFIX + b"?" + PREFIX + b"z")
     time.sleep(0.1)
-    os.write(tty_master, b"\x01d")
+    os.write(tty_master, PREFIX + b"d")
     assert_restored(process, tty_master, tty_slave, before, 0)
     close_watched(serial_master)
     close_watched(tty_master)
@@ -411,7 +418,7 @@ def normal_path():
 
     restored, tty_master, tty_slave, serial_master, before = start_frontend(session)
     assert b"Counter" in read_until(tty_master, b"Counter"), "saved session restore"
-    os.write(tty_master, b"\x01d")
+    os.write(tty_master, PREFIX + b"d")
     assert_restored(restored, tty_master, tty_slave, before, 0)
     close_watched(serial_master)
     close_watched(tty_master)
@@ -428,7 +435,7 @@ def failure_path():
 
 def copy_mode_interrupt_path():
     process, tty_master, tty_slave, serial_master, before = start_frontend()
-    os.write(tty_master, b"\x01y\x03")
+    os.write(tty_master, PREFIX + b"y\x03")
     assert_restored(process, tty_master, tty_slave, before, 0)
     close_watched(serial_master)
     close_watched(tty_master)

@@ -184,7 +184,7 @@ impl Desktop {
             zoomed: false,
             help: false,
             connected: true,
-            prefix_label: "Ctrl-A".to_string(),
+            prefix_label: "Ctrl-O".to_string(),
             clock: "--:--:--".into(),
             error: None,
             copy_mode: false,
@@ -396,7 +396,7 @@ impl Desktop {
 
     /// Put back any system pane that has been closed.
     ///
-    /// Ctrl-A x removes whatever holds focus, and closing Resources or the
+    /// The prefix and x remove whatever holds focus, and closing Resources or the
     /// debugger was otherwise unrecoverable: reloading a saved layout is the
     /// only other route back and helps only if a layout was ever saved. Each
     /// missing pane returns at its canonical position, so the numbering a
@@ -731,7 +731,7 @@ impl Desktop {
 
     fn label_for(&self, index: usize) -> String {
         let pane = &self.panes[index];
-        // Two numbers matter and they are not the same: Ctrl-A takes the pane
+        // Two numbers matter and they are not the same: the prefix takes the pane
         // number, while the debugger, mon and ps all take the endpoint. Naming
         // only the first invites killing endpoint 12 while watching pane 12,
         // which shows a different process. The pane number leads because it
@@ -926,7 +926,7 @@ mod tests {
         desktop.command(b'S');
         let layout = desktop.layout();
         assert_eq!(layout.len(), PaneKind::ALL.len());
-        // Restored at its canonical position, so Ctrl-A 4 still reaches it.
+        // Restored at its canonical position, so prefix-4 still reaches it.
         desktop.command(b'3');
         assert_eq!(desktop.focused_kind(), PaneKind::Debugger);
         // Restoring again is a no-op rather than a duplicate.
@@ -1149,7 +1149,7 @@ mod tests {
         assert!(help.contains("1-9 focus"));
         // The keys are the second half of a two-key sequence, and the screen
         // has to say so: alone they type into the focused pane.
-        assert!(help.contains("press Ctrl-A first"), "{help}");
+        assert!(help.contains("press Ctrl-O first"), "{help}");
 
         // And it names the prefix actually in use, not the default.
         desktop.set_prefix_label("Ctrl-]");

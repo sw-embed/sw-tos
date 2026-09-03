@@ -421,7 +421,7 @@ Shell commands include:
 - `help` lists commands.
 - `reboot` clears application process/TTY/preemption state and warm-restarts
   the persistent shell without reloading the resident image. The Windows
-  frontend's `Ctrl-A B` sends the same request through the UART ISR when the
+  frontend's `Ctrl-O B` sends the same request through the UART ISR when the
   shell is no longer reading input.
 - `uname` identifies SWTOS and COR24.
 - `df` summarizes generated catalog/image totals.
