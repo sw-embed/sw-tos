@@ -851,7 +851,7 @@ fn show_debugger_help(desktop: &mut Desktop) {
 /// The pane is titled, so it never needed a line announcing itself; what it
 /// needed was somewhere the typing visibly starts.
 fn debugger_prompt(desktop: &mut Desktop) {
-    desktop.push_channel(254, b"dbg ");
+    desktop.push_channel(254, b"(dbg) ");
 }
 
 /// The target announces its own rewinds. These are the two it prints.

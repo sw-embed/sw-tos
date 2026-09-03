@@ -40,14 +40,82 @@ prints.
 
 ## `list` versus `dis`
 
-Both take a `LOC`, and they are easy to confuse:
+## What debugging costs, and what it will cost later
 
-- `list LOC` prints **one line**: the source position of the instruction at
-  or immediately below the address, as `ADDRESS source.s:LINE TEXT`. It
-  searches backwards, so an address in the middle of an instruction still
-  resolves. Use it to answer "what source produced this address?"
+None of this reaches the board. The target runs `program.bin`; the debug map
+and the assembly `list` reads sit beside it in the build tree and are read by
+the frontend on the host. For a recent build:
+
+| | Size | |
+|---|---|---|
+| `program.bin` | 29,038 B | what the board runs |
+| `program.debug.json` | 1,974,175 B | 68x the image, host-side only |
+| generated `.s` | 360,755 B | host-side only |
+
+So debug metadata is free on the target today, and expensive only on disk.
+
+That will not stay true if any of it is ever bundled -- for symbolication on
+the board, or for a build shipped to a device that must carry its own map. The
+map is line-per-instruction JSON, which is the least dense form it could take:
+it compresses heavily, and most of it is repeated field names and source paths
+that a packed binary form would not spend bytes on at all. The source comments
+that make `list` useful for PL/SW are assembly comments, so the assembler
+already drops them before anything is linked, but they do triple the size of
+the generated assembly on disk.
+
+The order to reach for, if images are ever optimized for size: strip what is
+not needed for the build being shipped, compress what is, and only then
+consider a denser map format. Nothing here needs doing now -- it is written
+down so the growth is noticed before it matters rather than after.
+
+## Three views: source, instructions, data
+
+`list`, `dis` and `x` answer three different questions, and every debugger
+worth the name separates them the same way -- gdb has `list` / `disassemble` /
+`x`, LLDB `source list` / `disassemble` / `memory read`, WinDbg `lsa` / `u` /
+`db`. The split is not arbitrary: each needs something the others do not.
+
+| | Question | Needs | Shows what the others cannot |
+|---|---|---|---|
+| `list` | What did I write here? | The map **and** the assembly file beside it | Comments, labels, blank lines -- a third of this project's assembly carries no instruction at all |
+| `dis` | What will the machine do here? | Memory, and a map only if you want names | Any address, including a spawned process's private copy, which no map describes |
+| `x` | What is actually in memory now? | Nothing but a live target | Bytes that are not code: state blocks, stacks, queues, a descriptor you want to read by hand |
+
+The rule of thumb: reach for `list` when you have a symbol and want to
+understand intent, `dis` when you have a program counter and want to know what
+runs next, and `x` when you suspect the bytes are not what you think they are.
+
+`x` overlaps `dis` on purpose, the way gdb's `x/i` does: `x` will show you the
+bytes of an instruction when you doubt the disassembler, and `dis` will decode
+bytes when you doubt yourself.
+
+Both `list` and `dis` take a `LOC`, and they are easy to confuse:
+
+- `list LOC [N]` prints **source**: `N` lines from the address, each as
+  `ADDRESS source.s:LINE TEXT`. It starts at the instruction the address falls
+  inside, so an address in the middle of one still resolves -- which is what
+  `regs` reports and what you copy from it. `N` defaults to 10 and is capped at
+  25, about a pane; a longer listing scrolls away the part you asked for. A
+  bare `list` carries on from where the last one stopped, so a long listing is
+  read by repeating it rather than by working out the next address by hand.
+  Use it to answer "what source produced this address?"
+
+  For a PL/SW program the assembly it lists carries the PL/SW itself, because
+  the compiler emits each source statement as a `; N: TEXT` comment above the
+  instructions it produced. So listing an address in the shell shows the PL/SW
+  that was written, not only the assembly it became.
+
+  That stops at PL/SW line 255. Across every generated file in a build, 2,931
+  such comments exist and not one names a line above 255, with a dozen piled up
+  at exactly 255 -- a line counter kept in a byte, saturating at 0xFF. Past
+  that point a listing shows assembly alone. The fix belongs to the compiler,
+  in [sw-cor24-plsw](https://github.com/sw-embed/sw-cor24-plsw).
 - `dis LOC [N]` **disassembles**: it prints up to `N` instructions from the
-  address *forward*, each as `ADDRESS BYTES TEXT`. `N` defaults to 8 and is
+  address *forward*, each as `ADDRESS BYTES TEXT`. It is the only one of the
+  three that works outside the map, by reading twelve bytes of live memory and
+  decoding them, which is what a spawned process needs: its program counter
+  points into a private copy in the arena that no map describes. `N` defaults
+  to 8 and is
   capped at 32. Use it to read the code around a location.
 
 ```text
@@ -89,7 +157,7 @@ to inspect data the program has written.
 |---------|------|--------|
 | `help` | -- | Print the command summary. An empty line does the same |
 | `sym NAME` | map | Print `NAME = ADDRESS (module)` |
-| `list LOC` | map | Print the source line at or below `LOC` |
+| `list LOC [N]` | map | Print `N` source lines from `LOC` (default 10, max 25); bare `list` continues |
 | `dis LOC [N]` | map | Disassemble `N` instructions from `LOC` (default 8, max 32) |
 | `map [hw\|plan\|live]` | both | Hardware ranges, SWTOS's intended use, and live occupancy |
 | `regs [EP]` | target | Registers for endpoint `EP` (default 1): `r0 r1 r2 sp`, then `pc status` |

@@ -3,7 +3,7 @@
 use crate::resource::ResourceSnapshot;
 use serde::Deserialize;
 use std::fs;
-use std::path::Path;
+use std::path::{Path, PathBuf};
 
 #[derive(Clone, Debug, Deserialize, Eq, PartialEq)]
 pub struct Symbol {
@@ -32,6 +32,11 @@ pub struct Instruction {
 
 #[derive(Clone, Debug, Deserialize)]
 pub struct DebugMap {
+    /// Where the map was loaded from, so `list` can find the assembly beside
+    /// it. Not part of the map file: the map records source names, and the
+    /// names are only meaningful relative to where the map itself sits.
+    #[serde(skip)]
+    pub source_dir: Option<PathBuf>,
     pub format: String,
     pub build_id: String,
     pub build_id_size: u32,
@@ -46,8 +51,9 @@ impl DebugMap {
     pub fn load(path: &Path) -> Result<Self, String> {
         let contents = fs::read_to_string(path)
             .map_err(|error| format!("cannot read {}: {error}", path.display()))?;
-        let map: Self = serde_json::from_str(&contents)
+        let mut map: Self = serde_json::from_str(&contents)
             .map_err(|error| format!("invalid {}: {error}", path.display()))?;
+        map.source_dir = path.parent().map(Path::to_path_buf);
         if map.format != "swtos-debug-v1" {
             return Err(format!("unsupported debug format '{}'", map.format));
         }
@@ -115,6 +121,29 @@ impl DebugMap {
             .filter(|instruction| instruction.address >= address)
             .take(count)
             .collect()
+    }
+
+    /// Lines from a source file, one-based and inclusive.
+    ///
+    /// The instruction map holds only instructions. A third of this assembly
+    /// is comments, labels and blank lines that carry no instruction at all,
+    /// and they are the part that says why the code is the way it is, so a
+    /// listing that can only show mapped instructions cannot show the reason
+    /// for any of them.
+    pub fn source_lines(&self, name: &str, first: u32, last: u32) -> Option<Vec<(u32, String)>> {
+        // The name comes from the map, so refuse anything that could climb out
+        // of the directory the map was loaded from.
+        if name.is_empty() || name.contains('/') || name.contains("..") {
+            return None;
+        }
+        let text = fs::read_to_string(self.source_dir.as_ref()?.join(name)).ok()?;
+        let lines: Vec<(u32, String)> = text
+            .lines()
+            .enumerate()
+            .map(|(index, line)| (index as u32 + 1, line.to_string()))
+            .filter(|(number, _)| *number >= first && *number <= last)
+            .collect();
+        (!lines.is_empty()).then_some(lines)
     }
 
     pub fn source_location(&self, value: &str) -> Option<u32> {
@@ -197,6 +226,8 @@ pub struct DebugConsole {
     /// takes a round trip; this remembers what the answer is for so the reply
     /// is rendered as instructions rather than as a hex dump.
     pending_disassembly: Option<(u32, usize)>,
+    /// Where a bare `list` carries on from.
+    next_listing: Option<u32>,
 }
 
 pub struct CommandResult {
@@ -210,6 +241,7 @@ impl DebugConsole {
             map,
             target_build_id: None,
             pending_disassembly: None,
+            next_listing: None,
         }
     }
 
@@ -332,7 +364,12 @@ impl DebugConsole {
             ["map"] => self.map_command(resources, "all"),
             ["map", view] => self.map_command(resources, view),
             ["sym", name] => self.symbol_command(name),
-            ["list", location] => self.list_command(location),
+            ["list"] => self.list_command(None, None),
+            ["list", location] => self.list_command(Some(location), None),
+            ["list", location, count] => count
+                .parse::<usize>()
+                .map_err(|_| "count must be decimal".to_string())
+                .and_then(|count| self.list_command(Some(location), Some(count))),
             ["dis", location] => self.disassemble_command(location, None),
             ["dis", location, count] => count
                 .parse::<usize>()
@@ -517,21 +554,88 @@ impl DebugConsole {
         ))
     }
 
-    fn list_command(&self, value: &str) -> Result<CommandResult, String> {
-        let address = self.address(value)?;
-        let map = self.matched_map()?;
-        let instruction = map
-            .source_at(address)
-            .ok_or_else(|| match map.mapped_extent() {
-                Some((low, high)) => {
-                    format!("no source for {address:06x}; image maps {low:06x}-{high:06x}")
+    /// Source lines from a location, ten at a time.
+    ///
+    /// A bare `list` carries on from where the last one stopped, which is how
+    /// a listing longer than a screen is read: the alternative is working out
+    /// the next address by hand from the last line printed.
+    fn list_command(
+        &mut self,
+        value: Option<&str>,
+        count: Option<usize>,
+    ) -> Result<CommandResult, String> {
+        // Twenty-five lines is about a pane. More than that scrolls away the
+        // start of what was asked for, which is the part worth reading.
+        const MOST: usize = 25;
+        const DEFAULT: usize = 10;
+        let address = match value {
+            Some(value) => self.address(value)?,
+            None => self
+                .next_listing
+                .ok_or_else(|| "nothing listed yet; use list LOC".to_string())?,
+        };
+        let wanted = count.unwrap_or(DEFAULT).clamp(1, MOST);
+        let (lines, next) = {
+            let map = self.matched_map()?;
+            // The instruction the address falls inside, not the next one after
+            // it: an address part-way through a multi-byte instruction is what
+            // regs reports and what a person copies from it.
+            let instruction = map
+                .source_at(address)
+                .or_else(|| map.disassemble(address, 1).first().copied())
+                .ok_or_else(|| match map.mapped_extent() {
+                    Some((low, high)) => {
+                        format!("no source for {address:06x}; image maps {low:06x}-{high:06x}")
+                    }
+                    None => format!("no source for {address:06x}"),
+                })?;
+
+            // Centred, the way a source listing is: the lines before an
+            // address answer "what is this code" as much as the ones after.
+            let before = (wanted / 2) as u32;
+            let first = instruction.line.saturating_sub(before).max(1);
+            let last = first + wanted as u32 - 1;
+            match map.source_lines(&instruction.source, first, last) {
+                Some(source) => {
+                    let shown = source.last().map_or(last, |(number, _)| *number);
+                    let lines = source
+                        .into_iter()
+                        .map(|(number, line)| {
+                            // Mark the line the address is on, so a centred
+                            // listing says which one was asked about.
+                            let mark = if number == instruction.line { '>' } else { ' ' };
+                            format!("{mark}{}:{number} {line}", instruction.source)
+                        })
+                        .collect();
+                    let next = map
+                        .instructions
+                        .iter()
+                        .filter(|candidate| {
+                            candidate.source == instruction.source && candidate.line > shown
+                        })
+                        .map(|candidate| candidate.address)
+                        .min();
+                    (lines, next)
                 }
-                None => format!("no source for {address:06x}"),
-            })?;
-        Ok(text(&format!(
-            "{:06x} {}:{} {}",
-            instruction.address, instruction.source, instruction.line, instruction.text
-        )))
+                // No assembly beside the map. Say what is known rather than
+                // nothing: the map still holds this one line's text.
+                None => (
+                    vec![format!(
+                        "{:06x} {}:{} {}",
+                        instruction.address,
+                        instruction.source,
+                        instruction.line,
+                        instruction.text
+                    )],
+                    Some(instruction.address + instruction.size),
+                ),
+            }
+        };
+        self.next_listing = next;
+        Ok(CommandResult {
+            lines,
+            request: None,
+        })
     }
 
     fn disassemble_command(
@@ -619,7 +723,8 @@ fn disassemble_bytes(address: u32, data: &[u8], count: usize) -> Vec<String> {
 /// is where a reader stops looking.
 pub fn help_lines() -> &'static [&'static str] {
     &[
-        "look:   map [hw|plan|live]  sym NAME  list LOC  dis LOC [N]",
+        "look:   map [hw|plan|live]  sym NAME  dis LOC [N]",
+        "source: list LOC [N]  list (carries on)  N up to 25",
         "state:  regs [EP]  x ADDR [N]  bt",
         "run:    pause  continue  step  next",
         "break:  break LOC  bl  delete LOC",
@@ -682,6 +787,78 @@ mod tests {
 
     use super::*;
 
+    /// A map with assembly beside it, the way a real build leaves one.
+    fn map_with_source(name: &str) -> (DebugMap, std::path::PathBuf) {
+        // A directory per test: these run in parallel, and a shared one meant
+        // whichever finished first deleted the other's source file.
+        let dir = std::env::temp_dir().join(format!("te-rs-list-{}-{name}", std::process::id()));
+        std::fs::create_dir_all(&dir).expect("temp dir");
+        // Line 7 carries the instruction; the rest is what the map cannot
+        // hold -- a PL/SW source comment, a label, a blank line.
+        std::fs::write(
+            dir.join("app.s"),
+            "; 1: PROC;\n\n_start:\n        ; a comment\n\n; 6:     CALL X;\n        lc      r0,1\n        jmp     (r1)\n",
+        )
+        .expect("source");
+        let mut map = map();
+        map.source_dir = Some(dir.clone());
+        (map, dir)
+    }
+
+    #[test]
+    fn a_listing_shows_the_source_around_an_address_not_just_its_instruction() {
+        let (map, dir) = map_with_source("around");
+        let mut console = DebugConsole::new(Some(map));
+        console.response(&[1, 0x56, 0x34, 0x12]);
+
+        let listed = console.command("list 10", None);
+        let text = listed.lines.join("\n");
+
+        // The point of the command: lines the instruction map does not hold.
+        // A third of this project's assembly is comments and blank lines, and
+        // they are the part that says why the code is the way it is.
+        assert!(text.contains("; 6:     CALL X;"), "{text}");
+        assert!(text.contains("_start:"), "{text}");
+
+        // And it says which line was asked about.
+        assert!(
+            listed.lines.iter().any(|line| line.starts_with('>')),
+            "no line marked: {text}"
+        );
+        std::fs::remove_dir_all(&dir).ok();
+    }
+
+    #[test]
+    fn a_listing_takes_a_count_and_carries_on_from_where_it_stopped() {
+        let (with_source, dir) = map_with_source("count");
+        let mut console = DebugConsole::new(Some(with_source));
+        console.response(&[1, 0x56, 0x34, 0x12]);
+
+        let two = console.command("list 10 2", None);
+        assert_eq!(two.lines.len(), 2, "{:?}", two.lines);
+
+        // The cap holds however large a count is asked for.
+        let capped = console.command("list 10 999", None);
+        assert!(capped.lines.len() <= 25, "{} lines", capped.lines.len());
+
+        // Asked for before anything has been listed, it says so rather than
+        // guessing at an address.
+        let mut fresh = DebugConsole::new(Some(map()));
+        fresh.response(&[1, 0x56, 0x34, 0x12]);
+        assert!(fresh.command("list", None).lines[0].contains("nothing listed yet"));
+        std::fs::remove_dir_all(&dir).ok();
+    }
+
+    #[test]
+    fn a_listing_without_the_assembly_beside_it_still_says_what_it_knows() {
+        // A map can travel without the build tree it came from. The one line
+        // the map holds is better than refusing.
+        let mut console = DebugConsole::new(Some(map()));
+        console.response(&[1, 0x56, 0x34, 0x12]);
+        let listed = console.command("list 10", None);
+        assert_eq!(listed.lines, ["000010 app.s:7 lc r0,1"]);
+    }
+
     #[test]
     fn listing_outside_the_image_reports_the_gap_instead_of_the_nearest_line() {
         let mut console = DebugConsole::new(Some(map()));
@@ -742,6 +919,7 @@ mod tests {
 
     fn map() -> DebugMap {
         DebugMap {
+            source_dir: None,
             format: "swtos-debug-v1".into(),
             build_id: "crc24:123456".into(),
             build_id_size: 32,
