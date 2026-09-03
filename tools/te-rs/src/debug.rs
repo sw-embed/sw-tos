@@ -333,11 +333,11 @@ impl DebugConsole {
             ["map", view] => self.map_command(resources, view),
             ["sym", name] => self.symbol_command(name),
             ["list", location] => self.list_command(location),
-            ["dis", location] => self.disassemble_command(location, 8),
+            ["dis", location] => self.disassemble_command(location, None),
             ["dis", location, count] => count
                 .parse::<usize>()
                 .map_err(|_| "count must be decimal".to_string())
-                .and_then(|count| self.disassemble_command(location, count)),
+                .and_then(|count| self.disassemble_command(location, Some(count))),
             ["regs"] => Ok(CommandResult {
                 lines: vec!["requesting registers for endpoint 1".into()],
                 request: Some(registers_request(1)),
@@ -534,11 +534,15 @@ impl DebugConsole {
         )))
     }
 
-    fn disassemble_command(&mut self, value: &str, count: usize) -> Result<CommandResult, String> {
+    fn disassemble_command(
+        &mut self,
+        value: &str,
+        count: Option<usize>,
+    ) -> Result<CommandResult, String> {
         let address = self.address(value)?;
         let lines: Vec<String> = self
             .matched_map()?
-            .disassemble(address, count.min(32))
+            .disassemble(address, count.unwrap_or(8).min(32))
             .into_iter()
             .map(|item| format!("{:06x} {:<8} {}", item.address, item.bytes, item.text))
             .collect();
@@ -553,9 +557,17 @@ impl DebugConsole {
             // let the reader ask for the next address; a queue of reads would
             // buy a longer listing and a lot of state to lose track of.
             const WINDOW: u8 = 12;
-            self.pending_disassembly = Some((address, count.min(WINDOW as usize)));
+            // Show the whole window unless a count was asked for. Capping a
+            // read window at a default instruction count threw away bytes
+            // already fetched: twelve bytes of one-byte instructions announced
+            // twelve and listed eight, and the four it dropped had to be read
+            // again to be seen.
+            let shown = count.unwrap_or(WINDOW as usize).min(WINDOW as usize);
+            self.pending_disassembly = Some((address, shown));
             return Ok(CommandResult {
-                lines: vec![format!("decoding {WINDOW} bytes at {address:06x}")],
+                lines: vec![format!(
+                    "decoding {WINDOW} bytes at {address:06x}, up to {shown} instructions"
+                )],
                 request: Some(memory_request(address, WINDOW)?),
             });
         }
@@ -644,6 +656,16 @@ fn u24(bytes: &[u8]) -> u32 {
 
 #[cfg(test)]
 mod tests {
+    #[test]
+    fn a_read_window_is_listed_whole_unless_a_count_says_otherwise() {
+        // Twelve bytes are fetched. Listing eight of them and dropping four
+        // that had already been read meant asking for the same bytes again to
+        // see them, and announcing twelve while showing eight.
+        let bytes = [0_u8; 12];
+        assert_eq!(super::disassemble_bytes(0x6f68, &bytes, 12).len(), 12);
+        assert_eq!(super::disassemble_bytes(0x6f68, &bytes, 4).len(), 4);
+    }
+
     #[test]
     fn help_names_the_shell_escape_on_a_line_of_its_own() {
         let lines = super::help_lines();

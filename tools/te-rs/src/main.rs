@@ -1049,6 +1049,12 @@ fn run_windows(options: &Options) -> io::Result<()> {
     if let Some(error) = debug_map_error {
         desktop.push_channel(254, format!("{error}\n").as_bytes());
     }
+    // A prompt is owed after a reply, not after the command that asked for it:
+    // the target answers asynchronously and in as many frames as it likes, so
+    // printing one straight after the command put the reply on top of it and
+    // left the next line typed with no prompt at all. Wait for the frames to
+    // stop arriving.
+    let mut debugger_prompt_due: Option<Instant> = None;
     let mut prefix_pending = false;
     let mut copy_escape_state = 0;
     let mut shell_input = String::new();
@@ -1204,6 +1210,7 @@ fn run_windows(options: &Options) -> io::Result<()> {
                         for line in debugger.response(&frame.payload) {
                             desktop.push_channel(254, format!("{line}\n").as_bytes());
                         }
+                        debugger_prompt_due = Some(Instant::now() + Duration::from_millis(150));
                     }
                     StreamItem::Frame(_) => {}
                     StreamItem::Error(error) => {
@@ -1378,10 +1385,14 @@ fn run_windows(options: &Options) -> io::Result<()> {
                             for line in result.lines {
                                 desktop.push_channel(254, format!("{line}\n").as_bytes());
                             }
-                            if let Some(request) = result.request {
-                                queue_serial(&mut serial_output, &debug_request_frame(request));
+                            match result.request {
+                                Some(request) => {
+                                    queue_serial(&mut serial_output, &debug_request_frame(request));
+                                    // The reply brings the prompt with it.
+                                    debugger_prompt_due = None;
+                                }
+                                None => debugger_prompt(&mut desktop),
                             }
-                            debugger_prompt(&mut desktop);
                         }
                         0x08 | 0x7f => {
                             // Erase on screen as well as in the buffer. The
@@ -1466,6 +1477,13 @@ fn run_windows(options: &Options) -> io::Result<()> {
             dirty = true;
         }
         let now = Instant::now();
+        if let Some(due) = debugger_prompt_due
+            && now >= due
+        {
+            debugger_prompt(&mut desktop);
+            debugger_prompt_due = None;
+            dirty = true;
+        }
         if now >= next_footer_repaint {
             dirty = true;
             next_footer_repaint = now + Duration::from_secs(1);
