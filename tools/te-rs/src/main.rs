@@ -8,7 +8,7 @@ use std::path::{Path, PathBuf};
 use std::process::ExitCode;
 use std::thread;
 use std::time::{Duration, Instant, SystemTime, UNIX_EPOCH};
-use te_rs::debug::{DebugConsole, DebugMap, identity_request};
+use te_rs::debug::{DebugConsole, DebugMap, help_lines, identity_request};
 use te_rs::protocol::{ConnectionDecoder, Frame, FrameType, Mode, StreamItem, VERSION, hello};
 use te_rs::resource::SnapshotAssembler;
 use te_rs::ui::{CommandOutcome, Desktop, PaneKind};
@@ -826,6 +826,24 @@ fn is_numeric_menu_choice(byte: u8) -> bool {
     matches!(byte, b'1'..=b'5')
 }
 
+/// Put the debugger's own help in its pane.
+///
+/// Shown when the session opens and again whenever the target says it has
+/// been rewound, because a restart or a reboot is exactly the moment someone
+/// is looking for a way out and has nothing else on screen to go on.
+fn show_debugger_help(desktop: &mut Desktop) {
+    for line in help_lines() {
+        desktop.push_channel(254, format!("{line}\n").as_bytes());
+    }
+}
+
+/// The target announces its own rewinds. These are the two it prints.
+///
+/// Read from the shell's output rather than from what this frontend sent,
+/// because a rewind can be asked for in ways this frontend never sees: kill 1
+/// or reboot typed at the prompt, or the escape sent by another tool.
+const REWIND_BANNERS: [&str; 2] = ["SHELL RESTARTED", "SYSTEM REBOOTED"];
+
 fn desktop_clock() -> String {
     let now = SystemTime::now()
         .duration_since(UNIX_EPOCH)
@@ -1009,7 +1027,8 @@ fn run_windows(options: &Options) -> io::Result<()> {
     {
         desktop.set_error(Some(format!("session: {error}")));
     }
-    desktop.push_channel(254, b"SWTOS debugger: type help\n");
+    desktop.push_channel(254, b"SWTOS debugger\n");
+    show_debugger_help(&mut desktop);
     if let Some(error) = debug_map_error {
         desktop.push_channel(254, format!("{error}\n").as_bytes());
     }
@@ -1102,7 +1121,14 @@ fn run_windows(options: &Options) -> io::Result<()> {
                             desktop
                                 .add_application(frame.channel, format!("TTY {}", frame.channel));
                         }
+                        let rewound = frame.channel == 0 && {
+                            let text = String::from_utf8_lossy(&frame.payload);
+                            REWIND_BANNERS.iter().any(|banner| text.contains(banner))
+                        };
                         desktop.push_channel(frame.channel, &frame.payload);
+                        if rewound {
+                            show_debugger_help(&mut desktop);
+                        }
                     }
                     StreamItem::Frame(frame) if frame.kind == FrameType::ChannelOpen => {
                         let title = String::from_utf8_lossy(&frame.payload);

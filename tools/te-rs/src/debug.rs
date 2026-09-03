@@ -367,9 +367,10 @@ impl DebugConsole {
             // step with each other.
             ["kill", ..] => Ok(text("use !kill <endpoint>, which the shell answers")),
             ["detach"] => Ok(request("detaching from emulator", vec![12])),
-            ["help"] | [] => Ok(text(
-                "map [hw|plan|live] | sym NAME | list LOC | dis LOC [N] | regs [EP] | x ADDR [N] | pause | continue | break LOC | bl | delete LOC | step | next | bt | detach | !<shell command>",
-            )),
+            ["help"] | [] => Ok(CommandResult {
+                lines: help_lines().iter().map(|line| (*line).to_string()).collect(),
+                request: None,
+            }),
             _ => Err("unknown debugger command; use help".into()),
         };
         result.unwrap_or_else(|error| text(&error))
@@ -599,6 +600,22 @@ fn disassemble_bytes(address: u32, data: &[u8], count: usize) -> Vec<String> {
     lines
 }
 
+/// What the debugger can do, in the shape of a pane rather than a paragraph.
+///
+/// Grouped and broken so it reads in a narrow column, and so the shell escape
+/// is a line of its own: it was previously last in a single long line, which
+/// is where a reader stops looking.
+pub fn help_lines() -> &'static [&'static str] {
+    &[
+        "look:   map [hw|plan|live]  sym NAME  list LOC  dis LOC [N]",
+        "state:  regs [EP]  x ADDR [N]  bt",
+        "run:    pause  continue  step  next",
+        "break:  break LOC  bl  delete LOC",
+        "shell:  !<shell command>, e.g. !ps -l, !kill 3, !help",
+        "leave:  detach",
+    ]
+}
+
 fn text(value: &str) -> CommandResult {
     CommandResult {
         lines: vec![value.into()],
@@ -627,6 +644,20 @@ fn u24(bytes: &[u8]) -> u32 {
 
 #[cfg(test)]
 mod tests {
+    #[test]
+    fn help_names_the_shell_escape_on_a_line_of_its_own() {
+        let lines = super::help_lines();
+        let shell = lines
+            .iter()
+            .find(|line| line.contains("!<shell command>"))
+            .expect("help must show the shell escape");
+        assert!(shell.contains("!ps -l"), "with an example: {shell}");
+        // Its own line, not the tail of a long one, which is where a reader
+        // stops looking.
+        assert!(shell.len() < 70, "help lines fit a narrow pane: {shell}");
+        assert!(lines.iter().all(|line| line.len() < 70), "{lines:?}");
+    }
+
     use super::*;
 
     #[test]

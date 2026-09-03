@@ -304,6 +304,7 @@ def render_scheduled(entries: list[dict], manifest: Path) -> str:
         "SHELL_PROC_FORCED": " fp=",
         "SHELL_PROC_CPU": " cpu=",
         "SHELL_MON_NAME": MON_NAME,
+        "SHELL_MENU_HELP": " help=commands",
         "SHELL_SYNC_NOTE": "no free slot: running it here",
         "SHELL_SYNC_NEEDS_SLOT": "needs a slot of its own",
         "SHELL_TOPIC_SYNC": "sync NAME runs it here, without a slot",

@@ -43,6 +43,15 @@ check "the escape restarts a shell sitting at its prompt" \
 check "a restarted shell offers its menu again" \
     '\xFF\x04' 'MENU 1=Hello'
 
+# A rewound shell is the moment someone has nothing else on screen to go on,
+# so it says what it can do rather than only what it can be sent.
+check "a restarted shell lists its commands" \
+    '\xFF\x04' 'help ls dir ps run bg'
+check "and the menu points at them the rest of the time" \
+    '\xFF\x04' 'help=commands'
+check "a rebooted shell lists them too" \
+    '\xFF\x05' 'help ls dir ps run bg'
+
 check "the shell accepts kill 1 rather than refusing it" \
     'kill 1\n' 'SHELL RESTARTED'
 

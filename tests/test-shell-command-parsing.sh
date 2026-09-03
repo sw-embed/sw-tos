@@ -33,6 +33,20 @@ refute() {
     fi
 }
 
+# The shell lists its commands once on the way in, so a phrase from that list
+# is on screen before anything is typed. What matters is whether the command
+# produced another one.
+refute_again() {
+    local label="$1" input="$2" needle="$3" output seen
+    output=$(run_shell "$input")
+    seen=$(printf '%s' "$output" | grep -c -- "$needle" || true)
+    if [ "$seen" -gt 1 ]; then
+        echo "FAIL: $label (saw '$needle' $seen times, expected only the greeting)" >&2
+        printf '%s\n' "$output" >&2
+        exit 1
+    fi
+}
+
 expect() {
     local label="$1" input="$2" needle="$3" output
     output=$(run_shell "$input")
@@ -77,7 +91,7 @@ expect "backspace corrects an argument name" \
 # help before the topic was typed, which is what it used to do.
 expect "help explains one command" \
     'help bg\n' 'bg NAME is run'
-refute "help does not act at the space" \
+refute_again "help does not act at the space" \
     'help bg\n' 'df du mem stat uname'
 expect "an unknown help topic is refused" \
     'help nope\n' 'BAD'
