@@ -3040,8 +3040,26 @@ _release_slot:
         lc      r0,0
         sw      r0,24(r2)       ; PROC_FREE
         sw      r0,33(r2)       ; no program
-        add     r2,39           ; the statistics block
-        lc      r1,8
+        ; Everything the previous tenant left behind, in one sweep: the eight
+        ; statistics words at +39, the eleven preemption sidecar words at +63,
+        ; and the TTY's cursors, count and drop tally at +96. They are
+        ; contiguous, so twenty-three words covers all three.
+        ;
+        ; The sidecar is the one that mattered. It carries runway eligibility,
+        ; and _kill_endpoint reads that to decide how to kill: an eligible
+        ; process is torn down by the interrupt handler's landing, so its kill
+        ; is queued and reported accepted. Leaving that flag set meant a slot
+        ; that had once held a cpu-hog handed it to whatever came next -- and a
+        ; clock or an uptime never spins, so it is never the process the
+        ; handler interrupts, so the queued kill was never serviced. The kill
+        ; was accepted and the process ran forever. It also carried the dead
+        ; hog's forced-preemption count and interrupted-r0 sample, which ps and
+        ; mon then reported against a program that had never been preempted.
+        ;
+        ; The TTY's 64 bytes of data need no clearing: a zero count is what
+        ; makes them unreadable, and a new reader starts from that.
+        add     r2,39
+        lc      r1,23
 _release_slot_stats:
         lc      r0,0
         sw      r0,0(r2)

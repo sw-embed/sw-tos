@@ -57,6 +57,7 @@ Run one with `just <recipe>`.
 | Clear a pane, keeping it open | `Ctrl-O l` | unit test |
 | See that a pane's process has ended | `(ended)` in its name, including a program too short-lived for any snapshot to catch | `tui-soak`, unit test |
 | Reclaim the space of finished programs | `Ctrl-O c` | `tui-soak`, unit test |
+| Kill a process in a slot that once held another | any `kill`, after the slot has been reused | `debugger-kill-acceptance` |
 | Get back a shell that has stopped responding | `Ctrl-O k`, debugger `!kill 1`, or `kill 1` at a working prompt | `shell-restart`, `debugger-kill-acceptance` |
 | Return a responsive kernel to a clean process baseline | shell `reboot` or `Ctrl-O B` ISR request | `shell-command-parsing`, `windows-smoke` |
 | Keep the keyboard at the prompt when a program starts or exits | any `bg`, and any child exiting while the monitor runs | `shell-foreground` |

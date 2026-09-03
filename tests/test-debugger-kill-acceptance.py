@@ -264,6 +264,59 @@ def main():
         assert restarted.get(reused[0]), (
             f"the freed slot was not reused: {restarted}")
 
+        # A slot carries nothing of its last tenant into its next one.
+        #
+        # Releasing a slot cleared its state, its program and its statistics,
+        # but not its preemption sidecar -- and the sidecar holds runway
+        # eligibility, which is what the kill path reads to decide how to kill.
+        # A slot that had held a cpu-hog handed that flag to whatever came
+        # next, so killing a clock or an uptime in it took the queued path
+        # meant for a spinning private image: accepted, then never serviced,
+        # because a cooperative program is never the process the interrupt
+        # handler catches. The kill was reported as accepted and the process
+        # ran forever.
+        #
+        # Only one slot is freed at each step here, so the next spawn is bound
+        # to land in it.
+        tick, live_now = slot_states(transport, tick)
+        for endpoint in sorted(e for e, state in live_now.items() if e > 2 and state):
+            tick, _ = kill(transport, tick, endpoint)
+            tick = pump(transport, tick, 60, output)
+
+        type_line(transport, b"bg cpu-hog\r")
+        tick = pump(transport, tick, 120, output)
+        tick, with_hog = slot_states(transport, tick)
+        hog = max(e for e, state in with_hog.items() if state)
+        tick, status = kill(transport, tick, hog)
+        assert status == KILL_OK, f"the hog refused its kill: {status}"
+        tick = pump(transport, tick, 120, output)
+
+        type_line(transport, b"bg uptime\r")
+        tick = pump(transport, tick, 120, output)
+        tick, with_uptime = slot_states(transport, tick)
+        assert with_uptime.get(hog), (
+            f"expected the freed hog slot {hog} to be reused: {with_uptime}")
+
+        # The sidecar's own numbers are the visible half of the same fault: a
+        # program that has never been preempted reported the hog's counts.
+        output.clear()
+        tick = type_slowly(transport, b"ps -l\r", tick, output)
+        tick = pump(transport, tick, 250, output)
+        listing = bytes(output.get(0, b"")).decode("ascii", "replace")
+        row = next((line for line in listing.splitlines()
+                    if f"ep={hog} " in line), None)
+        assert row is not None, f"the reused slot is not listed:\n{listing[-400:]}"
+        assert "uptime" in row, f"expected uptime in the hog's slot: {row}"
+        assert "fp=0" in row and "cpu=0" in row, (
+            f"the reused slot kept the hog's preemption figures: {row}")
+
+        tick, status = kill(transport, tick, hog)
+        assert status == KILL_OK, f"the reused slot refused its kill: {status}"
+        tick = pump(transport, tick, 250, output)
+        tick, after_reuse = slot_states(transport, tick)
+        assert not after_reuse.get(hog), (
+            f"a process in a recycled hog slot survived an accepted kill: {after_reuse}")
+
         # Endpoint 1 is the shell, and killing it restarts it rather than
         # releasing its slot: a session with no shell is not a session. It is
         # left until last here because it discards whatever the shell was
