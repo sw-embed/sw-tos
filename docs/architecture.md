@@ -39,6 +39,31 @@ compiler's UART `FILE:`/`SOURCE:` protocol and extracts generated assembly.
 then use `meta-gen` to derive exports and FIXUP records and `link24` to produce
 an address-zero `program.bin`.
 
+### The compiler runs under a budget
+
+`plsw.lgo` is a COR24 program, so it runs for a bounded number of emulated
+instructions. `scripts/catalog-spawn-link.sh` sets `PLSW_BUDGET`, which
+defaults to two billion; the shell needed a little over half a billion of them
+in September 2026, and the figure grows with the source.
+
+A compile that runs out does not fail loudly. It stops mid-emit, and the
+half-written assembly it leaves behind is not obviously half-written: the build
+carries on and fails in the assembler, as an undefined label at whatever line
+the emit happened to stop on. That reads like a fault in the source being
+compiled, which is the wrong place to look entirely.
+
+The compiler brackets its output with `--- generated assembly ---` and
+`--- end assembly ---`, and the closing marker is the only thing that says it
+finished. Every script that extracts assembly checks for it before using what
+it extracted, and `tests/test-plsw-truncation.sh` drives a compile into the
+wall on purpose to prove the check still catches one. Asking whether the
+compiler finished is better than asking why it might not have: it catches a
+wall-clock timeout and a halt as well as an exhausted budget.
+
+To raise it: `PLSW_BUDGET=4000000000 just scheduled-shell-build`, or edit the
+default in the script. The `-t` wall-clock timeout beside it is the backstop
+that keeps a runaway compile from hanging a build.
+
 Generated inputs are part of the architecture:
 
 - `catalog/catalog.toml` declares programs and services.

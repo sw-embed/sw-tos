@@ -74,7 +74,7 @@ COMPILER_OUT=$($COR24EMU --lgo "$PLSW_LGO" --uart-file "$UART_INPUT" \
 
 UART_OUT="$COMPILER_OUT"
 
-if echo "$UART_OUT" | grep -q "compilation failed\|COMPILE ERROR\|ERROR:"; then
+if grep -q "compilation failed\|COMPILE ERROR\|ERROR:" <<<"$UART_OUT"; then
     echo "Compilation failed:" >&2
     echo "$UART_OUT" | grep -E "ERROR:|failed" >&2
     echo "" >&2
@@ -86,7 +86,7 @@ fi
 # Extract assembly between markers
 START_MARKER="--- generated assembly ---"
 END_MARKER="--- end assembly ---"
-if ! echo "$UART_OUT" | grep -q -- "$END_MARKER"; then
+if ! grep -q -- "$END_MARKER" <<<"$UART_OUT"; then
     echo "Compilation failed: compiler did not emit a complete assembly block" >&2
     echo "$UART_OUT" | tail -5 >&2
     exit 1

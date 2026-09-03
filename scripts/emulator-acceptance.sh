@@ -21,6 +21,7 @@ RECIPES=(
     tui-soak
     debugger-kill-acceptance
     shell-command-parsing
+    plsw-truncation
     shell-restart
     shell-foreground
     shell-sync-run

@@ -376,6 +376,10 @@ debugger-kill-acceptance: scheduled-shell-build cor24-debugger-build
 shell-command-parsing: scheduled-shell-build
     ./tests/test-shell-command-parsing.sh
 
+# Refuse a PL/SW compile that stopped before it finished emitting
+plsw-truncation:
+    ./tests/test-plsw-truncation.sh
+
 # Rewind the one process that cannot be killed, from each state it can wedge in
 shell-restart: scheduled-shell-build
     ./tests/test-shell-restart.sh

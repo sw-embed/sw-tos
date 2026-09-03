@@ -50,12 +50,19 @@ trap 'rm -rf "$scratch"' EXIT
     printf '\x04'
 } > "$scratch/input.bin"
 
-# The compiler is a COR24 program, so it runs under an instruction budget. It
-# needs a little over half a billion for this source and grows with it.
-PLSW_BUDGET=2000000000
+# The compiler is a COR24 program, so it runs under an instruction budget, and
+# the budget has to grow with the source it compiles. This one passed half a
+# billion in September 2026. PLSW_BUDGET can be set lower to prove the check
+# below still catches a truncated compile.
+PLSW_BUDGET=${PLSW_BUDGET:-2000000000}
 compiler_output=$($EMU --lgo "$PLSW" --uart-file "$scratch/input.bin" \
     --quiet --speed 0 -n "$PLSW_BUDGET" -t 600 2>&1)
-if echo "$compiler_output" | grep -q 'compilation failed\|COMPILE ERROR\|ERROR:'; then
+# Here-strings, not a pipe. Under `set -o pipefail`, `echo "$x" | grep -q p`
+# reports failure when the pattern IS found: grep exits at the first match and
+# closes the pipe, echo dies with EPIPE, and pipefail takes echo's status for
+# the pipeline. That inverts every test below -- a real compile error would be
+# read as a clean compile, and a complete compile as a truncated one.
+if grep -q 'compilation failed\|COMPILE ERROR\|ERROR:' <<<"$compiler_output"; then
     echo "PL/SW task compilation failed:" >&2
     echo "$compiler_output" >&2
     exit 1
@@ -64,16 +71,23 @@ fi
 # assembly it leaves behind is not obviously half-written: it fails much later
 # as an undefined label, at whatever line the emit happened to stop on, which
 # reads like a fault in the source that was being compiled.
-# A compiler that runs out of instructions stops mid-emit, and the half-written
-# assembly it leaves behind is not obviously half-written: it fails much later
-# as an undefined label, at whatever line the emit happened to stop on, which
-# reads like a fault in the source being compiled rather than a truncated file.
-# The emulator reports its instruction count either way, so the count is what
-# says which happened.
-executed=$(echo "$compiler_output" | sed -n 's/^Executed \([0-9]*\) instructions.*/\1/p' | tail -1)
-if [ -n "$executed" ] && [ "$executed" -ge "$PLSW_BUDGET" ]; then
-    echo "PL/SW compilation stopped at its $PLSW_BUDGET instruction budget;" >&2
-    echo "the assembly it wrote is truncated. Raise PLSW_BUDGET in $0." >&2
+# The compiler brackets its assembly, and the closing marker is the only thing
+# that says it finished. A compile that stops early -- out of instructions, out
+# of wall clock, halted -- stops mid-emit, and the half-written assembly it
+# leaves behind is not obviously half-written: it fails much later as an
+# undefined label, at whatever line the emit happened to stop on, which reads
+# like a fault in the source being compiled rather than a truncated file.
+#
+# Asking whether it finished beats asking why it might not have. An earlier
+# version of this check compared the instruction count against the budget,
+# which reported a clean compile as a failure the first time one finished just
+# over the old ceiling.
+if ! grep -q -- '--- end assembly ---' <<<"$compiler_output"; then
+    echo "PL/SW compilation did not finish: no end-of-assembly marker." >&2
+    echo "Its output is truncated, so the build would fail later as an" >&2
+    echo "undefined label. If it ran out of instructions, raise PLSW_BUDGET" >&2
+    echo "(currently $PLSW_BUDGET) in $0." >&2
+    echo "$compiler_output" | tail -3 >&2
     exit 1
 fi
 generated_banner "$PLSW_SOURCE compiled by tools/plsw.lgo" \

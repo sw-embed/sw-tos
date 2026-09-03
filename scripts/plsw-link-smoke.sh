@@ -51,9 +51,18 @@ compile_module() {
         -n 200000000 -t 120 2>&1)
     rm -rf "$scratch"
 
-    if echo "$compiler_output" | grep -q "compilation failed\|COMPILE ERROR\|ERROR:"; then
+    if grep -q "compilation failed\|COMPILE ERROR\|ERROR:" <<<"$compiler_output"; then
         echo "Compilation failed for $source:" >&2
         echo "$compiler_output" >&2
+        exit 1
+    fi
+
+    # The closing marker is what says the compiler finished. Without it the
+    # assembly is truncated, and a truncated file fails much later as an
+    # undefined label that reads like a fault in the source.
+    if ! grep -q -- "--- end assembly ---" <<<"$compiler_output"; then
+        echo "Compilation of $source did not finish: no end-of-assembly marker." >&2
+        echo "$compiler_output" | tail -3 >&2
         exit 1
     fi
 
