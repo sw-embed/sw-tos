@@ -1,5 +1,9 @@
 # SWTOS -- Software Wrighter Tiny Operating System
 
+<p align="center">
+  <img src="docs/assets/sw-tos-logo.webp" alt="SWTOS logo" width="200">
+</p>
+
 *A portable microkernel for educational and embedded systems.*
 
 ## Overview
