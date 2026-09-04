@@ -112,11 +112,12 @@ No recipe covers these yet. They are real behaviours, not hypotheticals.
   the ISA to make `ir` readable and writable.
 - **The launcher's adapter watchdog.** `swtos-emulator-debug.py` now exits when
   the adapter dies, which was verified by hand but has no recipe.
-- **PL/SW source past line 255.** The compiler emits each statement as a
+- **PL/SW source past line 256.** The compiler emits each statement as a
   `; N: TEXT` comment in the assembly it generates, which is what makes `list`
-  useful on a PL/SW program. No comment in any generated file names a line
-  above 255, and a dozen sit at exactly 255: the line counter is a byte. Past
-  that, `list` shows assembly alone. The fix is in the compiler.
+  useful on a PL/SW program. No generated file names a line above 256, so
+  attribution covers the first fifth of the shell and `list` shows assembly
+  alone past it. The fix is in the compiler; see
+  [PL/SW feature requests](plsw-feature-requests.md).
 - **Source lines inside a spawned process.** `dis` now decodes any address by
   reading the bytes, but `list` still needs the map, so a spawned copy shows
   instructions without the source they came from. Mapping a copy back to its

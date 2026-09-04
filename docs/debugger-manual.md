@@ -105,11 +105,13 @@ Both `list` and `dis` take a `LOC`, and they are easy to confuse:
   instructions it produced. So listing an address in the shell shows the PL/SW
   that was written, not only the assembly it became.
 
-  That stops at PL/SW line 255. Across every generated file in a build, 2,931
-  such comments exist and not one names a line above 255, with a dozen piled up
-  at exactly 255 -- a line counter kept in a byte, saturating at 0xFF. Past
-  that point a listing shows assembly alone. The fix belongs to the compiler,
-  in [sw-cor24-plsw](https://github.com/sw-embed/sw-cor24-plsw).
+  That stops at line 256. In a build's generated assembly the highest lines
+  named run 251, 252, 253, 254, 255, 256 -- and then nothing, in any file. The
+  compiler sees a concatenated stream of about 1,259 lines here, so attribution
+  covers the first fifth of the program. Past that a listing shows assembly
+  alone. The fix belongs to the compiler, in
+  [sw-cor24-plsw](https://github.com/sw-embed/sw-cor24-plsw); it is written up
+  with the measurements in [PL/SW feature requests](plsw-feature-requests.md).
 - `dis LOC [N]` **disassembles**: it prints up to `N` instructions from the
   address *forward*, each as `ADDRESS BYTES TEXT`. It is the only one of the
   three that works outside the map, by reading twelve bytes of live memory and
