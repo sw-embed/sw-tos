@@ -44,6 +44,55 @@ CALL UART_PUTS(ADDR({TEXT}));
 
 and the two macros collapse into one with no cost at any call site.
 
+### The same feature, needed a second time: pointer or named string
+
+`UART_PUTS` takes one pointer to NUL-terminated bytes, and callers arrive at
+that pointer three ways:
+
+```plsw
+CALL UART_PUTS(ADDR(SHELL_BAD_TEXT));   /* a declared array: take its address */
+CALL UART_PUTS(TEXT_PTR);               /* a PTR parameter: already an address */
+CALL UART_PUTS(DESC_PTR->SPD_NAME);     /* a field in a based record */
+```
+
+A clause declared `TEXT(lvalue)` and wrapped by the body in `ADDR({TEXT})`
+serves the first and silently breaks the others: `ADDR(TEXT_PTR)` is the
+address *of the pointer*, so it compiles and prints whatever those bytes
+happen to be. A clause declared `AT(expr)` and used bare serves all three.
+SWTOS confirmed this by compiling each shape:
+
+| invocation | compiles |
+|---|---|
+| `?PRINTLN AT(TEXT_PTR);` | yes |
+| `?PRINTLN AT(DESC_PTR->SPD_NAME);` | yes |
+| `?PRINTLN AT(ADDR(SHELL_BAD_TEXT));` | yes |
+
+But `AT` alone is the wrong default: 53 call sites here name a string and 2
+hold a pointer, so unifying on `AT` would make the common case carry a visible
+`ADDR()` to spare the rare one. What is wanted is one macro accepting either
+clause:
+
+```
+MACRODEF PRINTLN;
+    OPTIONAL TEXT(lvalue);
+    OPTIONAL AT(expr);
+    %IF DEFINED(TEXT); CALL UART_PUTS(ADDR({TEXT})); %ENDIF;
+    %IF DEFINED(AT);   CALL UART_PUTS({AT});         %ENDIF;
+    CALL UART_PUTCHAR(10);
+END;
+```
+
+which is the same missing feature as the newline switch above. With it, one
+macro with three optional clauses replaces `?PRINT`, `?PRINTLN` and both
+argument shapes. Without it each combination needs its own name, and SWTOS
+leaves the pointer callers as plain `CALL UART_PUTS`.
+
+**A smaller diagnostic that would help either way.** `ADDR()` applied to
+something that is already an address is always a bug, and today it is a silent
+one that prints garbage. A warning when `ADDR()` is applied to a `PTR` would
+catch this class of mistake where it is made, whether or not clause gating
+lands.
+
 **Already known.** `docs/storage-allocation.md` in the compiler repo says the
 same thing about `?GETMAIN`:
 
@@ -51,7 +100,9 @@ same thing about `?GETMAIN`:
 > `%IF DEFINED(RC)` inside source-template bodies, which is what an OPTIONAL
 > clause would need to gate its emission.
 
-So this request is that note, seconded by a second caller with a second use.
+So this request is that note, seconded twice: once for a newline switch, once
+for accepting either an lvalue or an address expression. Three callers, one
+feature.
 
 **Scope note.** `%IF` already exists for conditional compilation at file scope.
 What is missing is availability *inside* a template body, evaluated against the
@@ -139,6 +190,12 @@ diff b.code a.code        # empty
 That is the property worth protecting in any change to the expansion machinery,
 and it is what makes a large mechanical refactor of PL/SW source safe to do:
 the compiler can prove the result is the same program.
+
+`REQUIRED AT(expr)` was separately confirmed to accept a bare pointer, a
+based-record field dereference, and a wrapped `ADDR()`. Textual substitution
+followed by a re-parse means a clause takes whatever PL/SW would have accepted
+written by hand, which is worth stating because it bounds how much a clause
+type needs to constrain.
 
 `docs/cs-macro.md` in the compiler repo (§7) explains why this works without a
 gensym: source-template bodies take their branch labels from the compiler's
