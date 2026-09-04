@@ -141,9 +141,13 @@ clearing child process records, TTYs, preemption state, and the allocation
 generation. It still requires a functioning UART ISR and a safe scheduler
 boundary; physical reset and image reload remain the hard-wedge recovery.
 
-`run NAME --tty=new` asks the frontend for another application pane. Uptime
-and Clock receive host time frames only while the Resources snapshot reports
-the matching live process. Stop either application by focusing its pane and
+`run NAME --tty=new` asks the frontend for another application pane. Uptime,
+Clock, and the monitor receive host time frames while their live channel-open
+notifications or the Resources snapshot identify them. On reconnect, the
+compact channel notifications arrive before a complete multi-record snapshot;
+the frontend therefore starts those frames immediately instead of leaving the
+clock or monitor parked until prefix-`r`. Channel close and title-change events
+stop obsolete time traffic. Stop an application by focusing its pane and
 pressing Ctrl-O then `e`.
 
 For the two-context hostile-load demonstration, keep Shell interactive with:

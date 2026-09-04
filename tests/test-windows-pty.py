@@ -277,6 +277,14 @@ def normal_path():
     session = ROOT / "build/windows-pty/session.json"
     session.unlink(missing_ok=True)
     process, tty_master, tty_slave, serial_master, before = start_frontend(session)
+    # A reattached frontend sees the target's compact channel lifecycle before
+    # it can assemble a complete multi-record resource snapshot. mon must get
+    # its uptime tick immediately rather than sit at its banner until Ctrl-O r.
+    os.write(serial_master, frame(3, 1, b"mon"))
+    uptime_frame_prefix = SYNC + bytes((1, 6, 0, 3, 0))
+    assert uptime_frame_prefix in read_until(serial_master, uptime_frame_prefix, 2.0), (
+        "reattached mon did not enable host time frames from ChannelOpen"
+    )
     generation = 3
     records = (
         bytes((1, generation)),
@@ -326,7 +334,6 @@ def normal_path():
         bytes((5, time_generation, 2, 0, 0, 8, 0, 0, 9, 0, 0)),
     )
     os.write(serial_master, b"".join(frame(8, 0, record) for record in time_records))
-    uptime_frame_prefix = SYNC + bytes((1, 6, 0, 3, 0))
     time_traffic = read_until(serial_master, uptime_frame_prefix, 2.0)
     assert uptime_frame_prefix in time_traffic, "live Uptime did not enable host time frames"
     assert SYNC + bytes((1, 7, 0, 3, 0)) not in time_traffic, "Uptime received wall-clock frames"

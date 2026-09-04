@@ -1,5 +1,5 @@
 use serde::{Deserialize, Serialize};
-use std::collections::VecDeque;
+use std::collections::{BTreeMap, VecDeque};
 use std::env;
 use std::fs::{self, File, OpenOptions};
 use std::io::{self, BufRead, BufReader, Read, Write};
@@ -67,6 +67,29 @@ impl TimeModes {
         ]
         .into_iter()
         .flatten()
+    }
+}
+
+fn time_mode_for_title(title: &str) -> Option<TimeMode> {
+    if title.starts_with("mon") || title.starts_with("upti") {
+        Some(TimeMode::Uptime)
+    } else if title.starts_with("cloc") {
+        Some(TimeMode::Clock)
+    } else {
+        None
+    }
+}
+
+fn active_time_modes(
+    resources: &SnapshotAssembler,
+    channel_modes: &BTreeMap<u8, TimeMode>,
+) -> TimeModes {
+    TimeModes {
+        uptime: resources.has_process_named("upti")
+            || resources.has_process_named("mon")
+            || channel_modes.values().any(|mode| *mode == TimeMode::Uptime),
+        clock: resources.has_process_named("cloc")
+            || channel_modes.values().any(|mode| *mode == TimeMode::Clock),
     }
 }
 
@@ -1071,6 +1094,11 @@ fn run_windows(options: &Options) -> io::Result<()> {
     let mut next_time_frames = Instant::now();
     let mut next_footer_repaint = Instant::now();
     let mut time_modes = TimeModes::default();
+    // Channel-open/title notifications are small and arrive before a complete
+    // multi-record resource snapshot on reattach. Use them to start clocks
+    // immediately; completed snapshots still reconcile the authoritative
+    // process set below.
+    let mut channel_time_modes = BTreeMap::new();
 
     // Nothing precedes this frontend on a first attach, so the target's boot
     // output is not stale: render it instead of dropping it.
@@ -1154,7 +1182,13 @@ fn run_windows(options: &Options) -> io::Result<()> {
                         }
                     }
                     StreamItem::Frame(frame) if frame.kind == FrameType::ChannelOpen => {
-                        let title = String::from_utf8_lossy(&frame.payload);
+                        let title = String::from_utf8_lossy(&frame.payload).into_owned();
+                        if let Some(mode) = time_mode_for_title(&title) {
+                            channel_time_modes.insert(frame.channel, mode);
+                        } else {
+                            channel_time_modes.remove(&frame.channel);
+                        }
+                        time_modes = active_time_modes(&resources, &channel_time_modes);
                         // A channel is reused when a slot is: start the new
                         // program's pane empty rather than under whatever the
                         // last one left there.
@@ -1164,18 +1198,24 @@ fn run_windows(options: &Options) -> io::Result<()> {
                             if title.is_empty() {
                                 format!("TTY {}", frame.channel)
                             } else {
-                                title.into_owned()
+                                title
                             },
                         );
                     }
                     StreamItem::Frame(frame) if frame.kind == FrameType::ChannelClose => {
+                        channel_time_modes.remove(&frame.channel);
+                        time_modes = active_time_modes(&resources, &channel_time_modes);
                         desktop.release_channel(frame.channel);
                     }
                     StreamItem::Frame(frame) if frame.kind == FrameType::ChannelTitle => {
-                        desktop.set_channel_title(
-                            frame.channel,
-                            String::from_utf8_lossy(&frame.payload),
-                        );
+                        let title = String::from_utf8_lossy(&frame.payload).into_owned();
+                        if let Some(mode) = time_mode_for_title(&title) {
+                            channel_time_modes.insert(frame.channel, mode);
+                        } else {
+                            channel_time_modes.remove(&frame.channel);
+                        }
+                        time_modes = active_time_modes(&resources, &channel_time_modes);
+                        desktop.set_channel_title(frame.channel, title);
                     }
                     StreamItem::Frame(frame) if frame.kind == FrameType::ProtocolError => {
                         desktop
@@ -1183,14 +1223,11 @@ fn run_windows(options: &Options) -> io::Result<()> {
                     }
                     StreamItem::Frame(frame) if frame.kind == FrameType::ResourceSnapshot => {
                         if resources.push(&frame.payload, Instant::now()) {
-                            time_modes = TimeModes {
-                                // The monitor refreshes on the uptime tick, so
-                                // it needs that tick sent even when no uptime
-                                // is running.
-                                uptime: resources.has_process_named("upti")
-                                    || resources.has_process_named("mon"),
-                                clock: resources.has_process_named("cloc"),
-                            };
+                            // The monitor refreshes on the uptime tick, so it
+                            // needs that tick sent even when no uptime is
+                            // running. Channel notifications cover the window
+                            // before this complete snapshot arrives.
+                            time_modes = active_time_modes(&resources, &channel_time_modes);
                             // Channel N carries endpoint N+1, so this is what
                             // teaches a pane the name of the program on it,
                             // and what tells a pane its process has gone.
