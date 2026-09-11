@@ -1,0 +1,493 @@
+/* catalog-sdfs.plsw -- reading a FAT32 volume, as its own compiland.
+
+   Split out of catalog-shell.plsw because the compiler's symbol table is per
+   compilation: SYM_SCOPE_MAX is 256 symbols in a scope, and the shell had
+   grown to within a few of it. Adding this code tipped it over, and an
+   overflowing table does not say so -- sym_add returns -1, the declaration is
+   dropped, and every later use reports "undefined variable", pointing at
+   whichever procedure happens to use it rather than at the one that filled
+   the table. The error appeared in a procedure nobody had touched.
+
+   Separate modules are separate compilations with separate tables, which
+   link24 then resolves by name. The shell calls in here; this calls back out
+   to UART_PUTS, SHELL_PRINT_INT and SHELL_BAD. Neither module has to hold the
+   other's symbols. */
+
+%DEFINE LIBRARY;
+
+/* Declared, not defined: the storage for every one of these is emitted by
+   scripts/generate-catalog.py into the kernel module, and both compilands
+   reference it by name. */
+DCL 1 CAT_RESULT BASED,
+    3 CR_FOUND INT,
+    3 CR_CLUSTER INT,
+    3 CR_SIZE INT;
+DCL 1 CAT_GEOMETRY BASED,
+    3 CG_SPC INT,
+    3 CG_ROOT_SECTOR INT,
+    3 CG_DATA_START INT;
+DCL 1 CLOCK_BYTE_REF BASED,
+    3 CBR_VALUE BYTE;
+DCL SHELL_SAMPLE_BOOT(512) CHAR;
+DCL SHELL_SAMPLE_DATA(4096) CHAR;
+DCL SHELL_SAMPLE_FIRST INT;
+DCL SHELL_SAMPLE_COUNT INT;
+DCL SHELL_SD_NONE(26) CHAR INIT('no valid SD card detected');
+DCL SHELL_SD_UNFORMATTED(30) CHAR INIT('SD card present but not FAT32');
+DCL SHELL_SD_DIR(7) CHAR INIT(' <dir>');
+DCL SHELL_SD_MORE(41) CHAR INIT('... more entries than one cluster holds');
+DCL SHELL_MEM_AT(2) CHAR INIT('@');
+
+/* The shell's macro, repeated: a macro is expanded at compile time, so it is
+   not something a module can import from another. */
+MACRODEF PRINTLN;
+    REQUIRED TEXT(lvalue);
+    DO;
+        CALL UART_PUTS(ADDR({TEXT}));
+        CALL UART_PUTCHAR(10);
+    END;
+END;
+
+SHELL_SD_READ: PROC(SOURCE INT, SECTOR_NO INT, BUF_PTR PTR, STATUS_PTR PTR);
+    /* The only thing that differs between a card and the built-in sample.
+       Everything downstream -- the boot sector check, the geometry, the walk,
+       the names -- is the same code reading the same shapes. */
+    IF (SOURCE = 0) THEN CALL SPI_SD_READ_SECTOR(SECTOR_NO, BUF_PTR, STATUS_PTR);
+    ELSE CALL SHELL_SAMPLE_READ(SECTOR_NO, BUF_PTR, STATUS_PTR);
+END;
+
+SHELL_SAMPLE_READ: PROC(SECTOR_NO INT, BUF_PTR PTR, STATUS_PTR PTR);
+    /* Sector 0 is the boot sector; the data region is carried as one slice
+       starting at the sector the volume's own geometry names. Anything outside
+       the slice is absent, exactly as it would be past the end of a card. */
+    IF (SECTOR_NO = 0) THEN CALL SHELL_COPY_SECTOR(ADDR(SHELL_SAMPLE_BOOT), BUF_PTR, STATUS_PTR);
+    ELSE CALL SHELL_SAMPLE_DATA_READ(SECTOR_NO, BUF_PTR, STATUS_PTR);
+END;
+
+SHELL_SAMPLE_DATA_READ: PROC(SECTOR_NO INT, BUF_PTR PTR, STATUS_PTR PTR);
+    DCL STATUS_REF PTR;
+    DCL INDEX INT;
+    INDEX = SECTOR_NO - SHELL_SAMPLE_FIRST;
+    IF (INDEX < 0) THEN CALL SHELL_SAMPLE_ABSENT(STATUS_PTR);
+    ELSE CALL SHELL_SAMPLE_SLICE(INDEX, BUF_PTR, STATUS_PTR);
+END;
+
+SHELL_SAMPLE_SLICE: PROC(INDEX INT, BUF_PTR PTR, STATUS_PTR PTR);
+    IF (INDEX < SHELL_SAMPLE_COUNT) THEN CALL SHELL_COPY_SECTOR(ADDR(SHELL_SAMPLE_DATA) + INDEX * 512, BUF_PTR, STATUS_PTR);
+    ELSE CALL SHELL_SAMPLE_ABSENT(STATUS_PTR);
+END;
+
+SHELL_SAMPLE_ABSENT: PROC(STATUS_PTR PTR);
+    DCL STATUS_REF PTR;
+    STATUS_REF = STATUS_PTR;
+    STATUS_REF->CBR_VALUE = 1;
+END;
+
+SHELL_COPY_SECTOR: PROC(FROM_PTR PTR, BUF_PTR PTR, STATUS_PTR PTR);
+    DCL SRC PTR;
+    DCL DST PTR;
+    DCL STATUS_REF PTR;
+    DCL POS INT;
+    SRC = FROM_PTR;
+    DST = BUF_PTR;
+    POS = 0;
+    DO WHILE (POS < 512);
+        DST->CBR_VALUE = SRC->CBR_VALUE;
+        SRC = SRC + 1;
+        DST = DST + 1;
+        POS = POS + 1;
+    END;
+    STATUS_REF = STATUS_PTR;
+    STATUS_REF->CBR_VALUE = 0;
+END;
+
+SHELL_CAT_COMMAND: PROC(SOURCE INT, NAME_PTR PTR);
+    /* Show a file. Reads the boot sector for geometry, walks the root for a
+       name, then reads the one cluster its data starts in. One cluster, so a
+       file longer than that is shown as far as it goes -- following a chain
+       means reading the FAT, which nothing here does yet. */
+    DCL SECTOR(512) CHAR;
+    DCL STATUS INT;
+    STATUS = 1;
+    CALL SHELL_SD_READ(SOURCE, 0, ADDR(SECTOR), ADDR(STATUS));
+    IF (STATUS = 0) THEN CALL SHELL_CAT_MOUNTED(SOURCE, ADDR(SECTOR), NAME_PTR);
+    ELSE CALL SHELL_SD_ABSENT;
+END;
+
+SHELL_CAT_MOUNTED: PROC(SOURCE INT, BUF_PTR PTR, NAME_PTR PTR);
+    DCL 1 GEOM,
+        3 G_SPC INT,
+        3 G_ROOT_SECTOR INT,
+        3 G_DATA_START INT;
+    DCL P PTR;
+    DCL SPC INT;
+    DCL RESV INT;
+    DCL NFATS INT;
+    DCL FATSZ INT;
+    DCL ROOTC INT;
+    DCL DATA_START INT;
+    P = BUF_PTR + 13;
+    SPC = P->CBR_VALUE;
+    P = BUF_PTR + 14;
+    RESV = P->CBR_VALUE;
+    P = BUF_PTR + 15;
+    RESV = RESV + P->CBR_VALUE * 256;
+    P = BUF_PTR + 16;
+    NFATS = P->CBR_VALUE;
+    P = BUF_PTR + 36;
+    FATSZ = P->CBR_VALUE;
+    P = BUF_PTR + 37;
+    FATSZ = FATSZ + P->CBR_VALUE * 256;
+    P = BUF_PTR + 38;
+    FATSZ = FATSZ + P->CBR_VALUE * 65536;
+    P = BUF_PTR + 44;
+    ROOTC = P->CBR_VALUE;
+    P = BUF_PTR + 45;
+    ROOTC = ROOTC + P->CBR_VALUE * 256;
+    DATA_START = RESV + NFATS * FATSZ;
+    GEOM.G_SPC = SPC;
+    GEOM.G_ROOT_SECTOR = DATA_START + (ROOTC - 2) * SPC;
+    GEOM.G_DATA_START = DATA_START;
+    IF (SPC = 0) THEN CALL SHELL_SD_ABSENT;
+    ELSE CALL SHELL_CAT_FIND(SOURCE, BUF_PTR, NAME_PTR, ADDR(GEOM));
+END;
+
+SHELL_CAT_FIND: PROC(SOURCE INT, BUF_PTR PTR, NAME_PTR PTR, GEOM_PTR PTR);
+    DCL STATUS INT;
+    DCL POS INT;
+    DCL P PTR;
+    DCL G PTR;
+    DCL RENDERED(14) CHAR;
+    DCL 1 RESULT,
+        3 RES_FOUND INT,
+        3 RES_CLUSTER INT,
+        3 RES_SIZE INT;
+    G = GEOM_PTR;
+    RESULT.RES_FOUND = 0;
+    STATUS = 1;
+    CALL SHELL_SD_READ(SOURCE, G->CG_ROOT_SECTOR, BUF_PTR, ADDR(STATUS));
+    POS = 0;
+    DO WHILE (POS < 16);
+        P = BUF_PTR + POS * 32;
+        CALL SHELL_SD_NAME_INTO(P, ADDR(RENDERED));
+        CALL SHELL_CAT_TRY(P, ADDR(RENDERED), NAME_PTR, ADDR(RESULT));
+        POS = POS + 1;
+    END;
+    IF (RESULT.RES_FOUND = 0) THEN CALL SHELL_BAD;
+    ELSE CALL SHELL_CAT_AT(SOURCE, BUF_PTR, GEOM_PTR, ADDR(RESULT));
+END;
+
+SHELL_CAT_TRY: PROC(ENTRY_PTR PTR, RENDERED_PTR PTR, WANT_PTR PTR, RESULT_PTR PTR);
+    /* One candidate. A directory is not a file, a volume label is not a file,
+       and a name already found is not replaced by a later one. */
+    DCL P PTR;
+    DCL R PTR;
+    DCL SAME INT;
+    DCL ATTR INT;
+    DCL LOW INT;
+    DCL DIRBIT INT;
+    R = RESULT_PTR;
+    P = ENTRY_PTR + 11;
+    ATTR = P->CBR_VALUE;
+    LOW = ATTR - (ATTR / 16) * 16;
+    DIRBIT = (ATTR / 16) - (ATTR / 32) * 2;
+    SAME = 0;
+    IF (R->CR_FOUND = 0) THEN CALL SHELL_SAME_NAME(RENDERED_PTR, WANT_PTR, ADDR(SAME));
+    IF (LOW > 7) THEN SAME = 0;
+    IF (DIRBIT = 1) THEN SAME = 0;
+    IF (SAME = 1) THEN CALL SHELL_CAT_TAKE(ENTRY_PTR, RESULT_PTR);
+END;
+
+SHELL_CAT_AT: PROC(SOURCE INT, BUF_PTR PTR, GEOM_PTR PTR, RESULT_PTR PTR);
+    DCL G PTR;
+    DCL R PTR;
+    G = GEOM_PTR;
+    R = RESULT_PTR;
+    CALL SHELL_CAT_SHOW(SOURCE, BUF_PTR, G->CG_DATA_START + (R->CR_CLUSTER - 2) * G->CG_SPC, R->CR_SIZE);
+END;
+
+SHELL_CAT_TAKE: PROC(ENTRY_PTR PTR, RESULT_PTR PTR);
+    DCL P PTR;
+    DCL R PTR;
+    DCL VALUE INT;
+    R = RESULT_PTR;
+    P = ENTRY_PTR + 26;
+    VALUE = P->CBR_VALUE;
+    P = ENTRY_PTR + 27;
+    VALUE = VALUE + P->CBR_VALUE * 256;
+    R->CR_CLUSTER = VALUE;
+    P = ENTRY_PTR + 28;
+    VALUE = P->CBR_VALUE;
+    P = ENTRY_PTR + 29;
+    VALUE = VALUE + P->CBR_VALUE * 256;
+    P = ENTRY_PTR + 30;
+    VALUE = VALUE + P->CBR_VALUE * 65536;
+    R->CR_SIZE = VALUE;
+    R->CR_FOUND = 1;
+END;
+
+SHELL_SAME_NAME: PROC(LEFT_PTR PTR, RIGHT_PTR PTR, SAME_PTR PTR);
+    /* Case-insensitive, because a card holds upper-case short names and
+       nobody types them that way. */
+    DCL L PTR;
+    DCL R PTR;
+    DCL S PTR;
+    DCL A INT;
+    DCL B INT;
+    DCL DONE INT;
+    DCL OK INT;
+    L = LEFT_PTR;
+    R = RIGHT_PTR;
+    OK = 1;
+    DONE = 0;
+    DO WHILE (DONE = 0);
+        A = L->CBR_VALUE;
+        B = R->CBR_VALUE;
+        IF (A > 96) THEN A = A - 32;
+        IF (B > 96) THEN B = B - 32;
+        IF (A = B) THEN DONE = DONE;
+        ELSE DO;
+            OK = 0;
+            DONE = 1;
+        END;
+        IF (A = 0) THEN DONE = 1;
+        L = L + 1;
+        R = R + 1;
+    END;
+    S = SAME_PTR;
+    S->CBR_VALUE = OK;
+END;
+
+SHELL_CAT_SHOW: PROC(SOURCE INT, BUF_PTR PTR, SECTOR_NO INT, SIZE INT);
+    DCL STATUS INT;
+    DCL POS INT;
+    DCL LIMIT INT;
+    DCL P PTR;
+    STATUS = 1;
+    CALL SHELL_SD_READ(SOURCE, SECTOR_NO, BUF_PTR, ADDR(STATUS));
+    IF (STATUS = 0) THEN LIMIT = SIZE;
+    ELSE LIMIT = 0;
+    IF (LIMIT > 512) THEN LIMIT = 512;
+    POS = 0;
+    DO WHILE (POS < LIMIT);
+        P = BUF_PTR + POS;
+        CALL UART_PUTCHAR(P->CBR_VALUE);
+        POS = POS + 1;
+    END;
+    CALL UART_PUTCHAR(10);
+END;
+
+SHELL_SD_COMMAND: PROC(SOURCE INT);
+    /* List the root directory of an SD card, or of the built-in sample.
+       Nothing here assumes a card is there. A missing card, a card that is
+       not formatted, and an unreadable one are each reported as themselves:
+       the whole point of running this on hardware is to find out which. */
+    DCL SECTOR(512) CHAR;
+    DCL STATUS INT;
+    DCL OK INT;
+    DCL SPC INT;
+    DCL RESV INT;
+    DCL NFATS INT;
+    DCL FATSZ INT;
+    DCL ROOTC INT;
+    DCL ROOTSEC INT;
+    DCL SEEN INT;
+    STATUS = 1;
+    CALL SHELL_SD_READ(SOURCE, 0, ADDR(SECTOR), ADDR(STATUS));
+    IF (STATUS = 0) THEN OK = 1;
+    ELSE OK = 0;
+    IF (OK = 0) THEN CALL SHELL_SD_ABSENT;
+    ELSE CALL SHELL_SD_MOUNTED(SOURCE, ADDR(SECTOR));
+END;
+
+SHELL_SD_ABSENT: PROC;
+    ?PRINTLN TEXT(SHELL_SD_NONE);
+END;
+
+SHELL_SD_MOUNTED: PROC(SOURCE INT, BUF_PTR PTR);
+    /* The boot sector is in the buffer. Check it is one before trusting any
+       number in it: 55 AA at the end is what every host looks for, and a card
+       that is present but blank or formatted some other way fails here rather
+       than producing nonsense geometry. */
+    DCL P PTR;
+    DCL OK INT;
+    OK = 1;
+    P = BUF_PTR + 510;
+    IF (P->CBR_VALUE = 85) THEN OK = OK;
+    ELSE OK = 0;
+    P = BUF_PTR + 511;
+    IF (P->CBR_VALUE = 170) THEN OK = OK;
+    ELSE OK = 0;
+    IF (OK = 0) THEN ?PRINTLN TEXT(SHELL_SD_UNFORMATTED);
+    ELSE CALL SHELL_SD_GEOMETRY(SOURCE, BUF_PTR);
+END;
+
+SHELL_SD_GEOMETRY: PROC(SOURCE INT, BUF_PTR PTR);
+    /* Where the root directory starts, from the BIOS parameter block.
+       Every multi-byte field is least significant byte first, which is not
+       this machine's order, so each is assembled a byte at a time. */
+    DCL P PTR;
+    DCL SPC INT;
+    DCL RESV INT;
+    DCL NFATS INT;
+    DCL FATSZ INT;
+    DCL ROOTC INT;
+    DCL ROOTSEC INT;
+    P = BUF_PTR + 13;
+    SPC = P->CBR_VALUE;
+    P = BUF_PTR + 14;
+    RESV = P->CBR_VALUE;
+    P = BUF_PTR + 15;
+    RESV = RESV + P->CBR_VALUE * 256;
+    P = BUF_PTR + 16;
+    NFATS = P->CBR_VALUE;
+    P = BUF_PTR + 36;
+    FATSZ = P->CBR_VALUE;
+    P = BUF_PTR + 37;
+    FATSZ = FATSZ + P->CBR_VALUE * 256;
+    P = BUF_PTR + 38;
+    FATSZ = FATSZ + P->CBR_VALUE * 65536;
+    P = BUF_PTR + 44;
+    ROOTC = P->CBR_VALUE;
+    P = BUF_PTR + 45;
+    ROOTC = ROOTC + P->CBR_VALUE * 256;
+    P = BUF_PTR + 46;
+    ROOTC = ROOTC + P->CBR_VALUE * 65536;
+    /* A FAT32 volume with no sectors per cluster, no FATs, or a root before
+       the first data cluster is not one this can walk. */
+    IF (SPC = 0) THEN CALL SHELL_SD_ABSENT;
+    ELSE DO;
+        ROOTSEC = RESV + NFATS * FATSZ + (ROOTC - 2) * SPC;
+        CALL SHELL_SD_WALK(SOURCE, BUF_PTR, ROOTSEC, SPC);
+    END;
+END;
+
+SHELL_SD_WALK: PROC(SOURCE INT, BUF_PTR PTR, FIRST_SECTOR INT, SECTORS INT);
+    /* Every entry in the root directory's first cluster. A root directory
+       larger than one cluster continues through the FAT, which this does not
+       follow yet; it says so rather than stopping silently. */
+    DCL STATUS INT;
+    DCL SEC INT;
+    DCL COUNT INT;
+    DCL POS INT;
+    DCL DONE INT;
+    DCL P PTR;
+    SEC = FIRST_SECTOR;
+    COUNT = 0;
+    DONE = 0;
+    DO WHILE (DONE = 0);
+        STATUS = 1;
+        CALL SHELL_SD_READ(SOURCE, SEC, BUF_PTR, ADDR(STATUS));
+        IF (STATUS = 0) THEN POS = 0;
+        ELSE DONE = 1;
+        DO WHILE (POS < 16);
+            P = BUF_PTR + POS * 32;
+            IF (P->CBR_VALUE = 0) THEN DONE = 2;
+            ELSE CALL SHELL_SD_ENTRY(P);
+            IF (DONE = 2) THEN POS = 16;
+            ELSE POS = POS + 1;
+        END;
+        SEC = SEC + 1;
+        COUNT = COUNT + 1;
+        IF (COUNT = SECTORS) THEN CALL SHELL_SD_TRUNCATED(DONE);
+        IF (COUNT = SECTORS) THEN DONE = 1;
+    END;
+END;
+
+SHELL_SD_TRUNCATED: PROC(DONE INT);
+    /* The cluster ran out before an end-of-directory marker did. */
+    IF (DONE = 0) THEN ?PRINTLN TEXT(SHELL_SD_MORE);
+END;
+
+SHELL_SD_NAME_INTO: PROC(NAME_PTR PTR, OUT_PTR PTR);
+    /* Render the eleven padded bytes of an 8.3 field as the name a person
+       types, NUL-terminated, so it can be compared as well as printed. */
+    DCL P PTR;
+    DCL O PTR;
+    DCL POS INT;
+    P = NAME_PTR;
+    O = OUT_PTR;
+    POS = 0;
+    DO WHILE (POS < 8);
+        IF (P->CBR_VALUE = 32) THEN POS = POS;
+        ELSE DO;
+            O->CBR_VALUE = P->CBR_VALUE;
+            O = O + 1;
+        END;
+        P = P + 1;
+        POS = POS + 1;
+    END;
+    IF (P->CBR_VALUE = 32) THEN POS = POS;
+    ELSE DO;
+        O->CBR_VALUE = 46;
+        O = O + 1;
+    END;
+    POS = 0;
+    DO WHILE (POS < 3);
+        IF (P->CBR_VALUE = 32) THEN POS = POS;
+        ELSE DO;
+            O->CBR_VALUE = P->CBR_VALUE;
+            O = O + 1;
+        END;
+        P = P + 1;
+        POS = POS + 1;
+    END;
+    O->CBR_VALUE = 0;
+END;
+
+SHELL_SD_NAME: PROC(NAME_PTR PTR);
+    /* One 8.3 name from the eleven bytes a directory entry holds, through the
+       same builder that matching uses: a name that lists differently from the
+       way it is typed cannot be opened. */
+    DCL RENDERED(14) CHAR;
+    CALL SHELL_SD_NAME_INTO(NAME_PTR, ADDR(RENDERED));
+    CALL UART_PUTS(ADDR(RENDERED));
+END;
+
+SHELL_SD_ENTRY: PROC(ENTRY_PTR PTR);
+    /* One directory entry, or nothing if it is not a name a person wants: a
+       deleted entry, the volume label, or one of the extra entries a long
+       filename is stored across. */
+    DCL P PTR;
+    DCL FIRST INT;
+    DCL ATTR INT;
+    DCL SHOW INT;
+    DCL SIZE INT;
+    P = ENTRY_PTR;
+    FIRST = P->CBR_VALUE;
+    P = ENTRY_PTR + 11;
+    ATTR = P->CBR_VALUE;
+    SHOW = 1;
+    IF (FIRST = 229) THEN SHOW = 0;
+    IF (ATTR = 15) THEN SHOW = 0;
+    IF (ATTR - (ATTR / 16) * 16 > 7) THEN SHOW = 0;
+    IF (SHOW = 1) THEN CALL SHELL_SD_SHOW(ENTRY_PTR, ATTR);
+END;
+
+SHELL_SD_SHOW: PROC(ENTRY_PTR PTR, ATTR INT);
+    DCL P PTR;
+    DCL SIZE INT;
+    DCL IS_DIR INT;
+    CALL SHELL_SD_NAME(ENTRY_PTR);
+    IS_DIR = (ATTR / 16) - (ATTR / 32) * 2;
+    IF (IS_DIR = 1) THEN CALL UART_PUTS(ADDR(SHELL_SD_DIR));
+    ELSE CALL SHELL_SD_SIZE(ENTRY_PTR);
+    CALL UART_PUTCHAR(10);
+END;
+
+SHELL_SD_SIZE: PROC(ENTRY_PTR PTR);
+    /* Bytes 28..31 hold the size, least significant first. The top byte is
+       dropped: a 24-bit machine cannot hold a size above sixteen megabytes,
+       and a file that large is not one this reads. */
+    DCL P PTR;
+    DCL SIZE INT;
+    P = ENTRY_PTR + 28;
+    SIZE = P->CBR_VALUE;
+    P = ENTRY_PTR + 29;
+    SIZE = SIZE + P->CBR_VALUE * 256;
+    P = ENTRY_PTR + 30;
+    SIZE = SIZE + P->CBR_VALUE * 65536;
+    CALL UART_PUTCHAR(32);
+    CALL SHELL_PRINT_INT(SIZE);
+END;
+

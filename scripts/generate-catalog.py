@@ -239,7 +239,7 @@ def render_scheduled(entries: list[dict], manifest: Path) -> str:
     shell_strings = {
         "SHELL_DF_TEXT": f"catalog entries={len(entries)} images={len(images)} bytes={image_bytes}",
         "SHELL_HELP_1": "help ls dir ps run bg sync kill reboot",
-        "SHELL_HELP_2": "df du mem stat uname sdls",
+        "SHELL_HELP_2": "df du mem stat uname sdls cat",
         "SHELL_UNAME_TEXT": "SWTOS COR24 0.1",
         "SHELL_CPU_HOG_NAME": HOG_NAME,
         "SHELL_STAT_KIND": " kind=",
@@ -317,11 +317,12 @@ def render_scheduled(entries: list[dict], manifest: Path) -> str:
         "SHELL_HELLO_PROMPT": "Press a key here to exit",
         "SHELL_UPTIME_TEXT": "Uptime",
         "SHELL_CLOCK_TEXT": "Clock",
+        "SHELL_FILES_KEYS": "[r refresh  c card  s sample  Esc quit]",
         "SHELL_SD_NONE": "no valid SD card detected",
         "SHELL_SD_UNFORMATTED": "SD card present but not FAT32",
         "SHELL_SD_DIR": " <dir>",
         "SHELL_SD_MORE": "... more entries than one cluster holds",
-        "SHELL_TOPIC_SDLS": "sdls lists the SD card root directory",
+        "SHELL_TOPIC_SDLS": "sdls lists the SD card, sdsample a built-in one",
         "SHELL_SYNC_NOTE": "no free slot: running it here",
         "SHELL_FG_HINT": "[Ctrl-[ to end]",
         "SHELL_KILL_NO_SUCH": "no such endpoint",
@@ -344,7 +345,68 @@ def render_scheduled(entries: list[dict], manifest: Path) -> str:
         encoded = ",".join(str(byte) for byte in value.encode("ascii"))
         lines.extend([f"_{label}:", f"        .byte   {encoded},0"])
     lines.append("")
+    boot, data, first, count = sample_volume()
+    lines.extend([
+        "; The sample volume's slice: which sector the data region starts at,",
+        "; and how many of its sectors are carried here.",
+        "        .globl  _SHELL_SAMPLE_FIRST",
+        "_SHELL_SAMPLE_FIRST:",
+        f"        .word   {first}",
+        "        .globl  _SHELL_SAMPLE_COUNT",
+        "_SHELL_SAMPLE_COUNT:",
+        f"        .word   {count}",
+    ])
+    for label, block in {"SHELL_SAMPLE_BOOT": boot, "SHELL_SAMPLE_DATA": data}.items():
+        lines.append(f"_{label}:")
+        for offset in range(0, len(block), 16):
+            row = ",".join(str(byte) for byte in block[offset : offset + 16])
+            lines.append(f"        .byte   {row}")
+    lines.append("")
     return "\n".join(lines)
+
+
+def sample_volume() -> tuple[bytes, bytes, int, int]:
+    """A real FAT32 volume, sliced down to the sectors worth carrying.
+
+    Built by the same code that formats a card, so the boot sector, the
+    directories and the file data are all the real thing -- what the shell
+    walks here is what it will meet on hardware, and only where the bytes come
+    from differs.
+
+    A sliced volume rather than a whole one: a legal FAT32 filesystem needs
+    65525 clusters and so at least 32 MiB, which is not something to carry in a
+    1 MB image to show four names. The slice is the boot sector and the first
+    few data sectors, which is where the root directory, the subdirectories and
+    these small files all land. Nothing reads the FAT, because no chain here is
+    longer than one cluster.
+
+    Returns (boot sector, data sectors, first data sector, sector count).
+    """
+    import importlib.util
+
+    spec = importlib.util.spec_from_file_location(
+        "swtos_mkfat32", ROOT / "scripts" / "mkfat32.py"
+    )
+    mkfat32 = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(mkfat32)
+
+    volume, image = mkfat32.build(
+        None, 1, 1, "SAMPLE",
+        [("HELLO.TXT", b"Hello from the SD card"),
+         ("README.TXT", b"SWTOS test volume")],
+        [("APPS", [("COUNT.TXT", b"a program would live here")]),
+         ("DOCS", [("NOTES.TXT", b"SWTOS reads this from FAT32")])],
+        allow_small=True,
+    )
+    first = volume.data_start
+    count = 8
+    data = image[first * 512 : (first + count) * 512]
+    return image[:512], data, first, count
+
+
+def sample_volume_sectors() -> dict[str, bytes]:
+    boot, data, _, _ = sample_volume()
+    return {"SHELL_SAMPLE_BOOT": boot, "SHELL_SAMPLE_DATA": data}
 
 
 def render_shell(entries: list[dict], manifest: Path) -> str:

@@ -26,6 +26,7 @@ RECIPES=(
     shell-foreground
     shell-sync-run
     sd-listing
+    files-app
     acceptance-report-smoke
     provider-config-smoke
     proc-desc-abi-smoke

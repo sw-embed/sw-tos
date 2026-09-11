@@ -2614,6 +2614,14 @@ _plsw_mon_trampoline:
         la      r2,_halt
         jmp     (r2)
 
+_plsw_files_trampoline:
+        push    r0
+        la      r2,_PLSW_FILES
+        jal     r1,(r2)
+        add     sp,3
+        la      r2,_halt
+        jmp     (r2)
+
 ; Call the per-process loaded entry and terminate its child process.
 _embedded_loader_trampoline:
         la      r2,_current_proc

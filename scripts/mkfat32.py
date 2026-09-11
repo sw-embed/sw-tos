@@ -73,7 +73,8 @@ def directory_entry(name: str, attr: int, cluster: int, size: int) -> bytes:
 
 
 class Fat32:
-    def __init__(self, sectors: int, sectors_per_cluster: int, label: str):
+    def __init__(self, sectors: int, sectors_per_cluster: int, label: str,
+                 allow_small: bool = False):
         self.sectors_per_cluster = sectors_per_cluster
         self.reserved = 32
         # Solve for a FAT big enough to describe the clusters that remain once
@@ -86,7 +87,7 @@ class Fat32:
             clusters = (usable - fat_sectors * 2) // sectors_per_cluster
         self.fat_sectors = ((clusters + 2) * 4 + SECTOR - 1) // SECTOR
         self.clusters = clusters
-        if clusters < MIN_CLUSTERS:
+        if clusters < MIN_CLUSTERS and not allow_small:
             raise ValueError(
                 f"{clusters} clusters is below FAT32's {MIN_CLUSTERS} minimum; "
                 f"use a larger image or fewer sectors per cluster"
@@ -181,13 +182,19 @@ class Fat32:
         return bytes(out + table + table + self.data)
 
 
-def build(path: Path, size_mib: int, sectors_per_cluster: int, label: str,
-          files: list[tuple[str, bytes]], directories: list[str]) -> Fat32:
-    volume = Fat32((size_mib * 2**20) // SECTOR, sectors_per_cluster, label)
+def build(path: Path | None, size_mib: int, sectors_per_cluster: int, label: str,
+          files: list[tuple[str, bytes]],
+          directories: list[str] | list[tuple[str, list[tuple[str, bytes]]]],
+          allow_small: bool = False) -> tuple[Fat32, bytes]:
+    """Format a volume. A directory may carry files of its own, given as
+    (name, [(filename, contents), ...]) instead of a bare name."""
+    volume = Fat32((size_mib * 2**20) // SECTOR, sectors_per_cluster, label,
+                   allow_small)
     root = volume.allocate(1)
     entries = bytearray(directory_entry(label, ATTR_VOLUME_ID, 0, 0))
 
-    for name in directories:
+    for item in directories:
+        name, contents = item if isinstance(item, tuple) else (item, [])
         cluster = volume.allocate(1)
         # Every subdirectory carries "." and ".." as its first two entries, and
         # a host fsck reports a directory without them as damaged. ".." names
@@ -195,6 +202,11 @@ def build(path: Path, size_mib: int, sectors_per_cluster: int, label: str,
         body = bytearray()
         body += directory_entry(".", ATTR_DIRECTORY, cluster, 0)
         body += directory_entry("..", ATTR_DIRECTORY, 0, 0)
+        for child, payload in contents:
+            child_cluster = volume.allocate(len(payload)) if payload else 0
+            if payload:
+                volume.write_cluster_chain(child_cluster, payload)
+            body += directory_entry(child, 0x20, child_cluster, len(payload))
         per = volume.sectors_per_cluster * SECTOR
         volume.write_cluster_chain(cluster, bytes(body).ljust(per, b"\0"))
         entries += directory_entry(name, ATTR_DIRECTORY, cluster, 0)
@@ -209,9 +221,11 @@ def build(path: Path, size_mib: int, sectors_per_cluster: int, label: str,
     if len(entries) > per:
         raise ValueError("root directory needs more than one cluster")
     volume.write_cluster_chain(root, bytes(entries).ljust(per, b"\0"))
-    path.parent.mkdir(parents=True, exist_ok=True)
-    path.write_bytes(volume.image(root))
-    return volume
+    image = volume.image(root)
+    if path is not None:
+        path.parent.mkdir(parents=True, exist_ok=True)
+        path.write_bytes(image)
+    return volume, image
 
 
 def main() -> int:
@@ -236,8 +250,8 @@ def main() -> int:
         files.append((name, Path(source).read_bytes()))
 
     try:
-        volume = build(args.image, args.size_mib, args.sectors_per_cluster,
-                       args.label, files, args.dir)
+        volume, _ = build(args.image, args.size_mib, args.sectors_per_cluster,
+                          args.label, files, args.dir)
     except ValueError as error:
         print(f"mkfat32: {error}", file=sys.stderr)
         return 1

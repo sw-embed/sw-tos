@@ -59,6 +59,8 @@ Run one with `just <recipe>`.
 | Reclaim the space of finished programs | `Ctrl-O c` | `tui-soak`, unit test |
 | Kill a process in a slot that once held another | any `kill`, after the slot has been reused | `debugger-kill-acceptance` |
 | List an SD card's root directory | `sdls` | `sd-listing` |
+| List a card's worth of entries with no card | `sdsample` | `sd-listing` |
+| Browse files in a pane of their own | `bg files`, then `r` `c` `s` `Esc` | `files-app` |
 | Tell an empty card slot from an unformatted card | `sdls` with no card | `sd-listing` |
 | See where a process's memory is, not just how much | `mem -p` | `scheduled-memory-smoke` |
 | Get back a shell that has stopped responding | `Ctrl-O k`, debugger `!kill 1`, or `kill 1` at a working prompt | `shell-restart`, `debugger-kill-acceptance` |
@@ -131,6 +133,9 @@ No recipe covers these yet. They are real behaviours, not hypotheticals.
   that repository rather than made from here. Nothing in the design prevents
   the combination: the SPI device is driven by the guest through memory-mapped
   registers and the terminal bridges the UART, and the two share no state.
+  Meanwhile `sdsample` reads a built-in volume instead of a card, so the file
+  listing is usable in the windowed frontend today; it runs the same walk, and
+  the test requires the two listings to be identical.
 - **`sdls` reads one cluster of the root directory.** A root larger than one
   cluster continues through the FAT, which is not followed yet; the listing
   says so rather than stopping silently. Subdirectories are listed but cannot

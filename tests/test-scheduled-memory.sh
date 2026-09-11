@@ -13,7 +13,7 @@ FAIL_MANIFEST="$FAIL_BUILD/catalog.toml"
 
 output=$($EMU --load-binary "$OUT_DIR/program.bin@0" --entry 0 \
     -u 'mem\nmem -p\n5\nmem\nmem -r\nmem\n' \
-    --speed 0 -n 4000000 --quiet 2>/dev/null \
+    --speed 0 -n 16000000 --quiet 2>/dev/null \
     | sed '/^Entry point:/d')
 
 summary_count=$(grep -c 'total=1048576 image=' <<<"$output")

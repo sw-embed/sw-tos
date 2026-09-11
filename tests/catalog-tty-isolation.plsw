@@ -33,5 +33,11 @@ PLSW_MON: PROC(STATE_PTR PTR);
     CALL TASK_EXIT;
 END;
 
+PLSW_FILES: PROC(STATE_PTR PTR);
+    /* The kernel's catalog names an entry point for every program,
+       and this image has no filesystem module. */
+    CALL TASK_EXIT;
+END;
+
 PLSW_UPTIME: PROC(STATE_PTR PTR); CALL TASK_EXIT; END;
 PLSW_CLOCK: PROC(STATE_PTR PTR); CALL TASK_EXIT; END;

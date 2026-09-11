@@ -305,7 +305,11 @@ scheduled-shell-interactive: plsw-system-interactive
 plsw-system-interactive: scheduled-shell-build
     ./scripts/swtos-terminal.py --image build/scheduled-shell/program.bin
 
-# Run the scheduled shell with the generated W25Q32 media attached
+# The seed reaches the emulator arm that attaches SPI devices, and that arm
+# never enters terminal mode: no input is read, and Ctrl-C is a raw byte with
+# nothing listening, so the session must be killed from another terminal. Fix
+# requested in docs/emulator-feature-requests.md.
+# HANGS -- not interactive despite the name. Use sd-sample-interactive.
 plsw-system-spi-interactive: scheduled-shell-spi-build
     ./scripts/swtos-terminal.py --image build/scheduled-shell-spi/program.bin --lgo-seed build/scheduled-shell-spi/seed.lgo --spi-media build/catalog-images/swtos-storage.bin
 
@@ -331,11 +335,20 @@ sd-demo: scheduled-shell-build sd-card
         --spi-device "sdcard@cs=2?file=work/sd/swtos-card.img" \
         -u 'sdls\n' --speed 0 -n 60000000 --quiet
 
-# List an emulated card's root directory, and report a slot with no card in it
+# Interactive shell with the built-in sample volume. No card, no seed, so the
+# emulator takes the arm that has a terminal. Type sdsample to list it.
+sd-sample-interactive: scheduled-shell-build
+    ./scripts/swtos-terminal.py --image build/scheduled-shell/program.bin
+
+# Run the file listing as a pane app: switch sources and leave on Escape
+files-app: scheduled-shell-build cor24-debugger-build
+    python3 tests/test-files-app.py
+
+# List an emulated card, list the built-in sample, and report an empty slot
 sd-listing: scheduled-shell-build
     ./tests/test-sd-listing.sh
 
-# Run the scheduled shell with the generated storage image on emulated SD
+# HANGS like plsw-system-spi-interactive above. Use sd-sample-interactive.
 plsw-system-sd-interactive: scheduled-shell-sd-build
     ./scripts/swtos-terminal.py --image build/scheduled-shell-sd/program.bin --lgo-seed build/scheduled-shell-sd/seed.lgo --sd-media build/catalog-images/swtos-storage.bin
 

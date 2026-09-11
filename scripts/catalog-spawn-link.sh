@@ -14,7 +14,12 @@ EMU="$ROOT_DIR/scripts/swtos-emu"
 META_GEN="$TOOL_DIR/meta-gen"
 LINK="$TOOL_DIR/link24"
 PLSW="$ROOT_DIR/tools/plsw.lgo"
-MODULES=(kernel protocol app)
+# app is last because _swtos_image_end is appended to it, and that symbol is
+# where the heap and the stack arena begin. A module linked after it would sit
+# above the marker and be overwritten by the first allocation -- which is what
+# happened: the shell's own stack landed on the filesystem module's code, and
+# the first call into it halted on whatever the stack had written there.
+MODULES=(kernel protocol sdfs app)
 
 # Generated modules are concatenations and compiler output that live under
 # build/. Without this banner build/*/kernel.raw.s opens with the header of
@@ -41,60 +46,67 @@ else
 fi
 scratch=$(mktemp -d /tmp/swtos-catalog-spawn-XXXXXX)
 trap 'rm -rf "$scratch"' EXIT
-{
-    printf 'c\n'
-    if [ "$(basename "$PLSW_SOURCE")" = "catalog-shell.plsw" ]; then
-        sed -n 'p' "$SHELL_CATALOG"
-    fi
-    sed -n 'p' "$PLSW_SOURCE"
-    printf '\x04'
-} > "$scratch/input.bin"
 
 # The compiler is a COR24 program, so it runs under an instruction budget, and
 # the budget has to grow with the source it compiles. This one passed half a
-# billion in September 2026. PLSW_BUDGET can be set lower to prove the check
-# below still catches a truncated compile.
+# billion in September 2026. PLSW_BUDGET can be set lower to prove the
+# truncation check below still catches a half-written compile.
 PLSW_BUDGET=${PLSW_BUDGET:-2000000000}
-compiler_output=$($EMU --lgo "$PLSW" --uart-file "$scratch/input.bin" \
-    --quiet --speed 0 -n "$PLSW_BUDGET" -t 600 2>&1)
-# Here-strings, not a pipe. Under `set -o pipefail`, `echo "$x" | grep -q p`
-# reports failure when the pattern IS found: grep exits at the first match and
-# closes the pipe, echo dies with EPIPE, and pipefail takes echo's status for
-# the pipeline. That inverts every test below -- a real compile error would be
-# read as a clean compile, and a complete compile as a truncated one.
-if grep -q 'compilation failed\|COMPILE ERROR\|ERROR:' <<<"$compiler_output"; then
-    echo "PL/SW task compilation failed:" >&2
-    echo "$compiler_output" >&2
-    exit 1
+
+# Compile one .plsw into one .raw.s. One invocation per source, which is the
+# point: the compiler's symbol table is per compilation, so splitting a source
+# in two gives each half its own table, and link24 resolves across them by name
+# afterwards.
+compile_plsw() {
+    local source="$1" output="$2" banner="$3" prefix="$4"
+    local input out
+    input="$scratch/$(basename "$source").bin"
+    {
+        printf 'c\n'
+        if [ -n "$prefix" ]; then
+            sed -n 'p' "$prefix"
+        fi
+        sed -n 'p' "$source"
+        printf '\x04'
+    } > "$input"
+
+    out=$($EMU --lgo "$PLSW" --uart-file "$input" \
+        --quiet --speed 0 -n "$PLSW_BUDGET" -t 600 2>&1)
+
+    # Here-strings, not pipes: under `set -o pipefail`, `echo "$x" | grep -q p`
+    # reports failure when the pattern IS found, because grep exits at the
+    # first match, echo dies with EPIPE, and pipefail takes echo's status.
+    if grep -q 'compilation failed\|COMPILE ERROR\|ERROR:' <<<"$out"; then
+        echo "PL/SW compilation failed for $source:" >&2
+        echo "$out" >&2
+        exit 1
+    fi
+    # The closing marker is the only thing that says the compiler finished. A
+    # compile that stops early leaves assembly that is not obviously
+    # half-written: it fails much later as an undefined label, at whatever line
+    # the emit stopped on, which reads like a fault in the source.
+    if ! grep -q -- '--- end assembly ---' <<<"$out"; then
+        echo "PL/SW compilation of $source did not finish: no end-of-assembly" >&2
+        echo "marker, so its output is truncated. If it ran out of instructions," >&2
+        echo "raise PLSW_BUDGET (currently $PLSW_BUDGET) in $0." >&2
+        tail -3 <<<"$out" >&2
+        exit 1
+    fi
+    generated_banner "$banner" > "$output"
+    sed -n '/--- generated assembly ---/,/--- end assembly ---/{/--- generated assembly ---/d;/--- end assembly ---/d;p;}' \
+        <<<"$out" >> "$output"
+}
+
+if [ "$(basename "$PLSW_SOURCE")" = "catalog-shell.plsw" ]; then
+    compile_plsw "$PLSW_SOURCE" "$OUT_DIR/app.raw.s" \
+        "$PLSW_SOURCE compiled by tools/plsw.lgo" "$SHELL_CATALOG"
+    compile_plsw "$ROOT_DIR/tests/catalog-sdfs.plsw" "$OUT_DIR/sdfs.raw.s" \
+        "tests/catalog-sdfs.plsw compiled by tools/plsw.lgo" ""
+else
+    compile_plsw "$PLSW_SOURCE" "$OUT_DIR/app.raw.s" \
+        "$PLSW_SOURCE compiled by tools/plsw.lgo" ""
+    generated_banner "no filesystem module for $PLSW_SOURCE" > "$OUT_DIR/sdfs.raw.s"
 fi
-# A compiler that runs out of instructions stops mid-emit, and the half-written
-# assembly it leaves behind is not obviously half-written: it fails much later
-# as an undefined label, at whatever line the emit happened to stop on, which
-# reads like a fault in the source that was being compiled.
-# The compiler brackets its assembly, and the closing marker is the only thing
-# that says it finished. A compile that stops early -- out of instructions, out
-# of wall clock, halted -- stops mid-emit, and the half-written assembly it
-# leaves behind is not obviously half-written: it fails much later as an
-# undefined label, at whatever line the emit happened to stop on, which reads
-# like a fault in the source being compiled rather than a truncated file.
-#
-# Asking whether it finished beats asking why it might not have. An earlier
-# version of this check compared the instruction count against the budget,
-# which reported a clean compile as a failure the first time one finished just
-# over the old ceiling.
-if ! grep -q -- '--- end assembly ---' <<<"$compiler_output"; then
-    echo "PL/SW compilation did not finish: no end-of-assembly marker." >&2
-    echo "Its output is truncated, so the build would fail later as an" >&2
-    echo "undefined label. If it ran out of instructions, raise PLSW_BUDGET" >&2
-    echo "(currently $PLSW_BUDGET) in $0." >&2
-    echo "$compiler_output" | tail -3 >&2
-    exit 1
-fi
-generated_banner "$PLSW_SOURCE compiled by tools/plsw.lgo" \
-    > "$OUT_DIR/app.raw.s"
-echo "$compiler_output" | sed -n \
-    '/--- generated assembly ---/,/--- end assembly ---/{/--- generated assembly ---/d;/--- end assembly ---/d;p;}' \
-    >> "$OUT_DIR/app.raw.s"
 printf '%s\n' \
     '        .globl  _swtos_image_end' \
     '_swtos_image_end:' \
@@ -141,12 +153,13 @@ for i in "${!MODULES[@]}"; do
 done
 
 "$LINK" --entry kernel --dir "$OUT_DIR" \
-    --map "$OUT_DIR/program.map" kernel protocol app \
+    --map "$OUT_DIR/program.map" kernel protocol sdfs app \
     -o "$OUT_DIR/program.bin"
 python3 "$ROOT_DIR/scripts/generate-debug-info.py" \
     --binary "$OUT_DIR/program.bin" --map "$OUT_DIR/program.map" \
     --listing "$OUT_DIR/kernel.lst" --listing "$OUT_DIR/protocol.lst" \
-    --listing "$OUT_DIR/app.lst" --output "$OUT_DIR/program.debug.json"
+    --listing "$OUT_DIR/app.lst" --listing "$OUT_DIR/sdfs.lst" \
+    --output "$OUT_DIR/program.debug.json"
 "$ROOT_DIR/scripts/cor24-bin-to-lgo.py" \
     "$OUT_DIR/program.bin" "$OUT_DIR/program.lgo" \
     --load-address 0 --entry-address 0

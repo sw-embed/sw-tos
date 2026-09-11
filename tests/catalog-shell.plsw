@@ -40,6 +40,14 @@ DCL 1 SHELL_PROCESS_STATE BASED,
     3 SPS_CLOCK_DESC PTR,
     3 SPS_EMBEDDED_DESC PTR,
     3 SPS_UPTIME_DESC PTR;
+DCL 1 CAT_RESULT BASED,
+    3 CR_FOUND INT,
+    3 CR_CLUSTER INT,
+    3 CR_SIZE INT;
+DCL 1 CAT_GEOMETRY BASED,
+    3 CG_SPC INT,
+    3 CG_ROOT_SECTOR INT,
+    3 CG_DATA_START INT;
 DCL 1 CLOCK_BYTE_REF BASED,
     3 CBR_VALUE BYTE;
 DCL 1 SHELL_PROGRAM_DESC BASED,
@@ -52,7 +60,7 @@ DCL 1 SHELL_PROGRAM_DESC BASED,
     3 SPD_STATE_WORDS INT,
     3 SPD_FLAGS INT;
 DCL SHELL_HELP_1(39) CHAR INIT('help ls dir ps run bg sync kill reboot');
-DCL SHELL_HELP_2(30) CHAR INIT('df du mem stat uname sdls');
+DCL SHELL_HELP_2(34) CHAR INIT('df du mem stat uname sdls cat');
 DCL SHELL_UNAME_TEXT(17) CHAR INIT('SWTOS COR24 0.1');
 DCL SHELL_CPU_HOG_NAME(8) CHAR INIT('cpu-hog');
 DCL SHELL_MON_NAME(4) CHAR INIT('mon');
@@ -65,11 +73,16 @@ DCL SHELL_HELLO_TEXT(6) CHAR INIT('Hello');
 DCL SHELL_HELLO_PROMPT(25) CHAR INIT('Press a key here to exit');
 DCL SHELL_UPTIME_TEXT(7) CHAR INIT('Uptime');
 DCL SHELL_CLOCK_TEXT(6) CHAR INIT('Clock');
+DCL SHELL_SAMPLE_BOOT(512) CHAR;
+DCL SHELL_SAMPLE_DATA(4096) CHAR;
+DCL SHELL_SAMPLE_FIRST INT;
+DCL SHELL_SAMPLE_COUNT INT;
+DCL SHELL_FILES_KEYS(40) CHAR INIT('[r refresh  c card  s sample  Esc quit]');
 DCL SHELL_SD_NONE(26) CHAR INIT('no valid SD card detected');
 DCL SHELL_SD_UNFORMATTED(30) CHAR INIT('SD card present but not FAT32');
 DCL SHELL_SD_DIR(7) CHAR INIT(' <dir>');
 DCL SHELL_SD_MORE(41) CHAR INIT('... more entries than one cluster holds');
-DCL SHELL_TOPIC_SDLS(38) CHAR INIT('sdls lists the SD card root directory');
+DCL SHELL_TOPIC_SDLS(44) CHAR INIT('sdls lists the SD card, sdsample a built-in one');
 DCL SHELL_FG_HINT(19) CHAR INIT('[Ctrl-[ to end]');
 DCL SHELL_MEM_AT(2) CHAR INIT('@');
 DCL SHELL_MEM_IMAGE(8) CHAR INIT(' image=');
@@ -248,200 +261,6 @@ SHELL_MEM_SUMMARY: PROC;
     CALL UART_PUTS(ADDR(SHELL_MEM_SLOTS)); CALL SHELL_PRINT_INT(MEMORY_INFO.SMI_USED_SLOTS);
     CALL UART_PUTCHAR(47); CALL SHELL_PRINT_INT(MEMORY_INFO.SMI_TOTAL_SLOTS);
     CALL UART_PUTCHAR(10);
-END;
-
-SHELL_SD_COMMAND: PROC;
-    /* List the root directory of an SD card.
-       Nothing here assumes a card is there. A missing card, a card that is
-       not formatted, and an unreadable one are each reported as themselves:
-       the whole point of running this on hardware is to find out which. */
-    DCL SECTOR(512) CHAR;
-    DCL STATUS INT;
-    DCL OK INT;
-    DCL SPC INT;
-    DCL RESV INT;
-    DCL NFATS INT;
-    DCL FATSZ INT;
-    DCL ROOTC INT;
-    DCL ROOTSEC INT;
-    DCL SEEN INT;
-    STATUS = 1;
-    CALL SPI_SD_READ_SECTOR(0, ADDR(SECTOR), ADDR(STATUS));
-    IF (STATUS = 0) THEN OK = 1;
-    ELSE OK = 0;
-    IF (OK = 0) THEN CALL SHELL_SD_ABSENT;
-    ELSE CALL SHELL_SD_MOUNTED(ADDR(SECTOR));
-END;
-
-SHELL_SD_ABSENT: PROC;
-    ?PRINTLN TEXT(SHELL_SD_NONE);
-END;
-
-SHELL_SD_MOUNTED: PROC(BUF_PTR PTR);
-    /* The boot sector is in the buffer. Check it is one before trusting any
-       number in it: 55 AA at the end is what every host looks for, and a card
-       that is present but blank or formatted some other way fails here rather
-       than producing nonsense geometry. */
-    DCL P PTR;
-    DCL OK INT;
-    OK = 1;
-    P = BUF_PTR + 510;
-    IF (P->CBR_VALUE = 85) THEN OK = OK;
-    ELSE OK = 0;
-    P = BUF_PTR + 511;
-    IF (P->CBR_VALUE = 170) THEN OK = OK;
-    ELSE OK = 0;
-    IF (OK = 0) THEN ?PRINTLN TEXT(SHELL_SD_UNFORMATTED);
-    ELSE CALL SHELL_SD_GEOMETRY(BUF_PTR);
-END;
-
-SHELL_SD_GEOMETRY: PROC(BUF_PTR PTR);
-    /* Where the root directory starts, from the BIOS parameter block.
-       Every multi-byte field is least significant byte first, which is not
-       this machine's order, so each is assembled a byte at a time. */
-    DCL P PTR;
-    DCL SPC INT;
-    DCL RESV INT;
-    DCL NFATS INT;
-    DCL FATSZ INT;
-    DCL ROOTC INT;
-    DCL ROOTSEC INT;
-    P = BUF_PTR + 13;
-    SPC = P->CBR_VALUE;
-    P = BUF_PTR + 14;
-    RESV = P->CBR_VALUE;
-    P = BUF_PTR + 15;
-    RESV = RESV + P->CBR_VALUE * 256;
-    P = BUF_PTR + 16;
-    NFATS = P->CBR_VALUE;
-    P = BUF_PTR + 36;
-    FATSZ = P->CBR_VALUE;
-    P = BUF_PTR + 37;
-    FATSZ = FATSZ + P->CBR_VALUE * 256;
-    P = BUF_PTR + 38;
-    FATSZ = FATSZ + P->CBR_VALUE * 65536;
-    P = BUF_PTR + 44;
-    ROOTC = P->CBR_VALUE;
-    P = BUF_PTR + 45;
-    ROOTC = ROOTC + P->CBR_VALUE * 256;
-    P = BUF_PTR + 46;
-    ROOTC = ROOTC + P->CBR_VALUE * 65536;
-    /* A FAT32 volume with no sectors per cluster, no FATs, or a root before
-       the first data cluster is not one this can walk. */
-    IF (SPC = 0) THEN CALL SHELL_SD_ABSENT;
-    ELSE DO;
-        ROOTSEC = RESV + NFATS * FATSZ + (ROOTC - 2) * SPC;
-        CALL SHELL_SD_WALK(BUF_PTR, ROOTSEC, SPC);
-    END;
-END;
-
-SHELL_SD_WALK: PROC(BUF_PTR PTR, FIRST_SECTOR INT, SECTORS INT);
-    /* Every entry in the root directory's first cluster. A root directory
-       larger than one cluster continues through the FAT, which this does not
-       follow yet; it says so rather than stopping silently. */
-    DCL STATUS INT;
-    DCL SEC INT;
-    DCL COUNT INT;
-    DCL POS INT;
-    DCL DONE INT;
-    DCL P PTR;
-    SEC = FIRST_SECTOR;
-    COUNT = 0;
-    DONE = 0;
-    DO WHILE (DONE = 0);
-        STATUS = 1;
-        CALL SPI_SD_READ_SECTOR(SEC, BUF_PTR, ADDR(STATUS));
-        IF (STATUS = 0) THEN POS = 0;
-        ELSE DONE = 1;
-        DO WHILE (POS < 16);
-            P = BUF_PTR + POS * 32;
-            IF (P->CBR_VALUE = 0) THEN DONE = 2;
-            ELSE CALL SHELL_SD_ENTRY(P);
-            IF (DONE = 2) THEN POS = 16;
-            ELSE POS = POS + 1;
-        END;
-        SEC = SEC + 1;
-        COUNT = COUNT + 1;
-        IF (COUNT = SECTORS) THEN CALL SHELL_SD_TRUNCATED(DONE);
-        IF (COUNT = SECTORS) THEN DONE = 1;
-    END;
-END;
-
-SHELL_SD_TRUNCATED: PROC(DONE INT);
-    /* The cluster ran out before an end-of-directory marker did. */
-    IF (DONE = 0) THEN ?PRINTLN TEXT(SHELL_SD_MORE);
-END;
-
-SHELL_SD_NAME: PROC(NAME_PTR PTR);
-    /* One 8.3 name from the eleven bytes a directory entry holds. The stem is
-       padded with spaces and the extension likewise, and a short name may not
-       contain a space, so a space is padding wherever it appears. */
-    DCL P PTR;
-    DCL POS INT;
-    P = NAME_PTR;
-    POS = 0;
-    DO WHILE (POS < 8);
-        IF (P->CBR_VALUE = 32) THEN POS = POS;
-        ELSE CALL UART_PUTCHAR(P->CBR_VALUE);
-        P = P + 1;
-        POS = POS + 1;
-    END;
-    IF (P->CBR_VALUE = 32) THEN POS = POS;
-    ELSE CALL UART_PUTCHAR(46);
-    POS = 0;
-    DO WHILE (POS < 3);
-        IF (P->CBR_VALUE = 32) THEN POS = POS;
-        ELSE CALL UART_PUTCHAR(P->CBR_VALUE);
-        P = P + 1;
-        POS = POS + 1;
-    END;
-END;
-
-SHELL_SD_ENTRY: PROC(ENTRY_PTR PTR);
-    /* One directory entry, or nothing if it is not a name a person wants: a
-       deleted entry, the volume label, or one of the extra entries a long
-       filename is stored across. */
-    DCL P PTR;
-    DCL FIRST INT;
-    DCL ATTR INT;
-    DCL SHOW INT;
-    DCL SIZE INT;
-    P = ENTRY_PTR;
-    FIRST = P->CBR_VALUE;
-    P = ENTRY_PTR + 11;
-    ATTR = P->CBR_VALUE;
-    SHOW = 1;
-    IF (FIRST = 229) THEN SHOW = 0;
-    IF (ATTR = 15) THEN SHOW = 0;
-    IF (ATTR - (ATTR / 16) * 16 > 7) THEN SHOW = 0;
-    IF (SHOW = 1) THEN CALL SHELL_SD_SHOW(ENTRY_PTR, ATTR);
-END;
-
-SHELL_SD_SHOW: PROC(ENTRY_PTR PTR, ATTR INT);
-    DCL P PTR;
-    DCL SIZE INT;
-    DCL IS_DIR INT;
-    CALL SHELL_SD_NAME(ENTRY_PTR);
-    IS_DIR = (ATTR / 16) - (ATTR / 32) * 2;
-    IF (IS_DIR = 1) THEN CALL UART_PUTS(ADDR(SHELL_SD_DIR));
-    ELSE CALL SHELL_SD_SIZE(ENTRY_PTR);
-    CALL UART_PUTCHAR(10);
-END;
-
-SHELL_SD_SIZE: PROC(ENTRY_PTR PTR);
-    /* Bytes 28..31 hold the size, least significant first. The top byte is
-       dropped: a 24-bit machine cannot hold a size above sixteen megabytes,
-       and a file that large is not one this reads. */
-    DCL P PTR;
-    DCL SIZE INT;
-    P = ENTRY_PTR + 28;
-    SIZE = P->CBR_VALUE;
-    P = ENTRY_PTR + 29;
-    SIZE = SIZE + P->CBR_VALUE * 256;
-    P = ENTRY_PTR + 30;
-    SIZE = SIZE + P->CBR_VALUE * 65536;
-    CALL UART_PUTCHAR(32);
-    CALL SHELL_PRINT_INT(SIZE);
 END;
 
 SHELL_MEM_IMAGE_FIELD: PROC(WORDS INT, BASE PTR);
@@ -1021,10 +840,23 @@ PLSW_LAUNCHER: PROC(STATE_PTR PTR);
                     END;
                 END;
             END;
+            IF (CWORD(0) = 99) THEN DO;
+                IF (CWORD(1) = 97) THEN DO;
+                    IF (WLEN = 3) THEN DO;
+                        IF (ALEN = 0) THEN CALL SHELL_BAD;
+                        ELSE CALL SHELL_CAT_COMMAND(1, ADDR(CARG));
+                        MATCHED = 1;
+                    END;
+                END;
+            END;
             IF (CWORD(0) = 115) THEN DO;
                 IF (CWORD(1) = 100) THEN DO;
                     IF (WLEN = 4) THEN DO;
-                        CALL SHELL_SD_COMMAND;
+                        CALL SHELL_SD_COMMAND(0);
+                        MATCHED = 1;
+                    END;
+                    IF (WLEN = 8) THEN DO;
+                        CALL SHELL_SD_COMMAND(1);
                         MATCHED = 1;
                     END;
                 END;
@@ -1287,6 +1119,58 @@ MON_REPORT: PROC;
        than by two renderers kept in step. */
     CALL UART_PUTCHAR(12);
     CALL SHELL_REPORT;
+END;
+
+PLSW_FILES: PROC(STATE_PTR PTR);
+    /* A file listing as an ordinary process, so it gets a pane of its own,
+       shows up in ps, and can be killed like anything else.
+
+       It reads the built-in sample volume by default rather than the card,
+       because the emulator cannot attach an SD card and a terminal at the same
+       time (see docs/emulator-feature-requests.md) -- and a pane that says
+       "no valid SD card detected" and nothing else is not a file manager.
+       Press c for the card, which is what runs on hardware. */
+    DCL CH BYTE;
+    DCL SOURCE INT;
+    DCL DONE INT;
+    SOURCE = 1;
+    CALL SHELL_FILES_VIEW(SOURCE);
+    DONE = 0;
+    DO WHILE (DONE = 0);
+        CALL TASK_GETCHAR(ADDR(CH));
+        IF (CH = 27) THEN DONE = 1;
+        ELSE CALL SHELL_FILES_KEY(CH, ADDR(SOURCE));
+    END;
+    CALL TASK_EXIT;
+END;
+
+SHELL_FILES_VIEW: PROC(SOURCE INT);
+    /* Clear the pane and draw the listing again. A form feed is what the
+       frontend takes as "start this pane over", which is how mon redraws
+       rather than scrolling. */
+    CALL UART_PUTCHAR(12);
+    CALL SHELL_SD_COMMAND(SOURCE);
+    ?PRINTLN TEXT(SHELL_FILES_KEYS);
+END;
+
+SHELL_FILES_KEY: PROC(CH BYTE, SOURCE_PTR PTR);
+    DCL P PTR;
+    P = SOURCE_PTR;
+    IF (CH = 99) THEN P->CBR_VALUE = 0;
+    IF (CH = 115) THEN P->CBR_VALUE = 1;
+    IF (CH = 114) THEN P->CBR_VALUE = P->CBR_VALUE;
+    CALL SHELL_FILES_REDRAW(CH, SOURCE_PTR);
+END;
+
+SHELL_FILES_REDRAW: PROC(CH BYTE, SOURCE_PTR PTR);
+    DCL P PTR;
+    DCL WANTED INT;
+    P = SOURCE_PTR;
+    WANTED = 0;
+    IF (CH = 99) THEN WANTED = 1;
+    IF (CH = 115) THEN WANTED = 1;
+    IF (CH = 114) THEN WANTED = 1;
+    IF (WANTED = 1) THEN CALL SHELL_FILES_VIEW(P->CBR_VALUE);
 END;
 
 PLSW_MON: PROC(STATE_PTR PTR);

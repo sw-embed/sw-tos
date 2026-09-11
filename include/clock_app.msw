@@ -132,3 +132,15 @@ MON: PROC;
     CALL UART_PUTCHAR(110);
     CALL UART_PUTCHAR(10);
 END;
+
+FILES: PROC;
+    /* A stub for the same reason as MON above: the catalog names an entry
+       point for every program, and this image is built without the filesystem
+       module the real one reads through. */
+    CALL UART_PUTCHAR(102);
+    CALL UART_PUTCHAR(105);
+    CALL UART_PUTCHAR(108);
+    CALL UART_PUTCHAR(101);
+    CALL UART_PUTCHAR(115);
+    CALL UART_PUTCHAR(10);
+END;
