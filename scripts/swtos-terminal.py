@@ -46,6 +46,13 @@ def main() -> int:
         "--entry",
         "0",
         "--terminal",
+        # Without this the emulator narrates the UART instead of being one:
+        # every byte the target sends arrives as "[UART TX @ N] 'c' (0x63)".
+        # That is unreadable, and because this terminal puts the host tty in
+        # raw mode the diagnostic lines stair-step across the screen. It only
+        # showed up when a peripheral seed was passed, which is why the plain
+        # interactive recipe looked fine and the SPI and SD ones did not.
+        "--quiet",
         "--speed",
         "0",
         "-t",

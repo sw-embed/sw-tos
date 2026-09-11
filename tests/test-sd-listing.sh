@@ -11,7 +11,7 @@ set -euo pipefail
 
 ROOT_DIR="$(cd "$(dirname "$0")/.." && pwd)"
 EMU="$ROOT_DIR/scripts/swtos-emu"
-OUT_DIR="$ROOT_DIR/build/sd"
+OUT_DIR="$ROOT_DIR/work/sd"
 IMAGE="$ROOT_DIR/build/scheduled-shell/program.bin"
 CARD="$OUT_DIR/swtos-card.img"
 SEED="$OUT_DIR/seed.lgo"
@@ -39,6 +39,14 @@ done
 # The volume label is a directory entry too, and it is not a file. Nor are the
 # extra entries a long filename is stored across.
 grep -q '^SWTOS ' <<<"$listed" && fail "the volume label was listed as a file" "$listed"
+
+# Nothing between the last entry and the prompt. The end-of-directory marker
+# is found inside the first cluster here, so the "more entries" line must not
+# print -- and neither must the newline that goes with it. A macro expanding to
+# two statements leaves the second outside a THEN, which compiles and prints a
+# stray blank line, so this is what says the macro is wrapped.
+blank=$(sed -n '/README.TXT/,/^MENU/p' <<<"$listed" | grep -c '^$' || true)
+[ "$blank" -eq 0 ] || fail "a blank line followed the listing" "$listed"
 
 # Without a card: a diagnosis, not a blank listing or a hang. This is the case
 # on real hardware with an empty slot, and it has to be distinguishable from a

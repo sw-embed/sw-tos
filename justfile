@@ -310,19 +310,24 @@ plsw-system-spi-interactive: scheduled-shell-spi-build
     ./scripts/swtos-terminal.py --image build/scheduled-shell-spi/program.bin --lgo-seed build/scheduled-shell-spi/seed.lgo --spi-media build/catalog-images/swtos-storage.bin
 
 # Build a FAT32 SD-card image. Mounts on macOS and Linux as well as SWTOS:
-#   macOS  hdiutil attach -imagekey diskimage-class=CRawDiskImage build/sd/swtos-card.img
-#   Linux  mount -o loop build/sd/swtos-card.img /mnt
+#   macOS  hdiutil attach -imagekey diskimage-class=CRawDiskImage work/sd/swtos-card.img
+#   Linux  mount -o loop work/sd/swtos-card.img /mnt
 sd-card:
-    ./scripts/mkfat32.py build/sd/swtos-card.img \
+    mkdir -p work/sd
+    ./scripts/mkfat32.py work/sd/swtos-card.img \
         --file 'HELLO.TXT=Hello from the SD card' \
         --file 'README.TXT=SWTOS test volume' \
         --dir APPS --dir DOCS
 
-# Run the shell with that card attached. Type sdls to list its root directory.
-sd-interactive: scheduled-shell-build sd-card
-    ./tools/bin/cor24-asm tests/spi-launch-seed.s -o build/sd/seed.lgo
-    ./scripts/swtos-terminal.py --image build/scheduled-shell/program.bin \
-        --lgo-seed build/sd/seed.lgo --sd-media build/sd/swtos-card.img
+# Show sdls listing that card. Scripted, not interactive: cor24-emu attaches
+# SPI devices only on its --lgo path, and that path never enters terminal mode,
+# so a card and a keyboard cannot be had at once. See docs/use-cases.md.
+sd-demo: scheduled-shell-build sd-card
+    ./tools/bin/cor24-asm tests/spi-launch-seed.s -o work/sd/seed.lgo
+    ./scripts/swtos-emu --lgo work/sd/seed.lgo \
+        --load-binary build/scheduled-shell/program.bin@0 --entry 0 \
+        --spi-device "sdcard@cs=2?file=work/sd/swtos-card.img" \
+        -u 'sdls\n' --speed 0 -n 60000000 --quiet
 
 # List an emulated card's root directory, and report a slot with no card in it
 sd-listing: scheduled-shell-build

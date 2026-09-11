@@ -119,6 +119,16 @@ No recipe covers these yet. They are real behaviours, not hypotheticals.
   counts from the byte count, overstating free memory by roughly 21 KB. `mon`
   is consistent and marks its bytes with `B`. Fixing it means choosing one
   unit for the line and moving the tests that pin the current figures.
+- **An SD card and a keyboard cannot be had at once.** `cor24-emu` attaches
+  `--spi-device` only on its `--lgo` path, and that path never calls
+  `run_terminal_mode`, so `--terminal` is silently ignored there: the emulator
+  narrates the UART as `[UART TX @ N] 'c'` instead of bridging it, and typed
+  input reaches nothing. Without a seed the terminal works and the card does
+  not attach. So `just sd-demo` is scripted, and `plsw-system-spi-interactive`
+  and `plsw-system-sd-interactive` have never been interactive either. The fix
+  is two lines in the emulator, tried locally and confirmed to work; it is
+  written up in [emulator feature requests](emulator-feature-requests.md) for
+  that repository rather than made from here.
 - **`sdls` reads one cluster of the root directory.** A root larger than one
   cluster continues through the FAT, which is not followed yet; the listing
   says so rather than stopping silently. Subdirectories are listed but cannot

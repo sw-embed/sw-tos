@@ -146,7 +146,45 @@ alongside the line, since a build concatenates several PL/SW inputs into one
 stream and a stream line number is not a line number in any file a person has
 open.
 
-## 3. Macro invocation syntax is documented two ways, and one does not parse
+## 3. A multi-statement macro body needs its own `DO; ... END;`
+
+Not a request -- a property worth writing down, because nothing warns about
+it. A source-template body of more than one statement expands to more than one
+statement, so a macro is not a statement unless it says it is:
+
+```plsw
+IF (OK = 0) THEN ?PRINTLN TEXT(SHELL_SD_UNFORMATTED);
+ELSE CALL SHELL_SD_GEOMETRY(BUF_PTR);
+```
+
+fails to parse, because `THEN` takes the first statement and the second orphans
+the `ELSE`. Worse is the form with no `ELSE`: it **compiles**, and the second
+statement runs unconditionally -- a newline printed whether or not the branch
+was taken, with nothing to say so.
+
+Wrapping the body fixes it once, for every call site:
+
+```
+MACRODEF PRINTLN;
+    REQUIRED TEXT(lvalue);
+    DO;
+        CALL UART_PUTS(ADDR({TEXT}));
+        CALL UART_PUTCHAR(10);
+    END;
+END;
+```
+
+which is the same reason a C macro is wrapped in `do { } while (0)`. The block
+costs nothing: generated instructions are byte-identical with and without it.
+
+**What would help:** a warning when a macro whose body is several statements is
+expanded into a `THEN` or `ELSE` position. The compiler knows both facts at
+expansion time, and the silent case is the one that matters -- a macro that
+compiles and does the wrong thing is worse than one that does not compile.
+
+---
+
+## 4. Macro invocation syntax is documented two ways, and one does not parse
 
 `docs/usage.md` shows
 

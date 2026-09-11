@@ -7,6 +7,11 @@ build/
 *.map
 *.lst
 
+# Scratch media and anything else meant to outlive `just clean`: an SD card
+# image is built once and then read many times, and wiping it with the build
+# tree would mean rebuilding it to look at it.
+work/
+
 # Tool binaries (built from sw-cor24-x-assembler and sw-cor24-emulator)
 tools/bin/
 tools/te-rs/target/

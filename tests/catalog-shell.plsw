@@ -12,7 +12,14 @@
    Two macros rather than one with NL(TRUE): gating a clause inside a source
    template needs %IF DEFINED, which the macro system does not have yet, so a
    newline switch would expand to a runtime IF and cost a branch at every call
-   site. Fold them together when that lands. */
+   site. Fold them together when that lands.
+
+   ?PRINTLN wraps its two statements in DO; ... END; so that it is one
+   statement wherever it is written. Without it, IF (x) THEN ?PRINTLN ...;
+   puts only the string inside the conditional and prints the newline
+   unconditionally -- which compiles, so nothing says so. The block groups
+   without emitting anything: the generated instructions are identical either
+   way. Any macro whose body is more than one statement needs the same. */
 MACRODEF PRINT;
     REQUIRED TEXT(lvalue);
     CALL UART_PUTS(ADDR({TEXT}));
@@ -20,8 +27,10 @@ END;
 
 MACRODEF PRINTLN;
     REQUIRED TEXT(lvalue);
-    CALL UART_PUTS(ADDR({TEXT}));
-    CALL UART_PUTCHAR(10);
+    DO;
+        CALL UART_PUTS(ADDR({TEXT}));
+        CALL UART_PUTCHAR(10);
+    END;
 END;
 
 DCL 1 SHELL_PROCESS_STATE BASED,
@@ -282,7 +291,7 @@ SHELL_SD_MOUNTED: PROC(BUF_PTR PTR);
     P = BUF_PTR + 511;
     IF (P->CBR_VALUE = 170) THEN OK = OK;
     ELSE OK = 0;
-    IF (OK = 0) THEN DO; ?PRINTLN TEXT(SHELL_SD_UNFORMATTED); END;
+    IF (OK = 0) THEN ?PRINTLN TEXT(SHELL_SD_UNFORMATTED);
     ELSE CALL SHELL_SD_GEOMETRY(BUF_PTR);
 END;
 
@@ -360,7 +369,7 @@ END;
 
 SHELL_SD_TRUNCATED: PROC(DONE INT);
     /* The cluster ran out before an end-of-directory marker did. */
-    IF (DONE = 0) THEN DO; ?PRINTLN TEXT(SHELL_SD_MORE); END;
+    IF (DONE = 0) THEN ?PRINTLN TEXT(SHELL_SD_MORE);
 END;
 
 SHELL_SD_NAME: PROC(NAME_PTR PTR);
