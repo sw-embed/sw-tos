@@ -32,7 +32,7 @@ for expected in \
     'SWTOS COR24 0.1' \
     'hello kind=program source=resident stack=128 state=0 flags=1 image=0' \
     'embedded-ping kind=program source=embedded stack=128 state=0 flags=0 image=45' \
-    'shell kind=service source=resident stack=256 state=6 flags=15 image=0'; do
+    'shell kind=service source=resident stack=384 state=6 flags=15 image=0'; do
     if ! echo "$output" | grep -q "$expected"; then
         echo "FAIL: scheduled utility output missing '$expected'" >&2
         echo "$output" >&2

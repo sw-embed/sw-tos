@@ -27,7 +27,7 @@ fi
 
 # The shell is running, so its own row carries the figures that prove they
 # are tracked at all.
-if ! grep -q 'shell    ep=1 s=1 b=0 alloc=256/6w d=24 y=25 fp=0 cpu=0 ipc=1' <<<"$output"; then
+if ! grep -q 'shell    ep=1 s=1 b=0 alloc=384/6w d=24 y=25 fp=0 cpu=0 ipc=1' <<<"$output"; then
     echo "FAIL: detailed ps did not report shell scheduling and IPC operations" >&2
     echo "$output" >&2
     exit 1

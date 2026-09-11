@@ -26,7 +26,7 @@ flags = ["resident", "single_instance"]
 name = "shell"
 entry = "MENU"
 scheduled_entry = "_plsw_launcher_trampoline"
-stack_words = 256
+stack_words = 384
 state_words = 6
 flags = ["resident", "single_instance", "privileged", "autostart"]
 

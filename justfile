@@ -309,6 +309,25 @@ plsw-system-interactive: scheduled-shell-build
 plsw-system-spi-interactive: scheduled-shell-spi-build
     ./scripts/swtos-terminal.py --image build/scheduled-shell-spi/program.bin --lgo-seed build/scheduled-shell-spi/seed.lgo --spi-media build/catalog-images/swtos-storage.bin
 
+# Build a FAT32 SD-card image. Mounts on macOS and Linux as well as SWTOS:
+#   macOS  hdiutil attach -imagekey diskimage-class=CRawDiskImage build/sd/swtos-card.img
+#   Linux  mount -o loop build/sd/swtos-card.img /mnt
+sd-card:
+    ./scripts/mkfat32.py build/sd/swtos-card.img \
+        --file 'HELLO.TXT=Hello from the SD card' \
+        --file 'README.TXT=SWTOS test volume' \
+        --dir APPS --dir DOCS
+
+# Run the shell with that card attached. Type sdls to list its root directory.
+sd-interactive: scheduled-shell-build sd-card
+    ./tools/bin/cor24-asm tests/spi-launch-seed.s -o build/sd/seed.lgo
+    ./scripts/swtos-terminal.py --image build/scheduled-shell/program.bin \
+        --lgo-seed build/sd/seed.lgo --sd-media build/sd/swtos-card.img
+
+# List an emulated card's root directory, and report a slot with no card in it
+sd-listing: scheduled-shell-build
+    ./tests/test-sd-listing.sh
+
 # Run the scheduled shell with the generated storage image on emulated SD
 plsw-system-sd-interactive: scheduled-shell-sd-build
     ./scripts/swtos-terminal.py --image build/scheduled-shell-sd/program.bin --lgo-seed build/scheduled-shell-sd/seed.lgo --sd-media build/catalog-images/swtos-storage.bin

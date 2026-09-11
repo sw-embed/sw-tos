@@ -94,14 +94,26 @@ total=1048576 image=9453 arena=256 peak=448 kstack=8 free=1038859 failures=0 slo
 
 | Field | Unit | Meaning |
 |---|---|---|
-| `total=` | bytes | Installed SRAM. |
-| `image=` | bytes | The linked SWTOS image: kernel, protocol and every resident program. |
-| `arena=` | bytes | Stack arena in use. |
-| `peak=` | bytes | The most the arena has ever held. |
-| `kstack=` | bytes | Kernel stack high-water mark. |
-| `free=` | bytes | What is left: total minus image, arena and kernel stack. |
+| `total=` | **bytes** | Installed SRAM. |
+| `image=` | **words** | The linked SWTOS image: kernel, protocol and every resident program. |
+| `arena=` | **words** | Stack arena in use. |
+| `peak=` | **words** | The most the arena has ever held. |
+| `kstack=` | **words** | Kernel stack high-water mark. |
+| `free=` | mixed | See below. |
 | `failures=` | count | Allocations refused. |
 | `slots=N/16` | count | Process-table slots in use. |
+
+**The units are not uniform, and `free=` is wrong.** Everything but `total=` is
+a word count: `arena=384` against a 384-word shell stack, and `mon` prints the
+same quantity as `stk 1152/1152B`, which is those words in bytes. `total=` is
+the byte count of 1 MB of SRAM. `free=` is then computed as
+
+    total (bytes) - image (words) - arena (words) - kstack (words)
+
+which subtracts word counts from a byte count and so overstates what is left
+by about two thirds of what is in use -- roughly 21 KB on a current build.
+Read `free=` as an upper bound, not a figure. `mon`'s header is consistent and
+says `B` where it means bytes; prefer it until this is fixed.
 
 `mem -r` resets the counters that can safely restart while the shell runs. The
 boot-time kernel stack watermark is deliberately kept, because it cannot be

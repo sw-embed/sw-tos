@@ -58,6 +58,8 @@ Run one with `just <recipe>`.
 | See that a pane's process has ended | `(ended)` in its name, including a program too short-lived for any snapshot to catch | `tui-soak`, unit test |
 | Reclaim the space of finished programs | `Ctrl-O c` | `tui-soak`, unit test |
 | Kill a process in a slot that once held another | any `kill`, after the slot has been reused | `debugger-kill-acceptance` |
+| List an SD card's root directory | `sdls` | `sd-listing` |
+| Tell an empty card slot from an unformatted card | `sdls` with no card | `sd-listing` |
 | See where a process's memory is, not just how much | `mem -p` | `scheduled-memory-smoke` |
 | Get back a shell that has stopped responding | `Ctrl-O k`, debugger `!kill 1`, or `kill 1` at a working prompt | `shell-restart`, `debugger-kill-acceptance` |
 | Return a responsive kernel to a clean process baseline | shell `reboot` or `Ctrl-O B` ISR request | `shell-command-parsing`, `windows-smoke` |
@@ -112,6 +114,19 @@ No recipe covers these yet. They are real behaviours, not hypotheticals.
   the ISA to make `ir` readable and writable.
 - **The launcher's adapter watchdog.** `swtos-emulator-debug.py` now exits when
   the adapter dies, which was verified by hand but has no recipe.
+- **`mem` reports mixed units and `free=` is wrong.** Every figure but
+  `total=` is a word count; `total=` is bytes. `free=` subtracts the word
+  counts from the byte count, overstating free memory by roughly 21 KB. `mon`
+  is consistent and marks its bytes with `B`. Fixing it means choosing one
+  unit for the line and moving the tests that pin the current figures.
+- **`sdls` reads one cluster of the root directory.** A root larger than one
+  cluster continues through the FAT, which is not followed yet; the listing
+  says so rather than stopping silently. Subdirectories are listed but cannot
+  be entered.
+- **SD sector numbers are 24-bit**, so the first 8 GiB of a card is reachable.
+  Directory structures live near the start of a volume, so listing works on
+  any size of card; file data beyond 8 GiB does not. A wider sector number
+  needs two words through `SPI_SD_READ_SECTOR`.
 - **PL/SW source past line 256.** The compiler emits each statement as a
   `; N: TEXT` comment in the assembly it generates, which is what makes `list`
   useful on a PL/SW program. No generated file names a line above 256, so

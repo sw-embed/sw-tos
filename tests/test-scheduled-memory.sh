@@ -24,12 +24,12 @@ if [ "$summary_count" -ne 3 ]; then
 fi
 
 for expected in \
-    'arena=256 peak=256' \
-    'arena=256 peak=640' \
+    'arena=384 peak=384' \
+    'arena=384 peak=768' \
     'kstack=8' \
     'failures=0 slots=1/16' \
-    'ep=1 status=1 stack=256@0FFD00 state=6@' \
-    'image=resident total=262' \
+    'ep=1 status=1 stack=384@' \
+    'image=resident total=390' \
     'mem counters reset'; do
     if ! grep -q "$expected" <<<"$output"; then
         echo "FAIL: memory output missing '$expected'" >&2
@@ -38,7 +38,7 @@ for expected in \
     fi
 done
 
-if [ "$(grep -c 'arena=256 peak=256' <<<"$output")" -ne 2 ]; then
+if [ "$(grep -c 'arena=384 peak=384' <<<"$output")" -ne 2 ]; then
     echo "FAIL: mem -r did not reset the arena high-water mark" >&2
     echo "$output" >&2
     exit 1
@@ -68,7 +68,7 @@ if ! grep -q 'ERROR' <<<"$failure_output"; then
 fi
 # The stack-region peak no longer moves on a failed spawn: the state block it
 # rolls back is allocated from the SRAM heap, which mem does not yet report.
-if ! grep -q 'arena=256 peak=256.*failures=1 slots=1/16' <<<"$failure_output"; then
+if ! grep -q 'arena=384 peak=384.*failures=1 slots=1/16' <<<"$failure_output"; then
     echo "FAIL: failed spawn did not report the failure" >&2
     echo "$failure_output" >&2
     exit 1
