@@ -33,6 +33,12 @@ arrangement is the consumer's job. The kinds emitted are
 so that "free" and "padding" stay distinguishable: one is unused capacity, the
 other is the cost of block alignment, and a visualizer that shows them the same
 way hides what the alignment costs.
+
+`region_id` is what the viewer picks and cross-highlights by, so it comes from
+the catalog ordinal -- what the system itself uses to identify a program --
+rather than from a position in this document, which moves whenever a program is
+added. `rel_*` is an edge table saying what explains what, and `provenance`
+names the tree that produced the picture, dirty trees included.
 """
 
 import argparse
@@ -112,6 +118,21 @@ PROVIDERS = {
     "resident": {"space": "image", "name": "linked image", "capacity": None},
 }
 
+#: The contract's constant name, so a consumer can tell this document from
+#: another columnar file without guessing from its fields. MLOS emits the same
+#: schema, which is the point of naming it rather than the producer.
+SCHEMA = "sw-ml-study.system-layout"
+PRODUCER = "sw-tos"
+
+#: Region ids must be stable across snapshots -- native3d picks and
+#: cross-highlights by id, so an id that shifts when a program is added would
+#: move the selection to a different region. A positional index does exactly
+#: that, so ids come from what the system itself uses to identify a thing: the
+#: catalog ordinal. The fixed regions take low ids of their own, and a
+#: padding region borrows the ordinal of the image that imposed it.
+ID_HEADER, ID_CATALOG, ID_FREE = 1, 2, 3
+ID_IMAGE_BASE, ID_PADDING_BASE = 100, 200
+
 #: Regions that belong to no program. The catalog and its header are the
 #: kernel's bookkeeping; free space is owned by nobody, and saying so is not
 #: the same as calling it the kernel's.
@@ -124,10 +145,10 @@ def walk(data: bytes, records: list[dict], total: int) -> list[dict]:
     walk an image once."""
     index_end = HEADER + len(records) * RECORD
     rows = [
-        {"kind": "header", "name": "storage header", "owner": KERNEL,
-         "start": 0, "length": HEADER},
-        {"kind": "catalog", "name": "catalog records", "owner": KERNEL,
-         "start": HEADER, "length": index_end - HEADER},
+        {"id": ID_HEADER, "kind": "header", "name": "storage header",
+         "owner": KERNEL, "start": 0, "length": HEADER},
+        {"id": ID_CATALOG, "kind": "catalog", "name": "catalog records",
+         "owner": KERNEL, "start": HEADER, "length": index_end - HEADER},
     ]
 
     # Images in address order, which ordinal order need not be.
@@ -137,14 +158,17 @@ def walk(data: bytes, records: list[dict], total: int) -> list[dict]:
         if record["offset"] > cursor:
             # Alignment is a cost the following image imposes, so name it as
             # that image's, not as anonymous slack.
-            rows.append({"kind": "padding", "name": "block alignment",
+            rows.append({"id": ID_PADDING_BASE + record["ordinal"],
+                         "kind": "padding", "name": "block alignment",
                          "owner": record["name"], "start": cursor,
                          "length": record["offset"] - cursor})
         extent = data[record["offset"] : record["offset"] + record["length"]]
         rows.append({
+            "id": ID_IMAGE_BASE + record["ordinal"],
             "kind": "image",
             "name": record["name"],
             "owner": record["name"],
+            "ordinal": record["ordinal"],
             "start": record["offset"],
             "length": record["length"],
             **image_fields(extent),
@@ -152,12 +176,47 @@ def walk(data: bytes, records: list[dict], total: int) -> list[dict]:
         cursor = record["offset"] + record["length"]
 
     if cursor < total:
-        rows.append({"kind": "free", "name": "unused", "owner": NOBODY,
-                     "start": cursor, "length": total - cursor})
+        rows.append({"id": ID_FREE, "kind": "free", "name": "unused",
+                     "owner": NOBODY, "start": cursor,
+                     "length": total - cursor})
     return rows
 
 
-def layout(data: bytes, capacity: int | None, provider: str) -> dict:
+def relationships(rows: list[dict]) -> dict:
+    """The edge table: what explains what. Length E, independent of N.
+
+    Only `describes` exists at this phase -- a catalog record describes the
+    extent it points at, which is the first link of the "explain selected
+    program" chain (catalog -> extent -> C24IMG -> allocation). The rest of
+    that chain is `loads-to`, from a stored extent to the RAM it is loaded
+    into, and there is no RAM in a static image: it arrives with the runtime
+    snapshot rather than being invented here.
+    """
+    images = [row["id"] for row in rows if row["kind"] == "image"]
+    return {
+        "rel_kind": ["describes"] * len(images),
+        "rel_from": [ID_CATALOG] * len(images),
+        "rel_to": images,
+    }
+
+
+def revision() -> str:
+    """The producer's source revision, so a rendered snapshot is traceable
+    back to the tree that produced it. A dirty tree is marked as such: a bare
+    hash would claim a picture came from committed sources when it did not."""
+    import subprocess
+    try:
+        head = subprocess.run(["git", "rev-parse", "--short", "HEAD"],
+                              cwd=ROOT, capture_output=True, text=True, check=True)
+        dirty = subprocess.run(["git", "status", "--porcelain"],
+                               cwd=ROOT, capture_output=True, text=True, check=True)
+    except (subprocess.CalledProcessError, FileNotFoundError):
+        return "unknown"
+    return head.stdout.strip() + ("-dirty" if dirty.stdout.strip() else "")
+
+
+def layout(data: bytes, capacity: int | None, provider: str,
+           source: str | None = None) -> dict:
     """The columnar document. `used` is the address the last extent ends at,
     which is what a capacity bar should fill to."""
     storage_tool.validate_storage(data)
@@ -171,7 +230,11 @@ def layout(data: bytes, capacity: int | None, provider: str) -> dict:
         return [row.get(field, default) for row in rows]
 
     return {
+        "schema": SCHEMA,
         "version": 1,
+        "provenance": {"producer": PRODUCER,
+                       "revision": source or revision()},
+
         "spaces": [space],
         "space_name": [device["name"]],
         "space_block": [BLOCK],
@@ -179,6 +242,7 @@ def layout(data: bytes, capacity: int | None, provider: str) -> dict:
         "space_used": [max((r["start"] + r["length"]) for r in rows
                            if r["kind"] != "free")],
 
+        "region_id": column("id"),
         "region_space": [space] * len(rows),
         "region_kind": column("kind"),
         "region_name": column("name"),
@@ -190,6 +254,8 @@ def layout(data: bytes, capacity: int | None, provider: str) -> dict:
         "region_data_words": column("data_words"),
         "region_bss_words": column("bss_words"),
 
+        **relationships(rows),
+
         # The catalog holds a record per program whether or not an image is
         # stored, so a program with no image has no region of its own. These
         # columns keep it visible; they are length P, not length N.
@@ -198,6 +264,8 @@ def layout(data: bytes, capacity: int | None, provider: str) -> dict:
         "program_has_image": [1 if r["has_image"] else 0 for r in records],
         "program_offset": [r["offset"] for r in records],
         "program_length": [r["length"] for r in records],
+        "program_region": [ID_IMAGE_BASE + r["ordinal"] if r["has_image"] else 0
+                           for r in records],
     }
 
 
@@ -211,6 +279,9 @@ def main() -> int:
     parser.add_argument("--provider", choices=sorted(PROVIDERS), default="w25q32",
                         help="the device the image is read through; decides the "
                              "capacity and the granule worth outlining")
+    parser.add_argument("--revision", default=None,
+                        help="record this as the producer revision instead of "
+                             "asking git (for a reproducible artifact)")
     parser.add_argument("--capacity", type=int, default=None,
                         help="device capacity in bytes, if larger than the image "
                              "(a 4 MiB W25Q32 holds a much smaller image)")
@@ -222,7 +293,8 @@ def main() -> int:
         return 1
 
     try:
-        document = layout(args.image.read_bytes(), args.capacity, args.provider)
+        document = layout(args.image.read_bytes(), args.capacity, args.provider,
+                          args.revision)
     except ValueError as error:
         print(f"storage-layout: {args.image} is not a valid storage image: {error}",
               file=sys.stderr)
@@ -235,8 +307,10 @@ def main() -> int:
         kinds[kind] = kinds.get(kind, 0) + 1
     summary = " ".join(f"{name}={count}" for name, count in sorted(kinds.items()))
     print(f"{args.output}: {len(document['region_kind'])} regions ({summary}), "
+          f"{len(document['rel_kind'])} relationships, "
           f"{document['space_used'][0]} of {document['space_capacity'][0]} "
-          f"bytes used in {document['spaces'][0]}")
+          f"bytes used in {document['spaces'][0]} "
+          f"at {document['provenance']['revision']}")
     return 0
 
 

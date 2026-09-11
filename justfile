@@ -78,6 +78,14 @@ cor24-storage-smoke:
 storage-layout-smoke: cor24-storage-smoke
     ./tests/test-storage-layout.sh
 
+# Refresh the layout sample other repos develop against before they can run
+# this build. Run it from a clean tree: the provenance records the revision,
+# so a dirty tree publishes a snapshot nothing can be traced back to.
+storage-layout-publish: cor24-storage-smoke
+    mkdir -p examples/viz
+    ./scripts/storage-layout.py -o examples/viz/storage-layout.json
+    ./tests/validate-storage-layout.py examples/viz/storage-layout.json
+
 # Read the generated media through the emulator's W25Q32 SPI device
 spi-flash-read-smoke: cor24-storage-smoke
     ./tests/test-spi-flash-read.sh
