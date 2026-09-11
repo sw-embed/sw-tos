@@ -319,9 +319,11 @@ sd-card:
         --file 'README.TXT=SWTOS test volume' \
         --dir APPS --dir DOCS
 
-# Show sdls listing that card. Scripted, not interactive: cor24-emu attaches
-# SPI devices only on its --lgo path, and that path never enters terminal mode,
-# so a card and a keyboard cannot be had at once. See docs/use-cases.md.
+# Show sdls listing that card. Scripted only until the emulator attaches SPI
+# devices in binary mode -- it does so only on its --lgo path today, and that
+# path is the one without a terminal. Nothing in the design prevents both; the
+# two calls needed are in docs/emulator-feature-requests.md. Once they land,
+# this becomes --terminal and the "-u" line goes away.
 sd-demo: scheduled-shell-build sd-card
     ./tools/bin/cor24-asm tests/spi-launch-seed.s -o work/sd/seed.lgo
     ./scripts/swtos-emu --lgo work/sd/seed.lgo \

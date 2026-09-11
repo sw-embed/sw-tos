@@ -128,7 +128,9 @@ No recipe covers these yet. They are real behaviours, not hypotheticals.
   and `plsw-system-sd-interactive` have never been interactive either. The fix
   is two lines in the emulator, tried locally and confirmed to work; it is
   written up in [emulator feature requests](emulator-feature-requests.md) for
-  that repository rather than made from here.
+  that repository rather than made from here. Nothing in the design prevents
+  the combination: the SPI device is driven by the guest through memory-mapped
+  registers and the terminal bridges the UART, and the two share no state.
 - **`sdls` reads one cluster of the root directory.** A root larger than one
   cluster continues through the FAT, which is not followed yet; the listing
   says so rather than stopping silently. Subdirectories are listed but cannot
