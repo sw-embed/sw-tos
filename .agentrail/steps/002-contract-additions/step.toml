@@ -1,0 +1,10 @@
+number = 2
+slug = "contract-additions"
+status = "completed"
+description = "Add the identifying header and identity columns the consumers asked for once ..."
+role = "production"
+context_files = []
+created_at = "2026-09-11T12:36:58"
+completed_at = "2026-09-11T12:36:58"
+task_type = "tooling"
+commits = ["a08d8863440ef8030eb3976d3f63da733888be1d"]

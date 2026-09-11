@@ -1,0 +1,1 @@
+Add the identifying header and identity columns the consumers asked for once the contract settled: schema, provenance {producer, revision}, stable region_id, and the rel_kind/rel_from/rel_to edge table. Publish a sample artifact from a clean tree so another repo can develop against real producer output, and report the commit and checksum.

@@ -1,9 +1,0 @@
-number = 4
-slug = "coordinate-and-close"
-status = "pending"
-description = "Relay what sw-tos provides and consumes to the sw-mlpl and demo-extensions ag..."
-role = "production"
-context_files = []
-created_at = "2026-09-11T10:17:43"
-task_type = "docs"
-commits = []

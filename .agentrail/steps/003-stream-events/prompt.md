@@ -1,1 +1,0 @@
-Have te-rs emit snapshot events as they happen -- process spawn, image load, allocation, exit, reclaim -- so the viewer animates the system instead of re-reading a file. Phase 3 of the research doc, and the only step that touches the frontend rather than the build tools. Clippy --all-targets -- -D warnings, then tests, then the acceptance gate.

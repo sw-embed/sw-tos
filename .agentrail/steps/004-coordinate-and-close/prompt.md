@@ -1,1 +1,0 @@
-Relay what sw-tos provides and consumes to the sw-mlpl and demo-extensions agents, document the emitters under docs/, and close the saga. Do not make changes to repos outside sw-tos; ask for changes if needed.

@@ -1,0 +1,9 @@
+number = 3
+slug = "runtime-snapshot"
+status = "pending"
+description = "Emit build/runtime-layout.json: the same columnar contract for the running sy..."
+role = "production"
+context_files = []
+created_at = "2026-09-11T10:17:43"
+task_type = "tooling"
+commits = []
