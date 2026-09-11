@@ -1,0 +1,9 @@
+number = 1
+slug = "layout-emitter"
+status = "in-progress"
+description = "Emit build/storage-layout.json from the built storage image in the COLUMNAR c..."
+role = "production"
+context_files = []
+created_at = "2026-09-11T10:17:43"
+task_type = "tooling"
+commits = []

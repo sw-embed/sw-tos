@@ -73,6 +73,11 @@ cor24-image-smoke:
 cor24-storage-smoke:
     ./tests/test-cor24-storage.sh
 
+# Emit the storage layout the 3D visualization pipeline consumes, and check
+# that its columns still tile the image they describe
+storage-layout-smoke: cor24-storage-smoke
+    ./tests/test-storage-layout.sh
+
 # Read the generated media through the emulator's W25Q32 SPI device
 spi-flash-read-smoke: cor24-storage-smoke
     ./tests/test-spi-flash-read.sh

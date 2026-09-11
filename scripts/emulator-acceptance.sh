@@ -53,6 +53,7 @@ RECIPES=(
     cor24-image-smoke
     cor24-loader-smoke
     cor24-storage-smoke
+    storage-layout-smoke
     spi-flash-read-smoke
     scheduled-spi-provider-smoke
     scheduled-composite-spi-smoke

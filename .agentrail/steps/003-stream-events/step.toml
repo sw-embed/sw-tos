@@ -1,0 +1,9 @@
+number = 3
+slug = "stream-events"
+status = "pending"
+description = "Have te-rs emit snapshot events as they happen -- process spawn, image load, ..."
+role = "production"
+context_files = []
+created_at = "2026-09-11T10:17:43"
+task_type = "feature"
+commits = []
