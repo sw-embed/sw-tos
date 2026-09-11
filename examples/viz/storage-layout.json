@@ -1,0 +1,210 @@
+{
+  "schema": "sw-ml-study.system-layout",
+  "version": 1,
+  "provenance": {
+    "producer": "sw-tos",
+    "revision": "5c4a24e"
+  },
+  "spaces": [
+    "flash"
+  ],
+  "space_name": [
+    "W25Q32 storage"
+  ],
+  "space_block": [
+    8
+  ],
+  "space_capacity": [
+    4194304
+  ],
+  "space_used": [
+    372
+  ],
+  "region_id": [
+    1,
+    2,
+    106,
+    207,
+    107,
+    208,
+    108,
+    3
+  ],
+  "region_space": [
+    "flash",
+    "flash",
+    "flash",
+    "flash",
+    "flash",
+    "flash",
+    "flash",
+    "flash"
+  ],
+  "region_kind": [
+    "header",
+    "catalog",
+    "image",
+    "padding",
+    "image",
+    "padding",
+    "image",
+    "free"
+  ],
+  "region_name": [
+    "storage header",
+    "catalog records",
+    "embedded-hello",
+    "block alignment",
+    "embedded-ping",
+    "block alignment",
+    "cpu-hog",
+    "unused"
+  ],
+  "region_owner": [
+    "kernel",
+    "kernel",
+    "embedded-hello",
+    "embedded-ping",
+    "embedded-ping",
+    "cpu-hog",
+    "cpu-hog",
+    ""
+  ],
+  "region_start": [
+    0,
+    8,
+    248,
+    284,
+    288,
+    333,
+    336,
+    372
+  ],
+  "region_length": [
+    8,
+    240,
+    36,
+    4,
+    45,
+    3,
+    36,
+    4193932
+  ],
+  "region_text_words": [
+    0,
+    0,
+    3,
+    0,
+    6,
+    0,
+    3,
+    0
+  ],
+  "region_data_words": [
+    0,
+    0,
+    0,
+    0,
+    0,
+    0,
+    0,
+    0
+  ],
+  "region_bss_words": [
+    0,
+    0,
+    0,
+    0,
+    0,
+    0,
+    0,
+    0
+  ],
+  "rel_kind": [
+    "describes",
+    "describes",
+    "describes"
+  ],
+  "rel_from": [
+    2,
+    2,
+    2
+  ],
+  "rel_to": [
+    106,
+    107,
+    108
+  ],
+  "program_name": [
+    "hello",
+    "counter",
+    "clock",
+    "uptime",
+    "mon",
+    "files",
+    "embedded-hello",
+    "embedded-ping",
+    "cpu-hog",
+    "shell"
+  ],
+  "program_ordinal": [
+    0,
+    1,
+    2,
+    3,
+    4,
+    5,
+    6,
+    7,
+    8,
+    9
+  ],
+  "program_has_image": [
+    0,
+    0,
+    0,
+    0,
+    0,
+    0,
+    1,
+    1,
+    1,
+    0
+  ],
+  "program_offset": [
+    0,
+    0,
+    0,
+    0,
+    0,
+    0,
+    248,
+    288,
+    336,
+    0
+  ],
+  "program_length": [
+    0,
+    0,
+    0,
+    0,
+    0,
+    0,
+    36,
+    45,
+    36,
+    0
+  ],
+  "program_region": [
+    0,
+    0,
+    0,
+    0,
+    0,
+    0,
+    106,
+    107,
+    108,
+    0
+  ]
+}
