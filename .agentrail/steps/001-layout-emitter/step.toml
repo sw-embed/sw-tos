@@ -1,9 +1,10 @@
 number = 1
 slug = "layout-emitter"
-status = "in-progress"
+status = "completed"
 description = "Emit build/storage-layout.json from the built storage image in the COLUMNAR c..."
 role = "production"
 context_files = []
 created_at = "2026-09-11T10:17:43"
+completed_at = "2026-09-11T11:17:56"
 task_type = "tooling"
-commits = []
+commits = ["19a4ee75c7e9b09d1316805ab4ad5b783b5e854a"]

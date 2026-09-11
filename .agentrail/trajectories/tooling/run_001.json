@@ -1,0 +1,11 @@
+{
+  "task_type": "tooling",
+  "state": {
+    "number": 1,
+    "step": "layout-emitter"
+  },
+  "action": "scripts/storage-layout.py emits build/storage-layout.json in sw-mlpl's columnar\ncontract; tests/test-storage-layout.sh checks the contract and runs in the gate\nas storage-layout-smoke (58/58). Commit 19a4ee7.\n\nWhat the current build yields: 8 regions over the W25Q32's 4 MiB -- an 8-byte\nheader, 240 bytes of catalog records, three stored images (embedded-hello,\nembedded-ping, cpu-hog) with two 3-4 byte padding regions between them, and the\nrest free. 372 bytes used. Padding is emitted as its own kind so the alignment\ncost stays visible; sw-mlpl's fixture folds it into \"free\", which their\nclassifier should be told about.\n\nTwo things worth carrying forward:\n\nThe columnar shape was verified against the real interpreter, not just the\ndoc: mlpl-repl parses the emitted file, string columns arrive as string lists,\nnumeric columns as vectors, and floor(region_start / space_block) runs\nelementwise. read_text is sandboxed to the script's directory, and both\nread_text and record_get are Result-speaking, so the file must sit beside the\nscript and every access needs unwrap.\n\nThe test is a contract test on purpose. The numbers change whenever a program\nis added; what must not change is that columns stay index-aligned, regions tile\nthe whole capacity with no gap or overlap, and the totals match the image. It\nwas mutation-checked -- a dropped column, a one-region gap, a stretched\ncapacity are each caught -- because a test that has only ever passed proves\nnothing.\n\nEmitted but not in the pinned contract: space_used, and program_* columns\n(length P, not N) so that catalogued programs with no stored image stay\nvisible. A provider flag (w25q32/sdcard/resident) picks the space key and\ncapacity; only w25q32 is exercised.\n",
+  "result": "success",
+  "reward": 1,
+  "timestamp": "2026-09-11T11:17:56"
+}
