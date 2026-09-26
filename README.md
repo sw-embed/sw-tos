@@ -6,6 +6,8 @@
 
 *A portable microkernel for educational and embedded systems.*
 
+Blog post: **[Made Visible: SWTOS](https://blog.softwarewrighter.com/2026/09/11/made-visible-swtos/)** -- visualizing this OS.
+
 ## Overview
 
 SWTOS is a clean-room microkernel operating system inspired by MINIX IPC
