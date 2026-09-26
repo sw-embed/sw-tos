@@ -8,6 +8,8 @@
 
 Blog post: **[Made Visible: SWTOS](https://blog.softwarewrighter.com/2026/09/11/made-visible-swtos/)** -- visualizing this OS.
 
+Live demo: **[SWTOS in your browser](https://swtos.softwarewrighter.com/)** -- the same kernel on an emulated COR24, built by [web-sw-tos](https://github.com/sw-embed/web-sw-tos).
+
 ## Overview
 
 SWTOS is a clean-room microkernel operating system inspired by MINIX IPC
@@ -28,8 +30,8 @@ a PL/I-inspired systems programming language for the COR24 ISA.
 
 ## Windows frontend demo
 
-[▶ Watch the tiled Windows frontend demo](videos/cor24-windows-demo.webm) ·
-[▶ Watch two CPU hogs preempted independently](videos/cor24-preemption-demo.webm) ·
+[▶ Watch the tiled Windows frontend demo](videos/cor24-windows-demo.webm?raw=true) ·
+[▶ Watch two CPU hogs preempted independently](videos/cor24-preemption-demo.webm?raw=true) ·
 [Windows usage guide](docs/windows-usage.md) ·
 [Debugger manual](docs/debugger-manual.md) ·
 [Reproducible Windows VHS tape](docs/demos/cor24-windows.tape) ·
