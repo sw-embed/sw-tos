@@ -55,7 +55,7 @@ progressing and endpoint 3 continuing after endpoint 2 leaves Resources.
   frames from the host terminal, with cooperative fallback
 - **No MMU required** -- single address space with logical process
   isolation (separate stacks, no shared writable globals)
-- **No hardware multiply or floating point required**
+- **No hardware divide or floating point required**
 - **Entire system is one flat binary** -- kernel, services, and apps
   compiled and linked together
 - **Emulator-first** -- runs identically on hardware and in the emulator
