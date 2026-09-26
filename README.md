@@ -23,15 +23,15 @@ a PL/I-inspired systems programming language for the COR24 ISA.
 
 ## Hardware demo
 
-![SWTOS shell running on the COR24-TB](videos/cor24-terminal-demo.webp)
+[![SWTOS shell running on the COR24-TB](videos/cor24-terminal-demo.webp)](https://sw-embed.github.io/web-sw-tos/media/cor24-terminal-demo.webp)
 
 [Full terminal transcript](docs/transcript.log) ·
 [Reproducible VHS tape](docs/demos/cor24-terminal.tape)
 
 ## Windows frontend demo
 
-[▶ Watch the tiled Windows frontend demo](videos/cor24-windows-demo.webm?raw=true) ·
-[▶ Watch two CPU hogs preempted independently](videos/cor24-preemption-demo.webm?raw=true) ·
+[▶ Watch the tiled Windows frontend demo](https://sw-embed.github.io/web-sw-tos/media/cor24-windows-demo.webm) ·
+[▶ Watch two CPU hogs preempted independently](https://sw-embed.github.io/web-sw-tos/media/cor24-preemption-demo.webm) ·
 [Windows usage guide](docs/windows-usage.md) ·
 [Debugger manual](docs/debugger-manual.md) ·
 [Reproducible Windows VHS tape](docs/demos/cor24-windows.tape) ·
